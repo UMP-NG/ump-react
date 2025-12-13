@@ -1,0 +1,457 @@
+:root {
+    --color-primary: #fff;
+    --color-secondary: #222222ff;
+    --color-comp: #2851cbff;
+    --font-primary: 'Poppins', sans-serif;
+    --color-headerhover: #7f7f7fff;
+    --text: #333;
+    --primary: #ffffff;
+    --secondary: #222222;
+    --primary-alt: #f7f7f7;
+    --primary-soft: #fafafa;
+    --secondary_sec: #0f9d58;
+    --accent: #00c9a7;
+    --text-dark: #333;
+    --glass-bg: rgba(255, 255, 255, 0.15);
+}
+
+/* Reset & Base */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    outline: none;
+    border: none;
+    text-decoration: none;
+    text-transform: capitalize;
+    transition: all .2s linear;
+    font-family: var(--font-primary);
+}
+
+html {
+    overflow-x: hidden;
+    scroll-behavior: smooth;
+    scroll-padding-top: 7rem;
+    font-size: 62.5%;
+}
+
+body {
+    background: linear-gradient(135deg, #e8f5e9 0%, #ffffff 100%);
+    overflow-x: hidden;
+}
+
+/* Hero Section */
+.hero {
+    height: 90vh;
+    width: 100%;
+    background: url("../images/banner1.png") center/cover no-repeat;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    margin-top: 7rem;
+}
+
+.hero-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.45);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.hero-content {
+    color: var(--color-primary);
+    text-align: center;
+    max-width: 80rem;
+    padding: 2rem;
+}
+
+.hero-content h1 {
+    font-size: 4.5rem;
+    font-weight: 700;
+    line-height: 1.2;
+    margin-bottom: 2rem;
+}
+
+.hero-content p {
+    font-size: 1.8rem;
+    margin-bottom: 3rem;
+    font-weight: 300;
+}
+
+.hero-content .btn {
+    display: inline-block;
+    padding: 1.2rem 3rem;
+    background: var(--color-comp);
+    color: var(--primary);
+    font-size: 1.6rem;
+    border-radius: 5rem;
+    cursor: pointer;
+    transition: 0.3s;
+}
+
+.hero-content .btn:hover {
+    background: #173a99;
+}
+
+/* Role Selector */
+.role-selector {
+    padding: 5rem 2rem;
+    text-align: center;
+    background: var(--primary-alt);
+}
+
+.tab-bar {
+    display: flex;
+    justify-content: center;
+    gap: 2rem;
+    margin-bottom: 3rem;
+}
+
+.tab {
+    font-size: 1.6rem;
+    padding: 1rem 2rem;
+    border-radius: 5rem;
+    border: 1px solid var(--color-comp);
+    background: transparent;
+    color: var(--secondary);
+    cursor: pointer;
+    transition: 0.3s ease;
+}
+
+.tab:hover {
+    background: var(--primary-soft);
+}
+
+.tab.active {
+    background: #0f9d58;
+    /* emerald green */
+    color: var(--primary);
+    border-color: #0f9d58;
+}
+
+/* Tab transitions */
+.tab-content {
+    position: relative;
+    overflow: hidden;
+    perspective: 1000px;
+}
+
+.tab-pane {
+    display: none;
+    opacity: 0;
+    transform: translateY(30px) scale(0.98);
+    transition: all 0.6s ease;
+}
+
+.tab-pane p,
+h3 {
+    font-size: 1.6rem;
+    padding-bottom: 1rem;
+}
+
+.tab-pane.active {
+    display: block;
+    opacity: 1;
+    transform: translateY(0) scale(1);
+}
+
+/* ==========================================
+   🌈 FORM STYLING IMPROVEMENTS
+   ========================================== */
+.form-pane {
+    position: relative;
+    background: linear-gradient(135deg, rgba(0, 201, 167, 0.95), rgba(15, 157, 88, 0.95));
+    color: #fff;
+    padding: 3.5rem 4rem;
+    border-radius: 1.2rem;
+    box-shadow: 0 1rem 2.5rem rgba(0, 0, 0, 0.25);
+    backdrop-filter: blur(12px);
+    transform: translateY(20px);
+    animation: slideIn 0.7s ease forwards;
+}
+
+/* Fancy gradient border effect */
+.form-pane::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 1.2rem;
+    padding: 2px;
+    background: linear-gradient(45deg, #00e6b3, #00b894, #009688, #0f9d58);
+    -webkit-mask:
+        linear-gradient(#fff 0 0) content-box,
+        linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+}
+
+/* Animate each input group */
+.form-group {
+    position: relative;
+    margin-bottom: 2.2rem;
+    opacity: 0;
+    transform: translateY(10px);
+    animation: fadeUp 0.6s ease forwards;
+}
+
+.form-group.animate:nth-child(n) {
+    animation-delay: calc(0.08s * var(--i, 1));
+}
+
+/* Floating label fields */
+.form-group input,
+.form-group textarea {
+    width: 100%;
+    padding: 1.2rem;
+    border: none;
+    border-radius: 0.6rem;
+    background: rgba(255, 255, 255, 0.12);
+    color: #fff;
+    font-size: 1.6rem;
+    outline: none;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+}
+
+.form-group input::placeholder,
+.form-group textarea::placeholder {
+    color: transparent;
+    /* hide text so labels don’t overlap */
+}
+
+/* keep focused input visual */
+.form-group input:focus,
+.form-group textarea:focus {
+    background: rgba(255, 255, 255, 0.18);
+    box-shadow: inset 0 0 0 2px rgba(0, 230, 179, 0.08);
+    transform: scale(1.02);
+}
+
+.form-group label {
+    position: absolute;
+    left: 1.15rem;
+    top: 1.15rem;
+    color: rgba(255, 255, 255, 0.85);
+    font-size: 1.05rem;
+    pointer-events: none;
+    transition: transform .22s ease, top .22s ease, font-size .22s ease, color .22s ease, background .22s ease;
+    transform-origin: left top;
+    padding: 0 .35rem;
+}
+
+
+/* when input is focused OR not placeholder-shown -> lift label */
+.form-group input:focus+label,
+.form-group textarea:focus+label,
+.form-group input:not(:placeholder-shown)+label,
+.form-group textarea:not(:placeholder-shown)+label,
+.form-group.filled label {
+    top: -0.7rem;
+    left: 1rem;
+    font-size: .85rem;
+    color: #fff;
+    background: rgba(15, 157, 88, 0.95);
+    /* pill behind the label */
+    border-radius: .25rem;
+}
+
+/* File input fields */
+.file-upload .file-label {
+    position: static;
+    display: block;
+    margin-bottom: .6rem;
+    color: #fff;
+    font-weight: 600;
+}
+
+/* ==========================================
+   🪄 BUTTON ENHANCEMENTS
+   ========================================== */
+.btn {
+    display: inline-block;
+    width: 100%;
+    padding: 1.2rem 3rem;
+    background: #ffffff;
+    color: var(--secondary);
+    font-size: 1.6rem;
+    font-weight: 600;
+    border-radius: 50px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    margin-top: 2rem;
+    box-shadow: 0 0.5rem 1rem rgba(15, 157, 88, 0.25);
+}
+
+.btn:hover {
+    background: var(--accent);
+    color: #fff;
+    transform: translateY(-3px) scale(1.02);
+    box-shadow: 0 1rem 1.5rem rgba(0, 201, 167, 0.3);
+}
+
+/* ==========================================
+   ⚡ TAB BUTTONS
+   ========================================== */
+.tab {
+    font-weight: 600;
+    letter-spacing: 0.3px;
+    transition: all 0.3s ease;
+}
+
+.tab:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 0.4rem 1rem rgba(15, 157, 88, 0.2);
+}
+
+.tab.active {
+    background: linear-gradient(90deg, #0f9d58, #00c9a7);
+    color: #fff;
+    transform: scale(1.05);
+    box-shadow: 0 0.6rem 1.2rem rgba(15, 157, 88, 0.3);
+}
+
+/* ==========================================
+   🔮 ANIMATIONS
+   ========================================== */
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateY(40px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes fadeUp {
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.move {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 1rem 0;
+    font-size: 1.6rem;
+    color: #333;
+}
+
+.move p {
+    margin: 0;
+}
+
+.move a {
+    text-decoration: none;
+    color: #4CAF50;
+    font-weight: 600;
+    transition: all 0.2s ease-in-out;
+}
+
+.move a:hover {
+    color: #388E3C;
+    text-decoration: underline;
+}
+
+/* =======================================================
+   🌿 AVAILABILITY SECTION — FIXED CLEAN ALIGNMENT
+   ======================================================= */
+.availability-group {
+    position: relative;
+    margin-top: 2.5rem;
+    text-align: left;
+    width: 100%;
+}
+
+.availability-group .availability-label {
+    position: relative;
+    display: inline-block;
+    margin-bottom: 1.4rem;
+    font-size: 1.45rem;
+    font-weight: 600;
+    color: #fff;
+    letter-spacing: 0.4px;
+    padding: 0.7rem 1rem;
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 0.5rem;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(6px);
+}
+
+.availability-group .availability-label::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    bottom: -0.4rem;
+    width: 100%;
+    height: 2px;
+    background: linear-gradient(90deg, #00c9a7, #0f9d58);
+    border-radius: 2px;
+}
+
+/* Flex layout for availability buttons */
+.availability-options {
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 1.2rem;
+    width: 100%;
+}
+
+/* reset nested label inheritance from .form-group label */
+.availability-options label {
+    all: unset;
+    display: inline-block;
+    background: rgba(255, 255, 255, 0.12);
+    color: #fff;
+    font-size: 1.3rem;
+    font-weight: 500;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 3rem;
+    padding: 0.8rem 1.8rem;
+    cursor: pointer;
+    text-align: center;
+    user-select: none;
+    transition: all 0.25s ease;
+    white-space: nowrap;
+}
+
+/* Hide native checkbox */
+.availability-options input[type="checkbox"] {
+    display: none;
+}
+
+/* hover and checked visuals */
+.availability-options label:hover {
+    background: rgba(255, 255, 255, 0.18);
+    transform: translateY(-2px);
+}
+
+.availability-options input[type="checkbox"]:checked+label {
+    background: linear-gradient(90deg, #00c9a7, #0f9d58);
+    border-color: transparent;
+    box-shadow: 0 0 1rem rgba(0, 201, 167, 0.5);
+    transform: scale(1.05);
+}
+
+/* Responsive tweak */
+@media (max-width: 600px) {
+    .availability-options {
+        justify-content: center;
+        gap: 0.8rem;
+    }
+
+    .availability-options label {
+        font-size: 1.2rem;
+        padding: 0.7rem 1.4rem;
+    }
+}
