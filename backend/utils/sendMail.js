@@ -105,11 +105,21 @@ const buildContent = (options) => {
   return { subject, htmlContent, textContent };
 };
 
+const sendViaSendGrid = async ({ to, from, subject, html, text }) => {
+  sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+  await withTimeout(
+    sgMail.send({ to, from, subject, html, text }),
+    MAIL_TIMEOUT_MS
+  );
+  return { messageId: `sendgrid-${Date.now()}` };
+};
+
 const sendViaZoho = async (mailOptions) => {
   const transporter = nodemailer.createTransport({
     host: "smtppro.zoho.com",
-    port: 465,
-    secure: true,
+    port: 587,
+    secure: false,
+    requireTLS: true,
     connectionTimeout: 10000,
     greetingTimeout: 10000,
     socketTimeout: 10000,
@@ -119,12 +129,6 @@ const sendViaZoho = async (mailOptions) => {
     },
   });
   return withTimeout(transporter.sendMail(mailOptions), MAIL_TIMEOUT_MS);
-};
-
-const sendViaSendGrid = async (mailOptions) => {
-  sgMail.setApiKey(process.env.SENDGRID_API_KEY);
-  await withTimeout(sgMail.send(mailOptions), MAIL_TIMEOUT_MS);
-  return { messageId: `sendgrid-${Date.now()}` };
 };
 
 const sendMail = async (options) => {
@@ -143,53 +147,38 @@ const sendMail = async (options) => {
   const maskedEmail = options.email.replace(/(?<=.{2}).(?=[^@]*@)/g, "*");
   const { subject, htmlContent, textContent } = buildContent(options);
 
-  const mailOptions = {
-    from: process.env.ZOHO_SMTP_USER
-      ? `"UMP Official" <${process.env.ZOHO_SMTP_USER}>`
-      : process.env.SENDGRID_FROM_EMAIL || "admin@myump.com.ng",
-    to: options.email,
-    subject,
-    text: textContent,
-    html: htmlContent,
-  };
+  const FROM_SG   = process.env.SENDGRID_FROM_EMAIL || "admin@myump.com.ng";
+  const FROM_ZOHO = `"UMP Official" <${process.env.ZOHO_SMTP_USER}>`;
 
-  // Use whichever provider is configured; prefer Zoho when both present
-  // (SendGrid requires a paid plan for reliable deliverability)
-  if (hasZoho) {
+  const errors = [];
+
+  // 1️⃣ SendGrid — primary
+  if (hasSendGrid) {
     try {
-      console.log(`📧 [MAIL] Sending via Zoho to ${maskedEmail}`);
-      const info = await sendViaZoho(mailOptions);
-      console.log(`✅ [MAIL] Sent via Zoho to ${maskedEmail} — ${info.messageId}`);
+      console.log(`📧 [MAIL] Sending via SendGrid to ${maskedEmail}`);
+      const info = await sendViaSendGrid({ to: options.email, from: FROM_SG, subject, html: htmlContent, text: textContent });
+      console.log(`✅ [MAIL] Sent via SendGrid to ${maskedEmail}`);
       return info;
-    } catch (zohoErr) {
-      console.warn(`⚠️  [MAIL] Zoho failed: ${zohoErr.message}`);
-      if (!hasSendGrid) throw new Error(`Zoho send failed: ${zohoErr.message}`);
-
-      // Fall back to SendGrid
-      console.log(`📧 [MAIL] Falling back to SendGrid for ${maskedEmail}`);
-      try {
-        const sgMailOptions = { ...mailOptions, from: process.env.SENDGRID_FROM_EMAIL || "admin@myump.com.ng" };
-        const info = await sendViaSendGrid(sgMailOptions);
-        console.log(`✅ [MAIL] Sent via SendGrid to ${maskedEmail}`);
-        return info;
-      } catch (sgErr) {
-        console.error(`❌ [MAIL] Both Zoho and SendGrid failed. Zoho: ${zohoErr.message} | SendGrid: ${sgErr.message}`);
-        throw new Error(`Email delivery failed — Zoho: ${zohoErr.message} | SendGrid: ${sgErr.message}`);
-      }
+    } catch (err) {
+      console.warn(`⚠️  [MAIL] SendGrid failed: ${err.message}`);
+      errors.push(`SendGrid: ${err.message}`);
     }
   }
 
-  // SendGrid only (no Zoho credentials)
-  try {
-    console.log(`📧 [MAIL] Sending via SendGrid to ${maskedEmail}`);
-    const info = await sendViaSendGrid(mailOptions);
-    console.log(`✅ [MAIL] Sent via SendGrid to ${maskedEmail}`);
-    return info;
-  } catch (sgErr) {
-    console.error(`❌ [MAIL] SendGrid failed: ${sgErr.message}`);
-    throw new Error(`SendGrid send failed: ${sgErr.message}`);
+  // 2️⃣ Zoho SMTP — fallback (port 587 STARTTLS)
+  if (hasZoho) {
+    try {
+      console.log(`📧 [MAIL] Falling back to Zoho for ${maskedEmail}`);
+      const info = await sendViaZoho({ from: FROM_ZOHO, to: options.email, subject, text: textContent, html: htmlContent });
+      console.log(`✅ [MAIL] Sent via Zoho to ${maskedEmail}`);
+      return info;
+    } catch (err) {
+      console.warn(`⚠️  [MAIL] Zoho failed: ${err.message}`);
+      errors.push(`Zoho: ${err.message}`);
+    }
   }
-};
+
+  throw new Error(`Email delivery failed — ${errors.join(" | ")}`);
 
 export default sendMail;
 
