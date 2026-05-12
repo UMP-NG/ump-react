@@ -130,4 +130,24 @@ io.on("connection", (socket) => {
 // 🚀 Start server
 server.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
+
+  // Keep-alive ping for Render free tier (spins down after 15min inactivity)
+  // Fires at a random interval between 4–10 minutes
+  const SELF_URL = process.env.RENDER_EXTERNAL_URL;
+  if (SELF_URL) {
+    const scheduleNextPing = () => {
+      const delay = Math.floor(Math.random() * (10 - 4 + 1) + 4) * 60 * 1000;
+      setTimeout(async () => {
+        try {
+          const { default: https } = await import("https");
+          https.get(`${SELF_URL}/health`, (res) => {
+            console.log(`🏓 Keep-alive ping — ${res.statusCode}`);
+          }).on("error", () => {});
+        } catch {}
+        scheduleNextPing();
+      }, delay);
+    };
+    scheduleNextPing();
+    console.log("✅ Keep-alive ping scheduled (4–10 min random interval)");
+  }
 });
