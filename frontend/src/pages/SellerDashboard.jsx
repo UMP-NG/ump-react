@@ -1660,7 +1660,7 @@ export default function SellerDashboard() {
                         </td>
                         <td><span style={{ fontSize: "1.1rem", padding: "3px 8px", borderRadius: 20, background: "var(--surface)", border: "1px solid var(--line)" }}>{l.type || "—"}</span></td>
                         <td style={{ fontWeight: 700, color: "var(--accent)" }}>{naira(l.price)}<span style={{ fontWeight: 400, fontSize: "1.1rem", color: "var(--ink-3)" }}> {l.rate || ""}</span></td>
-                        <td>{l.beds || 0} {l.type === "Hostel" ? "man/room" : "bed"} · {l.baths || 0} bath</td>
+                        <td>{l.beds || 0} {l.type === "Hostel" ? "man/room" : (l.beds === 1 ? "bed" : "beds")} · {l.baths || 0} {l.baths === 1 ? "bath" : "baths"}</td>
                         <td>
                           <span style={{ fontSize: "1.1rem", padding: "3px 8px", borderRadius: 20, background: l.available ? "#dcfce7" : "#fee2e2", color: l.available ? "#16a34a" : "#dc2626", fontWeight: 600 }}>
                             {l.available ? "Yes" : "No"}

@@ -86,7 +86,7 @@ const buildContent = (options) => {
       <p>You requested to reset the password for your UMP account.</p>
       <p>Click the button below to continue:</p>
       <div class="button-wrapper">
-        <a href="${options.resetUrl}" target="_blank" class="button">Reset Password</a>
+        <a href="${escapeHtml(options.resetUrl)}" target="_blank" class="button">Reset Password</a>
       </div>
       <p>This link will expire in <strong>10 minutes</strong>. If you did not request this, ignore this email.</p>
       <p>— UMP Support Team</p>
@@ -97,7 +97,9 @@ const buildContent = (options) => {
 </html>`;
   } else {
     subject = options.subject || "Message from UMP";
-    htmlContent = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8" /><style>body{font-family:Arial,sans-serif;padding:30px;background-color:#f4f4f4;}.content{background:#fff;padding:20px;border-radius:10px;}</style></head><body><div class="content"><p>${escapeHtml(options.message || "Hello from UMP!")}</p></div></body></html>`;
+    const msg = options.message || "Hello from UMP!";
+    textContent = msg;
+    htmlContent = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8" /><style>body{font-family:Arial,sans-serif;padding:30px;background-color:#f4f4f4;}.content{background:#fff;padding:20px;border-radius:10px;}</style></head><body><div class="content"><p>${escapeHtml(msg)}</p></div></body></html>`;
   }
 
   return { subject, htmlContent, textContent };
