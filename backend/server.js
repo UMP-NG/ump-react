@@ -135,19 +135,29 @@ server.listen(PORT, () => {
   // Fires at a random interval between 4–10 minutes
   const SELF_URL = process.env.RENDER_EXTERNAL_URL;
   if (SELF_URL) {
+    let pingTimer = null;
     const scheduleNextPing = () => {
       const delay = Math.floor(Math.random() * (10 - 4 + 1) + 4) * 60 * 1000;
-      setTimeout(async () => {
+      pingTimer = setTimeout(async () => {
         try {
           const { default: https } = await import("https");
           https.get(`${SELF_URL}/health`, (res) => {
             console.log(`🏓 Keep-alive ping — ${res.statusCode}`);
-          }).on("error", () => {});
-        } catch {}
+          }).on("error", (err) => {
+            console.warn(`⚠️  Keep-alive ping failed: ${err.message}`);
+          });
+        } catch (err) {
+          console.warn(`⚠️  Keep-alive ping error: ${err.message}`);
+        }
         scheduleNextPing();
       }, delay);
     };
     scheduleNextPing();
     console.log("✅ Keep-alive ping scheduled (4–10 min random interval)");
+
+    // Clean up on server close to prevent memory leaks
+    server.on("close", () => {
+      if (pingTimer) clearTimeout(pingTimer);
+    });
   }
 });
