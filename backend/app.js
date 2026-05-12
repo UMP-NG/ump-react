@@ -187,10 +187,12 @@ app.use((req, res, next) => {
 });
 
 // ----------------------------
-// 📂 STATIC FILES — serve React build output in production
+// 📂 STATIC FILES — serve React build output only when frontend/dist exists (local monorepo)
 // ----------------------------
+import { existsSync } from "fs";
 const STATIC_DIR = path.join(__dirname, "../frontend/dist");
-app.use(express.static(STATIC_DIR));
+const hasFrontendBuild = existsSync(path.join(STATIC_DIR, "index.html"));
+if (hasFrontendBuild) app.use(express.static(STATIC_DIR));
 
 // ----------------------------
 // 🏥 HEALTH CHECK - For debugging
@@ -251,11 +253,14 @@ app.get("/api/debug", (req, res) => {
   });
 });
 
-// Catch-all: serve React's index.html for all non-API routes (SPA routing)
+// Catch-all: serve React app for SPA routing (only when frontend build exists)
 app.get(/./, (req, res) => {
   if (req.path.startsWith("/api")) {
     return res.status(404).json({ message: "API endpoint not found" });
   }
-  res.sendFile(path.join(STATIC_DIR, "index.html"));
+  if (hasFrontendBuild) {
+    return res.sendFile(path.join(STATIC_DIR, "index.html"));
+  }
+  res.status(404).json({ message: "Not found" });
 });
 export default app;
