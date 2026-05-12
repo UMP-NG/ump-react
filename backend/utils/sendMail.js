@@ -179,6 +179,7 @@ const sendMail = async (options) => {
   }
 
   throw new Error(`Email delivery failed — ${errors.join(" | ")}`);
+};
 
 export default sendMail;
 
