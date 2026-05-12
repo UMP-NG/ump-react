@@ -26,9 +26,11 @@ const sendMail = async (options) => {
   const hasSendGrid = !!process.env.SENDGRID_API_KEY;
   const hasZoho = !!(process.env.ZOHO_SMTP_USER && process.env.ZOHO_SMTP_PASS);
   if (!hasSendGrid && !hasZoho) {
-    console.warn(`⚠️  [MAIL] No mail credentials configured — skipping email to ${options.email}`);
+    console.warn(`⚠️  [MAIL] No mail credentials configured — skipping email`);
     return { skipped: true };
   }
+
+  const maskedEmail = options.email.replace(/(?<=.{2}).(?=[^@]*@)/g, "*");
 
   try {
     // ✅ BACKUP: Zoho transporter (fallback)
@@ -282,10 +284,10 @@ This link will expire in 10 minutes.
     try {
       // 🟢 Try SendGrid first (PRIMARY)
       if (hasSendGrid) {
-        console.log(`📧 [MAIL] Attempting to send via SendGrid to ${options.email}`);
+        console.log(`📧 [MAIL] Attempting to send via SendGrid to ${maskedEmail}`);
         await withTimeout(sgMail.send(mailOptions), MAIL_TIMEOUT_MS);
         info = { messageId: `sendgrid-${Date.now()}` };
-        console.log(`✅ [MAIL] Successfully sent via SendGrid to ${options.email}`);
+        console.log(`✅ [MAIL] Successfully sent via SendGrid to ${maskedEmail}`);
         return info;
       }
       throw new Error("SendGrid not configured");
@@ -296,7 +298,7 @@ This link will expire in 10 minutes.
 
       try {
         // 🟠 Fallback to Zoho (BACKUP)
-        console.log(`📧 [MAIL] Falling back to Zoho mail for ${options.email}`);
+        console.log(`📧 [MAIL] Falling back to Zoho mail for ${maskedEmail}`);
         const zohoMailOptions = {
           ...mailOptions,
           from: `"UMP Official" <${process.env.ZOHO_SMTP_USER}>`,

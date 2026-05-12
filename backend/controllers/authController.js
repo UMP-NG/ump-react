@@ -14,12 +14,13 @@ export const signup = async (req, res) => {
   try {
     const { email, password, name } = req.body;
 
-    console.log("🔐 [SIGNUP] Request received:", { email, name, passwordLength: password?.length });
+    const maskedEmail = email?.replace(/(?<=.{2}).(?=[^@]*@)/g, "*");
+    console.log("🔐 [SIGNUP] Request received:", { email: maskedEmail, name, passwordLength: password?.length });
 
     const existingUser = await User.findOne({ email });
 
     if (existingUser && existingUser.isVerified) {
-      console.log("⚠️  [SIGNUP] User already exists and verified:", email);
+      console.log("⚠️  [SIGNUP] User already exists and verified:", maskedEmail);
       return res.status(400).json({ message: "User already exists" });
     }
 
@@ -40,7 +41,7 @@ export const signup = async (req, res) => {
           type: "otp",
           otp: otp,
         });
-        console.log("📧 [SIGNUP] OTP sent to existing unverified user:", email);
+        console.log("📧 [SIGNUP] OTP sent to existing unverified user:", maskedEmail);
       } catch (err) {
         console.error("❌ [SIGNUP] Error sending OTP:", err.message);
         // Error logged at mail service level
@@ -71,7 +72,7 @@ export const signup = async (req, res) => {
         type: "otp",
         otp: otp,
       });
-      console.log("📧 [SIGNUP] OTP sent to new user:", email);
+      console.log("📧 [SIGNUP] OTP sent to new user:", maskedEmail);
     } catch (err) {
       console.error("❌ [SIGNUP] Error sending OTP to new user:", err.message);
       // Error logged at mail service level
