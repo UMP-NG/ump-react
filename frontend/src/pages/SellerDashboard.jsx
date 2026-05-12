@@ -932,7 +932,8 @@ export default function SellerDashboard() {
       apiFetch("/api/payouts").catch(() => []),
       apiFetch("/api/messages/unread-count").catch(() => ({ count: 0 })),
       apiFetch("/api/payouts/details").catch(() => null),
-    ]).then(([dash, prods, ords, pays, unread, bankDets]) => {
+      apiFetch("/api/listings/my").catch(() => ({ listings: [] })),
+    ]).then(([dash, prods, ords, pays, unread, bankDets, listingsRes]) => {
       setKpis(dash?.kpis || dash);
       setProfile(dash?.profile || null);
       setProductPerformance(dash?.productPerformance || []);
@@ -940,6 +941,8 @@ export default function SellerDashboard() {
       setOrders(ords.orders || ords || []);
       setPayouts(pays.payouts || pays || []);
       setUnreadMessages(unread?.count || unread?.unread || 0);
+      setListings(listingsRes?.listings || []);
+      setListingsFetched(true);
 
       if (dash?.profile) {
         setDashStore({

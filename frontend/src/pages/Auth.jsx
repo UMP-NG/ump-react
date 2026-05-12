@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { apiFetch } from "../utils/api";
 import { useUser } from "../context/UserContext";
@@ -15,6 +15,10 @@ export default function Auth() {
   const [resendCooldown, setResendCooldown] = useState(0);
   const cooldownRef = useRef(null);
   const refs = useRef([]);
+
+  useEffect(() => {
+    return () => { if (cooldownRef.current) clearInterval(cooldownRef.current); };
+  }, []);
 
   function handleChange(i, val) {
     const v = val.replace(/\D/, "");
@@ -49,8 +53,10 @@ export default function Auth() {
     setResendMsg("");
     setError("");
     try {
-      await apiFetch("/api/auth/resend-otp", { method: "POST", body: { email } });
-      setResendMsg("Code sent! Check your inbox.");
+      const result = await apiFetch("/api/auth/resend-otp", { method: "POST", body: { email } });
+      setResendMsg(result?.deliveryFailed
+        ? "OTP generated but email failed — check spam or try again."
+        : "Code sent! Check your inbox.");
       let secs = 30;
       setResendCooldown(secs);
       cooldownRef.current = setInterval(() => {
@@ -95,7 +101,11 @@ export default function Auth() {
         ))}
       </div>
       {error && <div style={{ margin: "12px 24px 0", padding: 10, background: "#fef2f2", color: "#dc2626", borderRadius: "var(--r-md)", fontSize: "1.3rem", textAlign: "center" }}>{error}</div>}
-      {resendMsg && <div style={{ margin: "12px 24px 0", padding: 10, background: "#f0fdf4", color: "#16a34a", borderRadius: "var(--r-md)", fontSize: "1.3rem", textAlign: "center" }}>{resendMsg}</div>}
+      {resendMsg && (
+        <div style={{ margin: "12px 24px 0", padding: 10, background: resendMsg.includes("failed") ? "#fefce8" : "#f0fdf4", color: resendMsg.includes("failed") ? "#92400e" : "#16a34a", borderRadius: "var(--r-md)", fontSize: "1.3rem", textAlign: "center" }}>
+          {resendMsg}
+        </div>
+      )}
       <div style={{ padding: "24px 24px 0" }}>
         <button className="btn btn-primary btn-block btn-lg" onClick={handleVerify} disabled={loading}>
           {loading ? <i className="fas fa-spinner fa-spin" /> : <>Verify <i className="fas fa-arrow-right" /></>}

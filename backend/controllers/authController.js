@@ -441,7 +441,15 @@ export const resendOtp = async (req, res) => {
     const otp = user.createOTP();
     await user.save({ validateBeforeSave: false });
 
-    await sendMail({ email, type: "otp", otp });
+    try {
+      await sendMail({ email, type: "otp", otp });
+    } catch (mailErr) {
+      console.error("❌ [RESEND-OTP] Email delivery failed:", mailErr.message);
+      return res.status(200).json({
+        message: "OTP generated but email delivery failed — check your spam folder or try again shortly.",
+        deliveryFailed: true,
+      });
+    }
 
     res.status(200).json({ message: "OTP resent successfully" });
   } catch (error) {
