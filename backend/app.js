@@ -53,6 +53,7 @@ const allowedOrigins = [
   // Production / staging
   "https://ump-ng.github.io",
   "https://ump-html-1.onrender.com",
+  "https://ump-react.onrender.com",
   "https://exquisite-cactus-a9264f.netlify.app",
   "https://moonlit-babka-b6237b.netlify.app",
   "https://cool-malabi-39da0c.netlify.app",
@@ -62,6 +63,9 @@ const allowedOrigins = [
   "http://myump.com.ng",
   "file://",
 ];
+
+// Allow all Vercel preview + production deployments for this project
+const VERCEL_PATTERN = /^https:\/\/ump-react[\w-]*\.vercel\.app$/;
 
 // 🗜️ Enable gzip compression for all responses
 app.use(compression());
@@ -76,10 +80,9 @@ app.use(
       } else {
         // Normalize origin by removing trailing slash for comparison
         const normalizedOrigin = origin.replace(/\/$/, '');
-        const isAllowed = allowedOrigins.some(allowed => {
-          const normalizedAllowed = allowed.replace(/\/$/, '');
-          return normalizedAllowed === normalizedOrigin;
-        });
+        const isAllowed =
+          VERCEL_PATTERN.test(normalizedOrigin) ||
+          allowedOrigins.some(allowed => allowed.replace(/\/$/, '') === normalizedOrigin);
 
         if (isAllowed) {
           console.log("✅ CORS allowed:", origin);
