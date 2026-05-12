@@ -7,9 +7,27 @@ dotenv.config();
 // ✅ Initialize SendGrid
 sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 
+const MAIL_TIMEOUT_MS = 8000;
+
+const withTimeout = (promise, ms) =>
+  Promise.race([
+    promise,
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error(`Mail timed out after ${ms}ms`)), ms)
+    ),
+  ]);
+
 const sendMail = async (options) => {
   if (!options.email) {
     throw new Error("Recipient email is required");
+  }
+
+  // Skip silently if no mail credentials configured (e.g. dev / fresh deploy)
+  const hasSendGrid = !!process.env.SENDGRID_API_KEY;
+  const hasZoho = !!(process.env.ZOHO_SMTP_USER && process.env.ZOHO_SMTP_PASS);
+  if (!hasSendGrid && !hasZoho) {
+    console.warn(`⚠️  [MAIL] No mail credentials configured — skipping email to ${options.email}`);
+    return { skipped: true };
   }
 
   try {
@@ -18,6 +36,9 @@ const sendMail = async (options) => {
       host: "smtp.zoho.com",
       port: 465,
       secure: true,
+      connectionTimeout: 5000,
+      greetingTimeout: 5000,
+      socketTimeout: 5000,
       auth: {
         user: process.env.ZOHO_SMTP_USER,
         pass: process.env.ZOHO_SMTP_PASS,
@@ -260,13 +281,18 @@ This link will expire in 10 minutes.
 
     try {
       // 🟢 Try SendGrid first (PRIMARY)
-      console.log(`📧 [MAIL] Attempting to send via SendGrid to ${options.email}`);
-      await sgMail.send(mailOptions);
-      info = { messageId: `sendgrid-${Date.now()}` };
-      console.log(`✅ [MAIL] Successfully sent via SendGrid to ${options.email}`);
-      return info;
+      if (hasSendGrid) {
+        console.log(`📧 [MAIL] Attempting to send via SendGrid to ${options.email}`);
+        await withTimeout(sgMail.send(mailOptions), MAIL_TIMEOUT_MS);
+        info = { messageId: `sendgrid-${Date.now()}` };
+        console.log(`✅ [MAIL] Successfully sent via SendGrid to ${options.email}`);
+        return info;
+      }
+      throw new Error("SendGrid not configured");
     } catch (sendGridError) {
       console.warn(`⚠️  [MAIL] SendGrid failed: ${sendGridError.message}`);
+
+      if (!hasZoho) throw new Error("No fallback mail provider configured");
 
       try {
         // 🟠 Fallback to Zoho (BACKUP)
@@ -275,7 +301,7 @@ This link will expire in 10 minutes.
           ...mailOptions,
           from: `"UMP Official" <${process.env.ZOHO_SMTP_USER}>`,
         };
-        info = await zohoTransporter.sendMail(zohoMailOptions);
+        info = await withTimeout(zohoTransporter.sendMail(zohoMailOptions), MAIL_TIMEOUT_MS);
         console.log(`✅ [MAIL] Successfully sent via Zoho to ${options.email} - Message ID: ${info.messageId}`);
         return info;
       } catch (zohoError) {
