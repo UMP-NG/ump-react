@@ -432,18 +432,20 @@ export const resendOtp = async (req, res) => {
   const { email } = req.body;
 
   try {
-    // Re-generate OTP and send email again
-    const otp = Math.floor(100000 + Math.random() * 900000);
-    await sendMail({
-      email,
-      subject: "Your New UMP OTP Code",
-      otp,
-      type: "otp",
-    });
+    if (!email) return res.status(400).json({ message: "Email is required" });
+
+    const user = await User.findOne({ email });
+    if (!user) return res.status(404).json({ message: "No account found with that email" });
+    if (user.isVerified) return res.status(400).json({ message: "Email is already verified" });
+
+    const otp = user.createOTP();
+    await user.save({ validateBeforeSave: false });
+
+    await sendMail({ email, type: "otp", otp });
 
     res.status(200).json({ message: "OTP resent successfully" });
   } catch (error) {
-    res.status(500).json({ message: "Failed to resend OTP", error });
+    res.status(500).json({ message: "Failed to resend OTP" });
   }
 };
 

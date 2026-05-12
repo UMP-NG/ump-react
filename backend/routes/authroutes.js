@@ -62,7 +62,7 @@ router.put("/me", protect, async (req, res) => {
 router.post("/forgot-password", forgotPassword);
 router.put("/reset-password/:token", resetPassword);
 router.post("/verify-otp", verifyOTP);
-router.post("/auth/resend-otp", resendOtp);
+router.post("/resend-otp", resendOtp);
 
 router.put("/change-password", protect, async (req, res) => {
   try {

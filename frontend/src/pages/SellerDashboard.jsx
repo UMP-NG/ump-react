@@ -1362,6 +1362,22 @@ export default function SellerDashboard() {
               </div>
             </div>
           </div>
+
+          {/* Listings quick-access */}
+          <div className="card" style={{ padding: 0, overflow: "hidden", marginTop: 20 }}>
+            <div style={{ padding: "16px 16px 12px", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid var(--line)" }}>
+              <h3 style={{ margin: 0, fontSize: "1.6rem", fontWeight: 700 }}><i className="fas fa-building" style={{ marginRight: 8, color: "var(--accent)" }} />Apartments & Hostels</h3>
+              <span style={{ fontSize: "1.2rem", color: "var(--accent)", cursor: "pointer", fontWeight: 600 }} onClick={() => setTab("Apartments")}>Manage</span>
+            </div>
+            <div style={{ padding: "14px 16px" }}>
+              <p style={{ margin: 0, color: "var(--ink-3)", fontSize: "1.3rem" }}>
+                You have <strong style={{ color: "var(--ink-1)" }}>{listings.length}</strong> active {listings.length === 1 ? "listing" : "listings"}.
+              </p>
+              <button className="btn btn-sm" style={{ marginTop: 12, background: "rgba(249,115,22,.1)", color: "var(--accent)", border: "none" }} onClick={() => setTab("Apartments")}>
+                <i className="fas fa-arrow-right" /> View all listings
+              </button>
+            </div>
+          </div>
         </>
       )}
 
@@ -2015,15 +2031,15 @@ export default function SellerDashboard() {
 
           {PAGE_CONTENT}
 
-          <div className="seller-mob-tabs" style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: "var(--navy-800)", display: "flex", borderTop: "1px solid rgba(255,255,255,.08)", zIndex: 55 }}>
+          <div className="seller-mob-tabs" style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: "var(--navy-800)", display: "flex", borderTop: "1px solid rgba(255,255,255,.08)", zIndex: 55, overflow: "hidden" }}>
             {MOB_TABS.map((t) => (
               <button
                 key={t.id}
                 onClick={() => setTab(t.id)}
-                style={{ flex: 1, padding: "10px 2px", border: "none", background: "transparent", color: tab === t.id ? "var(--accent)" : "rgba(255,255,255,.5)", fontSize: "0.85rem", fontWeight: 600, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 3, fontFamily: "var(--font-sans)" }}
+                style={{ flex: 1, minWidth: 0, padding: "8px 2px", border: "none", background: "transparent", color: tab === t.id ? "var(--accent)" : "rgba(255,255,255,.5)", fontSize: "0.78rem", fontWeight: 600, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 2, fontFamily: "var(--font-sans)" }}
               >
-                <i className={`fas fa-${t.icon}`} style={{ fontSize: "1.5rem" }} />
-                {t.label}
+                <i className={`fas fa-${t.icon}`} style={{ fontSize: "1.35rem" }} />
+                <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", width: "100%", textAlign: "center" }}>{t.label}</span>
               </button>
             ))}
           </div>

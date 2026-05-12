@@ -11,6 +11,9 @@ export default function Auth() {
   const [digits, setDigits] = useState(["", "", "", "", "", ""]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [resendMsg, setResendMsg] = useState("");
+  const [resendCooldown, setResendCooldown] = useState(0);
+  const cooldownRef = useRef(null);
   const refs = useRef([]);
 
   function handleChange(i, val) {
@@ -42,7 +45,22 @@ export default function Auth() {
   }
 
   async function handleResend() {
-    try { await apiFetch("/api/auth/resend-otp", { method: "POST", body: { email } }); } catch {}
+    if (resendCooldown > 0) return;
+    setResendMsg("");
+    setError("");
+    try {
+      await apiFetch("/api/auth/resend-otp", { method: "POST", body: { email } });
+      setResendMsg("Code sent! Check your inbox.");
+      let secs = 30;
+      setResendCooldown(secs);
+      cooldownRef.current = setInterval(() => {
+        secs -= 1;
+        setResendCooldown(secs);
+        if (secs <= 0) clearInterval(cooldownRef.current);
+      }, 1000);
+    } catch (err) {
+      setError(err.message || "Failed to resend code, try again");
+    }
   }
 
   return (
@@ -77,13 +95,19 @@ export default function Auth() {
         ))}
       </div>
       {error && <div style={{ margin: "12px 24px 0", padding: 10, background: "#fef2f2", color: "#dc2626", borderRadius: "var(--r-md)", fontSize: "1.3rem", textAlign: "center" }}>{error}</div>}
+      {resendMsg && <div style={{ margin: "12px 24px 0", padding: 10, background: "#f0fdf4", color: "#16a34a", borderRadius: "var(--r-md)", fontSize: "1.3rem", textAlign: "center" }}>{resendMsg}</div>}
       <div style={{ padding: "24px 24px 0" }}>
         <button className="btn btn-primary btn-block btn-lg" onClick={handleVerify} disabled={loading}>
           {loading ? <i className="fas fa-spinner fa-spin" /> : <>Verify <i className="fas fa-arrow-right" /></>}
         </button>
         <p style={{ textAlign: "center", marginTop: 20, fontSize: "1.3rem", color: "var(--ink-3)" }}>
           Didn't get the code?{" "}
-          <span style={{ color: "var(--accent)", fontWeight: 700, cursor: "pointer" }} onClick={handleResend}>Resend</span>
+          <span
+            style={{ color: resendCooldown > 0 ? "var(--ink-3)" : "var(--accent)", fontWeight: 700, cursor: resendCooldown > 0 ? "default" : "pointer" }}
+            onClick={handleResend}
+          >
+            {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : "Resend"}
+          </span>
         </p>
       </div>
     </div>
