@@ -4,7 +4,7 @@ import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
 import BottomNav from "../components/BottomNav";
 import Ph from "../components/Ph";
-import ProductCard, { naira } from "../components/ProductCard";
+import ProductCard from "../components/ProductCard";
 import Skel from "../components/Skel";
 import { apiFetch } from "../utils/api";
 import { useUser } from "../context/UserContext";
