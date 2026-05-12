@@ -28,7 +28,7 @@ export const signup = async (req, res) => {
     if (existingUser && !existingUser.isVerified) {
       // Resend OTP for unverified user — also update name and password so
       // re-signup heals accounts that were created with the old double-hash bug
-      console.log("🔄 [SIGNUP] User exists but not verified, resending OTP:", email);
+      console.log("🔄 [SIGNUP] User exists but not verified, resending OTP:", maskedEmail);
       if (name) existingUser.name = name;
       existingUser.password = password; // pre-save hook will hash it correctly
       const otp = existingUser.createOTP();

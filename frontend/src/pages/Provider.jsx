@@ -2,6 +2,7 @@ import { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import Logo from "../components/Logo";
 import { apiFetch } from "../utils/api";
+import { useUser } from "../context/UserContext";
 
 const SELLER_CATS  = ["Electronics", "Books", "Fashion", "Food", "Beauty", "Accessories", "Handmade", "Other"];
 const SERVICE_CATS = ["Design", "Writing", "Tech / Coding", "Tutoring", "Photography", "Fitness", "Music", "Other"];
@@ -23,6 +24,7 @@ const STATS = [
 
 export default function Provider() {
   const navigate = useNavigate();
+  const { user } = useUser();
   const [tab, setTab]       = useState("seller");
   const [loading, setLoading] = useState(false);
   const [error, setError]   = useState("");
@@ -187,7 +189,20 @@ export default function Provider() {
                 ))}
               </div>
 
-              <form onSubmit={handleSubmit}>
+              {tab === "seller" && user?.roles?.includes("seller") && (
+                <div style={{ padding: "24px 20px", background: "#fefce8", border: "1px solid #fde68a", borderRadius: "var(--r-lg)", marginBottom: 24, textAlign: "center" }}>
+                  <i className="fas fa-store" style={{ fontSize: "2.8rem", color: "#d97706", marginBottom: 12, display: "block" }} />
+                  <div style={{ fontWeight: 800, fontSize: "1.8rem", color: "var(--ink-1)", marginBottom: 6 }}>You already have a store</div>
+                  <p style={{ fontSize: "1.3rem", color: "var(--ink-2)", margin: "0 0 18px" }}>
+                    Each account can only have one store. Go to your Seller Dashboard to manage your existing store.
+                  </p>
+                  <button type="button" className="btn btn-primary" onClick={() => navigate("/seller-dashboard")}>
+                    <i className="fas fa-chart-line" /> Go to My Dashboard
+                  </button>
+                </div>
+              )}
+
+              <form onSubmit={handleSubmit} style={{ display: tab === "seller" && user?.roles?.includes("seller") ? "none" : undefined }}>
                 {tab === "seller"
                   ? <SellerForm seller={seller} setSeller={setSeller} />
                   : <ProviderForm service={service} setService={setService} />
@@ -495,4 +510,5 @@ function ProviderForm({ service, setService }) {
     </>
   );
 }
+
 

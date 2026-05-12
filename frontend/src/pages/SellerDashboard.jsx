@@ -481,8 +481,8 @@ function ListingModal({ listing, onClose, onSave, showToast }) {
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 10, marginBottom: 14 }}>
             <div>
-              <label style={lSty}>Bedrooms</label>
-              <input style={iSty} type="number" min="0" value={form.beds} onChange={set("beds")} />
+              <label style={lSty}>{form.type === "Hostel" ? "Men per Room" : "Bedrooms"}</label>
+              <input style={iSty} type="number" min="1" value={form.beds} onChange={set("beds")} placeholder={form.type === "Hostel" ? "e.g. 4" : "1"} />
             </div>
             <div>
               <label style={lSty}>Bathrooms</label>
@@ -1660,7 +1660,7 @@ export default function SellerDashboard() {
                         </td>
                         <td><span style={{ fontSize: "1.1rem", padding: "3px 8px", borderRadius: 20, background: "var(--surface)", border: "1px solid var(--line)" }}>{l.type || "—"}</span></td>
                         <td style={{ fontWeight: 700, color: "var(--accent)" }}>{naira(l.price)}<span style={{ fontWeight: 400, fontSize: "1.1rem", color: "var(--ink-3)" }}> {l.rate || ""}</span></td>
-                        <td>{l.beds || 0} bed · {l.baths || 0} bath</td>
+                        <td>{l.beds || 0} {l.type === "Hostel" ? "man/room" : "bed"} · {l.baths || 0} bath</td>
                         <td>
                           <span style={{ fontSize: "1.1rem", padding: "3px 8px", borderRadius: 20, background: l.available ? "#dcfce7" : "#fee2e2", color: l.available ? "#16a34a" : "#dc2626", fontWeight: 600 }}>
                             {l.available ? "Yes" : "No"}
@@ -2031,3 +2031,4 @@ export default function SellerDashboard() {
     </>
   );
 }
+
