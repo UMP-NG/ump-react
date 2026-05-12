@@ -1989,11 +1989,12 @@ export default function SellerDashboard() {
   );
 
   const MOB_TABS = [
-    { id: "Home",     icon: "house" },
-    { id: "Orders",   icon: "box-archive" },
-    { id: "Products", icon: "boxes-stacked" },
-    { id: "Payouts",  icon: "wallet" },
-    { id: "Settings", icon: "gear" },
+    { id: "Home",       icon: "house",         label: "Home" },
+    { id: "Orders",     icon: "box-archive",   label: "Orders" },
+    { id: "Products",   icon: "boxes-stacked", label: "Products" },
+    { id: "Apartments", icon: "building",      label: "Listings" },
+    { id: "Payouts",    icon: "wallet",        label: "Payouts" },
+    { id: "Settings",   icon: "gear",          label: "Settings" },
   ];
 
   return (
@@ -2019,10 +2020,10 @@ export default function SellerDashboard() {
               <button
                 key={t.id}
                 onClick={() => setTab(t.id)}
-                style={{ flex: 1, padding: "10px 4px", border: "none", background: "transparent", color: tab === t.id ? "var(--accent)" : "rgba(255,255,255,.5)", fontSize: "1rem", fontWeight: 600, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 3, fontFamily: "var(--font-sans)" }}
+                style={{ flex: 1, padding: "10px 2px", border: "none", background: "transparent", color: tab === t.id ? "var(--accent)" : "rgba(255,255,255,.5)", fontSize: "0.85rem", fontWeight: 600, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 3, fontFamily: "var(--font-sans)" }}
               >
-                <i className={`fas fa-${t.icon}`} style={{ fontSize: "1.6rem" }} />
-                {t.id}
+                <i className={`fas fa-${t.icon}`} style={{ fontSize: "1.5rem" }} />
+                {t.label}
               </button>
             ))}
           </div>
