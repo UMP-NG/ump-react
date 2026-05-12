@@ -19,3 +19,4 @@ router.get("/sellers", searchSellers);
 router.get("/", siteSearch);
 
 export default router;
+

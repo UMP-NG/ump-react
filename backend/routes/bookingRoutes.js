@@ -27,3 +27,4 @@ router.put("/:bookingId/accept", protect, acceptBooking);
 router.put("/:bookingId/reject", protect, rejectBooking);
 
 export default router;
+

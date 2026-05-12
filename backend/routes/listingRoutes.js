@@ -33,3 +33,4 @@ router.get("/:id", getListingById);
 router.delete("/:id", protect, requireRole("seller", "admin"), deleteListing);
 
 export default router;
+

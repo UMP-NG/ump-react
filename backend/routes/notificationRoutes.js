@@ -15,3 +15,4 @@ router.put("/preferences", protect, updateNotificationPreferences);
 router.patch("/:id/read", protect, markNotificationRead);
 
 export default router;
+

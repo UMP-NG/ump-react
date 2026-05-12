@@ -18,3 +18,4 @@ const payoutSchema = new mongoose.Schema(
 );
 
 export default mongoose.model("Payout", payoutSchema);
+

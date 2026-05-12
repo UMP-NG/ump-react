@@ -20,3 +20,4 @@ router.put("/details", protect, updatePayoutDetails);
 
 
 export default router;
+

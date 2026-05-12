@@ -100,3 +100,4 @@ export const paystackWebhook = async (req, res) => {
     return res.sendStatus(500);
   }
 };
+

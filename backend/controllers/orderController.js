@@ -746,3 +746,4 @@ export const getEscrowDetails = async (req, res) => {
       .json({ success: false, message: "Failed to fetch escrow info" });
   }
 };
+

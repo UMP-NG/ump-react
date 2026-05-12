@@ -39,3 +39,4 @@ router.put("/users/update-password", protect, updatePassword);
 router.delete("/users/deactivate", protect, deactivateAccount);
 router.get("/orders", protect, requireRole("seller"), getSellerOrders);
 export default router;
+

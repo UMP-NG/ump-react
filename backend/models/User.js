@@ -168,3 +168,4 @@ userSchema.methods.createResetToken = function () {
 // Note: _id already has default index from MongoDB
 
 export default mongoose.model("User", userSchema);
+

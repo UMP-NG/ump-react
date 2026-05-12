@@ -78,3 +78,4 @@ router.get("/", protect, requireRole("admin"), getAllUsers);
 router.get("/:id", protect, requireRole("admin"), getUserById);
 
 export default router;
+

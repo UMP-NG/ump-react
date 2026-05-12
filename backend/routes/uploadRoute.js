@@ -21,3 +21,4 @@ router.post("/", uploadSingle, async (req, res) => {
 });
 
 export default router;
+

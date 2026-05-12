@@ -21,3 +21,4 @@ router.get("/sessions/recent", getRecentSessions);
 router.get("/revenue/daily", getDailyRevenue);
 
 export default router;
+

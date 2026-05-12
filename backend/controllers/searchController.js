@@ -107,3 +107,4 @@ export const siteSearch = async (req, res) => {
     res.status(500).json({ message: "Server error while searching" });
   }
 };
+

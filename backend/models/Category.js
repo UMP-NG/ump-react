@@ -21,3 +21,4 @@ const categorySchema = new mongoose.Schema(
 categorySchema.index({ name: "text", description: "text" });
 
 export default mongoose.model("Category", categorySchema);
+

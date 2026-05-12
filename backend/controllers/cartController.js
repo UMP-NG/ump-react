@@ -171,3 +171,4 @@ export const checkoutCart = async (req, res) => {
     res.status(500).json({ message: "Checkout failed" });
   }
 };
+

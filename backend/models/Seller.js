@@ -84,3 +84,4 @@ sellerSchema.index({
 });
 
 export default mongoose.model("Seller", sellerSchema);
+

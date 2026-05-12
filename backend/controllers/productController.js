@@ -640,3 +640,4 @@ export const trackProductView = async (req, res) => {
     res.status(500).json({ message: "Server error tracking view" });
   }
 };
+

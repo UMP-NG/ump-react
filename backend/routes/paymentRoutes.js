@@ -21,3 +21,4 @@ router.get("/verify-account", protect, verifyAccount);
 router.post("/bank-details", protect, saveBankDetails);
 
 export default router;
+

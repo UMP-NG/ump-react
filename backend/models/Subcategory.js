@@ -24,3 +24,4 @@ const subcategorySchema = new mongoose.Schema(
 subcategorySchema.index({ parent: 1, name: 1 }, { unique: true });
 
 export default mongoose.model("Subcategory", subcategorySchema);
+

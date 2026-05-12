@@ -30,3 +30,4 @@ const serviceSessionSchema = new mongoose.Schema(
 );
 
 export default mongoose.model("ServiceSession", serviceSessionSchema);
+

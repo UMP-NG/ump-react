@@ -43,3 +43,4 @@ const listingSchema = new mongoose.Schema(
 );
 
 export default mongoose.model("Listing", listingSchema);
+

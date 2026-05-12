@@ -32,3 +32,4 @@ messageSchema.index({ receiver: 1, isRead: 1 });
 messageSchema.index({ createdAt: -1 }); // For cleanup queries
 
 export default mongoose.model("Message", messageSchema);
+

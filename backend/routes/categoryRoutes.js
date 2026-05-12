@@ -38,3 +38,4 @@ router.put("/:id", protect, requireRole("admin"), updateCategory);
 router.delete("/:id", protect, requireRole("admin"), deleteCategory);
 
 export default router;
+

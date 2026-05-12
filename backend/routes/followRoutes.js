@@ -32,3 +32,4 @@ router.get("/:userId/followers", getFollowers);
 router.get("/:userId/following", getFollowing);
 
 export default router;
+

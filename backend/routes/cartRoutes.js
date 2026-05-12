@@ -17,3 +17,4 @@ router.delete("/remove/:productId", protect, removeFromCart);
 router.post("/checkout", protect, checkoutCart);
 
 export default router;
+

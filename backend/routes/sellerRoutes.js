@@ -43,3 +43,4 @@ router.patch("/:id/view", incrementSellerView);
 router.get("/:id", getSellerById);
 
 export default router;
+

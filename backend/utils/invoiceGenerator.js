@@ -37,3 +37,4 @@ export const generateInvoicePDF = async (order) => {
 
   return filePath;
 };
+

@@ -9,3 +9,4 @@ router.post("/listing/:listingId", protect, toggleListing);
 router.post("/:productId", protect, toggleWishlist);
 
 export default router;
+
