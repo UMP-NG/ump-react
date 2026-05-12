@@ -259,7 +259,9 @@ app.get(/./, (req, res) => {
     return res.status(404).json({ message: "API endpoint not found" });
   }
   if (hasFrontendBuild) {
-    return res.sendFile(path.join(STATIC_DIR, "index.html"));
+    return res.sendFile(path.join(STATIC_DIR, "index.html"), (err) => {
+      if (err && !res.headersSent) res.status(500).json({ message: "Failed to serve app" });
+    });
   }
   res.status(404).json({ message: "Not found" });
 });
