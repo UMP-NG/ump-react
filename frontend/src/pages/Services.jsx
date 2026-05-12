@@ -1,171 +1,188 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
+import BottomNav from "../components/BottomNav";
+import Ph from "../components/Ph";
+import { naira } from "../components/ProductCard";
 import { apiFetch } from "../utils/api";
-import "../styles/Services.css";
+import Skel from "../components/Skel";
+
+const CATS = ["All", "Tutoring", "Design", "Fitness", "Music", "Photo", "Coding"];
+const SORTS = [
+  { value: "default", label: "Default" },
+  { value: "price-asc", label: "Price: Low" },
+  { value: "price-desc", label: "Price: High" },
+  { value: "rating", label: "Top Rated" },
+];
+
+function matchesCat(service, cat) {
+  if (cat === "All") return true;
+  const fields = [
+    service.category,
+    service.type,
+    service.title,
+    service.name,
+    service.major,
+    service.description,
+  ].filter(Boolean).join(" ").toLowerCase();
+  return fields.includes(cat.toLowerCase());
+}
+
+function applySort(services, sort) {
+  if (sort === "price-asc") return [...services].sort((a, b) => (a.rate || 0) - (b.rate || 0));
+  if (sort === "price-desc") return [...services].sort((a, b) => (b.rate || 0) - (a.rate || 0));
+  if (sort === "rating") return [...services].sort((a, b) => (b.rating || 0) - (a.rating || 0));
+  return services;
+}
 
 export default function Services() {
+  const navigate = useNavigate();
+  const [cat, setCat] = useState("All");
+  const [sort, setSort] = useState("default");
+  const [availableOnly, setAvailableOnly] = useState(false);
+  const [maxPrice, setMaxPrice] = useState("");
   const [services, setServices] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Filters
-  const [priceRange, setPriceRange] = useState(100);
-  const [category, setCategory] = useState("");
-  const [rating, setRating] = useState("");
-  const [availability, setAvailability] = useState([]);
-
-  // Load services
   useEffect(() => {
-    async function loadServices() {
-      try {
-        const data = await apiFetch("/services");
-        setServices(Array.isArray(data) ? data : data.services || []);
-      } catch (err) {
-        console.error(err);
-        setServices([]);
-      } finally {
-        setLoading(false);
-      }
-    }
-    loadServices();
+    apiFetch("/api/services")
+      .then((d) => setServices(d.services || d || []))
+      .catch(() => setServices([]))
+      .finally(() => setLoading(false));
   }, []);
 
-  // Filtered services
-  const filteredServices = services.filter((s) => {
-    const matchPrice = s.rate <= priceRange;
-    const matchCategory = category ? s.category === category : true;
-    const matchRating = rating ? s.rating >= parseFloat(rating) : true;
-    const matchAvailability =
-      availability.length > 0
-        ? availability.some((a) => s.availability?.includes(a))
-        : true;
-    return matchPrice && matchCategory && matchRating && matchAvailability;
-  });
-
-  // Handle availability checkbox toggle
-  const handleAvailabilityChange = (e) => {
-    const { value, checked } = e.target;
-    setAvailability((prev) =>
-      checked ? [...prev, value] : prev.filter((a) => a !== value)
-    );
-  };
+  const visible = applySort(
+    services.filter((s) => {
+      if (!matchesCat(s, cat)) return false;
+      if (availableOnly && s.available === false) return false;
+      if (maxPrice && (s.rate || 0) > Number(maxPrice)) return false;
+      return true;
+    }),
+    sort
+  );
 
   return (
-    <>
+    <div className="page">
       <Navbar />
-
-      {/* Filters */}
-      <section className="filter-bar">
-        <div className="filter-item">
-          <label htmlFor="category">Category</label>
-          <select
-            id="category"
-            value={category}
-            onChange={(e) => setCategory(e.target.value)}
-          >
-            <option value="">All Categories</option>
-            <option value="tutoring">Academic Tutoring</option>
-            <option value="design">Graphic Design</option>
-            <option value="fitness">Fitness Coaching</option>
-            <option value="music">Music Lessons</option>
-          </select>
+      <div className="page-inner">
+        <div style={{ padding: "12px 0 0" }}>
+          <h1 style={{ fontSize: "2.6rem", fontWeight: 800, letterSpacing: "-0.02em", margin: "4px 0 4px" }}>Services</h1>
+          <p style={{ margin: 0, color: "var(--ink-2)", fontSize: "1.3rem" }}>Hire talent right on campus.</p>
         </div>
 
-        <div className="filter-item price-filter">
-          <label htmlFor="priceRange">Rate / Price</label>
-          <div className="price-range-wrapper">
+        {/* Filter row */}
+        <div style={{ padding: "12px 0 0", display: "flex", gap: 8, overflowX: "auto", scrollbarWidth: "none" }}>
+          {CATS.map((c) => (
+            <span
+              key={c}
+              className={`chip${cat === c ? " active" : ""}`}
+              style={{ cursor: "pointer", flexShrink: 0 }}
+              onClick={() => setCat(c)}
+            >
+              {c}
+            </span>
+          ))}
+        </div>
+
+        {/* Sort + price + availability row */}
+        <div style={{ padding: "10px 0 0", display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          <select
+            className="input"
+            value={sort}
+            onChange={(e) => setSort(e.target.value)}
+            style={{ width: 130, height: 40, paddingLeft: 10, flexShrink: 0 }}
+          >
+            {SORTS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+          </select>
+          <input
+            className="input"
+            type="number"
+            placeholder="Max price (₦)"
+            value={maxPrice}
+            onChange={(e) => setMaxPrice(e.target.value)}
+            style={{ width: 140, height: 40, flexShrink: 0 }}
+          />
+          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "1.3rem", cursor: "pointer", userSelect: "none" }}>
             <input
-              type="range"
-              id="priceRange"
-              min="0"
-              max="100"
-              step="5"
-              value={priceRange}
-              onChange={(e) => setPriceRange(e.target.value)}
+              type="checkbox"
+              checked={availableOnly}
+              onChange={(e) => setAvailableOnly(e.target.checked)}
             />
-            <span id="priceValue">₦0 - ₦{priceRange}/hr</span>
-          </div>
+            Available only
+          </label>
         </div>
 
-        <div className="filter-item">
-          <label htmlFor="rating">Rating</label>
-          <select
-            id="rating"
-            value={rating}
-            onChange={(e) => setRating(e.target.value)}
-          >
-            <option value="">All Ratings</option>
-            <option value="4.5">4.5★ & Up</option>
-            <option value="4">4★ & Up</option>
-            <option value="3.5">3.5★ & Up</option>
-          </select>
-        </div>
-
-        <div className="filter-item availability">
-          <label>Availability</label>
-          <div className="availability-options">
-            {["mornings", "afternoons", "evenings", "weekdays", "weekends"].map(
-              (time) => (
-                <label key={time}>
-                  <input
-                    type="checkbox"
-                    value={time}
-                    checked={availability.includes(time)}
-                    onChange={handleAvailabilityChange}
-                  />{" "}
-                  {time.charAt(0).toUpperCase() + time.slice(1)}
-                </label>
+        <div style={{ padding: "14px 0 24px", display: "flex", flexDirection: "column", gap: 12 }}>
+          {loading
+            ? [1, 2, 3].map((i) => <Skel.ServiceCard key={i} />)
+            : visible.length === 0
+            ? (
+                <div className="empty-state">
+                  <i className="fas fa-hand-holding-heart" />
+                  <h3>No services found</h3>
+                  <p>{cat !== "All" ? `No "${cat}" services match your filters` : "No services listed yet — check back soon"}</p>
+                </div>
               )
-            )}
-          </div>
-        </div>
-      </section>
+            : visible.map((s) => {
+                const imgUrl = s.images?.[0]?.url || null;
+                const providerName = s.provider?.storeName || s.provider?.businessName || s.provider?.brandName || s.provider?.name || "Provider";
 
-      {/* Services Grid */}
-      <section className="service-listing">
-        <div className="service-grid">
-          {loading ? (
-            <p>Loading services...</p>
-          ) : filteredServices.length === 0 ? (
-            <div className="empty-state">
-              <img src="/images/service.jpg" alt="No services" />
-              <h3>No services available yet</h3>
-              <p>Once partners add services, they’ll appear here.</p>
-            </div>
-          ) : (
-            filteredServices.map((s) => (
-              <div className="service-card" key={s._id}>
-                <img
-                  src={s.image || "/images/default.jpg"}
-                  alt={s.title}
-                  className="service-photo"
-                />
-                <h3 className="service-title">{s.title}</h3>
-                <div className="provider-info">
-                  <span>{s.name || s.provider?.name || "Unknown"}</span>
-                  {s.verified && (
-                    <span className="verified-badge">Verified</span>
-                  )}
-                </div>
-                <div className="price">₦{s.rate || "N/A"}/hr</div>
-                <div className="rating">
-                  ⭐ {s.rating || "0"} <span>/ 5.0</span>
-                </div>
-                <button
-                  className="view-btn"
-                  onClick={() =>
-                    (window.location.href = `/servicesdp?id=${s._id}`)
-                  }
-                >
-                  View Details
-                </button>
-              </div>
-            ))
-          )}
+                return (
+                  <div
+                    key={s._id}
+                    className="card"
+                    style={{ padding: 14, display: "flex", gap: 12, cursor: "pointer" }}
+                    onClick={() => navigate(`/services/${s._id}`)}
+                  >
+                    <div style={{ width: 96, height: 96, borderRadius: 14, overflow: "hidden", flexShrink: 0, background: "var(--surface)" }}>
+                      {imgUrl
+                        ? <img src={imgUrl} alt={s.title || s.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                        : <Ph kind={s.category?.toLowerCase() || s.major?.toLowerCase() || "default"} label={s.category || s.major || ""} />
+                      }
+                    </div>
+
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
+                        <div style={{ fontSize: "1.4rem", fontWeight: 700, lineHeight: 1.3 }}>{s.title || s.name}</div>
+                        {s.available === false && (
+                          <span style={{ fontSize: "1rem", padding: "2px 7px", borderRadius: 10, background: "#fee2e2", color: "#dc2626", fontWeight: 600, flexShrink: 0 }}>Unavailable</span>
+                        )}
+                      </div>
+
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "1.2rem", color: "var(--ink-3)", marginTop: 4 }}>
+                        {providerName}
+                        {s.verified && <i className="fas fa-circle-check" style={{ color: "var(--accent)", fontSize: "1rem" }} />}
+                      </div>
+
+                      {(s.rating || 0) > 0 && (
+                        <div className="rating" style={{ marginTop: 4 }}>
+                          <i className="fas fa-star star" /> {s.rating}
+                          <span className="count">({s.reviewsCount || 0})</span>
+                        </div>
+                      )}
+
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8 }}>
+                        <span style={{ fontSize: "1.5rem", fontWeight: 800, color: "var(--accent)" }}>
+                          {naira(s.rate || 0)}<span style={{ fontSize: "1.1rem", color: "var(--ink-3)", fontWeight: 500 }}>/session</span>
+                        </span>
+                        <button
+                          className="btn btn-sm btn-dark"
+                          onClick={(e) => { e.stopPropagation(); navigate(`/services/${s._id}`); }}
+                        >
+                          Book
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+          }
         </div>
-      </section>
+      </div>
 
       <Footer />
-    </>
+      <BottomNav />
+    </div>
   );
 }

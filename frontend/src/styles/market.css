@@ -34,6 +34,7 @@ html {
 body {
     background: whitesmoke;
     overflow-x: hidden;
+    padding-top: 8rem;
 }
 
 /* Header */
@@ -87,8 +88,8 @@ body {
     color: #fff;
 }
 
-#mobile_menu {
-    display: none;
+.hamburger-btn {
+    display: none !important;
 }
 
 .search-form {
@@ -258,7 +259,7 @@ body {
     padding: 1rem 2rem;
     background: var(--color-primary);
     border-bottom: 1px solid #ddd;
-    margin-top: 9rem;
+    margin-top: 1rem;
     box-shadow: 0 3px 6px rgba(0, 0, 0, 0.2);
 }
 
@@ -461,9 +462,9 @@ body {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
     gap: 2.5rem;
-    padding: 4rem 2rem;
+    padding: 3rem 2rem;
     max-width: 1200px;
-    margin: 10rem auto;
+    margin: 0 auto;
 }
 
 .product-card,
@@ -728,90 +729,7 @@ body {
 }
 
 
-footer {
-    background: #111827;
-    color: #f3f4f6;
-    padding: 60px 20px 30px;
-    text-align: center;
-    transform: translateY(100%);
-    opacity: 0;
-    transition: all 0.8s ease;
-}
-
-footer.visible {
-    transform: translateY(0);
-    opacity: 1;
-}
-
-.footer-container {
-    max-width: 1200px;
-    margin: auto;
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 30px;
-    text-align: left;
-}
-
-.footer-logo h2 {
-    font-size: 1.5rem;
-    margin-bottom: 10px;
-    color: #f9fafb;
-}
-
-.footer-logo p {
-    font-size: 0.95rem;
-    color: #d1d5db;
-}
-
-.footer-links h3 {
-    margin-bottom: 12px;
-    font-size: 1.1rem;
-    color: #f3f4f6;
-}
-
-.footer-links ul {
-    list-style: none;
-}
-
-.footer-links ul li {
-    margin-bottom: 8px;
-}
-
-.footer-links ul li a {
-    color: #9ca3af;
-    text-decoration: none;
-    font-size: 0.95rem;
-    transition: color 0.3s;
-}
-
-.footer-links ul li a:hover {
-    color: #f3f4f6;
-}
-
-.social-icons {
-    margin-top: 15px;
-}
-
-.social-icons a {
-    display: inline-block;
-    margin-right: 10px;
-    color: #9ca3af;
-    font-size: 1.2rem;
-    transition: color 0.3s;
-}
-
-.social-icons a:hover {
-    color: #f3f4f6;
-}
-
-.footer-bottom {
-    margin-top: 40px;
-    border-top: 1px solid #374151;
-    padding-top: 15px;
-    font-size: 0.85rem;
-    color: #9ca3af;
-    text-align: center;
-}
+/* Footer styles are in index.css */
 
 @keyframes popIn {
     0% {
@@ -928,8 +846,8 @@ footer.visible {
         transition: .4s linear;
     }
 
-    #mobile_menu {
-        display: inline-block;
+    .hamburger-btn {
+        display: flex !important;
     }
 
     .main-header .nav_links a {

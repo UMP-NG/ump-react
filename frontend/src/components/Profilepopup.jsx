@@ -1,42 +1,79 @@
-import React from "react";
-import "../styles/index.css";
+import { useNavigate } from "react-router-dom";
+import { useUser } from "../context/UserContext";
+import { apiFetch } from "../utils/api";
 
-export default function ProfilePopup({ active, onOpenSettings }) {
+export default function ProfilePopup({ onClose }) {
+  const navigate = useNavigate();
+  const { user, setUser } = useUser();
+
+  const roles = user?.roles || [];
+  const isSeller   = roles.includes("seller");
+  const isProvider = roles.includes("service_provider");
+
+  const MENU = [
+    { icon: "box-archive",        label: "My orders",           path: "/orders" },
+    { icon: "heart",              label: "Wishlist",            path: "/wishlist" },
+    ...(isSeller   ? [{ icon: "store",             label: "Seller dashboard",   path: "/seller-dashboard" }] : []),
+    ...(isProvider ? [{ icon: "hand-holding-heart", label: "Provider analytics", path: "/provider-analytics" }] : []),
+    ...(!isSeller && !isProvider ? [{ icon: "circle-plus", label: "Become a seller / provider", path: "/partner", accent: true }] : []),
+    ...(isSeller !== isProvider  ? [{ icon: "circle-plus", label: "Add another role", path: "/partner", accent: true }] : []),
+    { icon: "gear",               label: "Settings",            path: "/settings" },
+    { icon: "circle-question",    label: "Help & support",      path: "/help" },
+  ];
+
+  const initials = user
+    ? (user.name || user.email || "U").split(" ").map((p) => p[0]).join("").slice(0, 2).toUpperCase()
+    : "?";
+  const avatarUrl = user?.avatar?.url || (typeof user?.avatar === "string" ? user.avatar : null);
+
+  async function handleLogout() {
+    try { await apiFetch("/api/auth/logout", { method: "POST" }); } catch {}
+    setUser(null);
+    onClose();
+    navigate("/login");
+  }
+
+  function handleNav(path) {
+    onClose();
+    if (path !== "#") navigate(path);
+  }
+
   return (
-    <div className={`profile-popup ${active ? "active" : ""}`}>
-      <div className="profile-settings">
-        <button aria-label="Open settings" onClick={onOpenSettings}>
-          <i className="fas fa-cog"></i>
-        </button>
-      </div>
-      <div className="profile-header">
-        <div className="profile-avatar">
-          <img
-            id="profileAvatar"
-            src="/images/guy.png"
-            alt="Avatar"
-            className="profile-avatar"
-          />
+    <>
+      <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.4)", zIndex: 70 }} />
+      <div style={{ position: "fixed", top: 70, right: 12, width: 280, background: "#fff", borderRadius: "var(--r-xl)", boxShadow: "var(--shadow-deep)", overflow: "hidden", zIndex: 80, animation: "fadeUp .25s" }}>
+        <div style={{ padding: 16, display: "flex", alignItems: "center", gap: 12, background: "linear-gradient(135deg, var(--navy-800), #1e1b4b)", color: "#fff" }}>
+          <div className="avatar" style={{ width: 44, height: 44, overflow: "hidden", padding: avatarUrl ? 0 : undefined }}>
+              {avatarUrl
+                ? <img src={avatarUrl} alt={user?.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                : initials}
+            </div>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontWeight: 700, fontSize: "1.4rem" }}>{user?.name || "Guest"}</div>
+            <div style={{ fontSize: "1.1rem", opacity: 0.7, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {user?.email || "—"}
+            </div>
+          </div>
         </div>
-        <div className="profile-info">
-          <h3 id="profileName">Guest</h3>
-          <span id="profileEmail" className="profile-email">
-            -
-          </span>
-          <span id="profileStatus" className="profile-status">
-            ❌ Logged out
-          </span>
+        <div style={{ padding: 8 }}>
+          {MENU.map((it) => (
+            <button
+              key={it.label}
+              onClick={() => handleNav(it.path)}
+              style={{ width: "100%", padding: "12px 14px", display: "flex", alignItems: "center", gap: 12, border: "none", background: "transparent", cursor: "pointer", fontSize: "1.4rem", borderRadius: "var(--r-md)", color: it.accent ? "var(--accent)" : "var(--ink-1)", fontWeight: it.accent ? 600 : 500, textAlign: "left" }}
+            >
+              <i className={`fas fa-${it.icon}`} style={{ width: 20, textAlign: "center" }} /> {it.label}
+            </button>
+          ))}
+          <div style={{ height: 1, background: "var(--line)", margin: "6px 0" }} />
+          <button
+            onClick={handleLogout}
+            style={{ width: "100%", padding: "12px 14px", display: "flex", alignItems: "center", gap: 12, border: "none", background: "transparent", cursor: "pointer", fontSize: "1.4rem", borderRadius: "var(--r-md)", color: "#ef4444", fontWeight: 600, textAlign: "left" }}
+          >
+            <i className="fas fa-right-from-bracket" style={{ width: 20, textAlign: "center" }} /> Log out
+          </button>
         </div>
       </div>
-
-      <div className="profile-actions">
-        <button className="profile-btn" id="signInBtn">
-          Sign In
-        </button>
-        <button className="profile-btn logout" id="logoutBtn">
-          Logout
-        </button>
-      </div>
-    </div>
+    </>
   );
 }

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
-import { API_BASE } from "../utils/api";
+import { Link } from "react-router-dom";
+import { apiFetch } from "../utils/api";
 
 export default function FeaturedCategories() {
   const [categories, setCategories] = useState([]);
@@ -8,9 +9,8 @@ export default function FeaturedCategories() {
     let mounted = true;
     async function load() {
       try {
-        const res = await fetch(`${API_BASE}/api/categories`);
-        if (!res.ok) throw new Error("Failed to fetch categories");
-        let data = await res.json();
+        let data = await apiFetch("/api/categories");
+        if (!Array.isArray(data)) data = data.categories || [];
         data = data.sort(() => Math.random() - 0.5).slice(0, 4);
         if (mounted) setCategories(data);
       } catch (err) {
@@ -18,9 +18,7 @@ export default function FeaturedCategories() {
       }
     }
     load();
-    return () => {
-      mounted = false;
-    };
+    return () => { mounted = false; };
   }, []);
 
   return (
@@ -32,19 +30,22 @@ export default function FeaturedCategories() {
       </p>
 
       <div className="categories-grid" id="categoryContainer">
-        {categories.map((cat) => (
-          <a
-            key={cat.slug}
-            href={`/pages/category.html?slug=${cat.slug}`}
+        {categories.map((cat) => {
+          const imgUrl = cat.images?.[0]?.url || cat.image || "";
+          return (
+          <Link
+            key={cat.slug || cat._id}
+            to={`/category/${cat.slug}`}
             className="category-card"
           >
-            <img src={cat.image} alt={cat.name} />
+            {imgUrl && <img src={imgUrl} alt={cat.name} />}
             <div className="category-overlay">
               <h3>{cat.name}</h3>
               <span>{cat.description || ""}</span>
             </div>
-          </a>
-        ))}
+          </Link>
+          );
+        })}
       </div>
     </section>
   );

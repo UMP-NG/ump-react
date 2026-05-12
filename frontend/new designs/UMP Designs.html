@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>UMP — University Marketplace · Designs</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+
+<script type="text/babel" src="shared.jsx"></script>
+<script type="text/babel" src="screens-home.jsx"></script>
+<script type="text/babel" src="screens-market.jsx"></script>
+<script type="text/babel" src="screens-product.jsx"></script>
+<script type="text/babel" src="screens-cart.jsx"></script>
+<script type="text/babel" src="screens-auth.jsx"></script>
+<script type="text/babel" src="screens-messages.jsx"></script>
+<script type="text/babel" src="screens-light.jsx"></script>
+<script type="text/babel" src="screens-desktop.jsx"></script>
+<script type="text/babel" src="app.jsx"></script>
+
+<script type="text/babel">
+const { useState, useEffect } = React;
+
+// Tweak defaults — host-editable
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "accent": "#eab308",
+  "accentDeep": "#d29b00",
+  "navStyle": "frosted",
+  "radius": "rounded",
+  "heroVariant": "image",
+  "cardVariant": "hover",
+  "theme": "light"
+}/*EDITMODE-END*/;
+
+function applyTweaks(t) {
+  const root = document.documentElement;
+  root.style.setProperty('--accent', t.accent);
+  root.style.setProperty('--accent-deep', t.accentDeep);
+  root.setAttribute('data-theme', t.theme);
+  // radius
+  if (t.radius === 'sharp') {
+    root.style.setProperty('--r-md', '6px');
+    root.style.setProperty('--r-lg', '8px');
+    root.style.setProperty('--r-xl', '12px');
+    root.style.setProperty('--r-2xl', '16px');
+  } else {
+    root.style.setProperty('--r-md', '12px');
+    root.style.setProperty('--r-lg', '18px');
+    root.style.setProperty('--r-xl', '24px');
+    root.style.setProperty('--r-2xl', '32px');
+  }
+}
+
+function Root() {
+  const [t, setT] = useTweaks(TWEAK_DEFAULTS);
+  useEffect(() => applyTweaks(t), [t]);
+
+  return (
+    <>
+      <TweaksPanel title="UMP design tweaks">
+        <TweakSection title="Brand">
+          <TweakColor
+            label="Accent"
+            value={t.accent}
+            onChange={(v) => setT({ accent: v, accentDeep: shade(v) })}
+            options={['#f97316', '#eab308', '#22c55e', '#ef4444', '#8b5cf6', '#0ea5e9']}
+          />
+          <TweakRadio label="Theme" value={t.theme} onChange={(v) => setT('theme', v)}
+            options={[{ label: 'Light', value: 'light' }, { label: 'Dark', value: 'dark' }]} />
+        </TweakSection>
+
+        <TweakSection title="Layout">
+          <TweakRadio label="Navbar" value={t.navStyle} onChange={(v) => setT('navStyle', v)}
+            options={[{ label: 'Frosted', value: 'frosted' }, { label: 'Solid', value: 'solid' }, { label: 'Dark', value: 'dark' }]} />
+          <TweakRadio label="Card radius" value={t.radius} onChange={(v) => setT('radius', v)}
+            options={[{ label: 'Sharp', value: 'sharp' }, { label: 'Rounded', value: 'rounded' }]} />
+        </TweakSection>
+
+        <TweakSection title="Variants">
+          <TweakRadio label="Hero" value={t.heroVariant} onChange={(v) => setT('heroVariant', v)}
+            options={[{ label: 'Full image', value: 'image' }, { label: 'Split', value: 'split' }]} />
+          <TweakRadio label="Product cards" value={t.cardVariant} onChange={(v) => setT('cardVariant', v)}
+            options={[{ label: 'Always shown', value: 'always' }, { label: 'On hover', value: 'hover' }]} />
+        </TweakSection>
+      </TweaksPanel>
+
+      <DesignCanvas
+        title="UMP — University Marketplace Platform"
+        subtitle="Hi-fi designs · mobile-first · clickable prototype · all 15 screens"
+      >
+        <DCSection id="overview" title="Components & Foundations">
+          <DCArtboard id="navbar-frosted" label="Navbar — frosted (light, authed)" width={420} height={120}>
+            <NavbarSpec frosted />
+          </DCArtboard>
+          <DCArtboard id="navbar-solid" label="Navbar — solid" width={420} height={120}>
+            <NavbarSpec />
+          </DCArtboard>
+          <DCArtboard id="navbar-dark" label="Navbar — dark" width={420} height={120}>
+            <NavbarSpec dark frosted />
+          </DCArtboard>
+          <DCArtboard id="footer" label="Footer (mobile)" width={390} height={520}>
+            <div style={{ background: 'var(--paper)', height: '100%', overflow: 'auto' }}>
+              <Footer />
+            </div>
+          </DCArtboard>
+        </DCSection>
+
+        <DCSection id="auth-flow" title="Auth flow → Login → OTP → Home">
+          <DCArtboard id="login" label="01 · Login (Sign In + Sign Up tabs)" width={390} height={844}>
+            <Phone theme={t.theme}><LoginMobile onNav={() => {}} /></Phone>
+          </DCArtboard>
+          <DCArtboard id="otp" label="02 · OTP verification (auto-advancing)" width={390} height={844}>
+            <Phone theme={t.theme}><OtpMobile onNav={() => {}} /></Phone>
+          </DCArtboard>
+          <DCArtboard id="forgot" label="03 · Forgot password" width={390} height={844}>
+            <Phone theme={t.theme}><ForgotMobile onNav={() => {}} /></Phone>
+          </DCArtboard>
+          <DCArtboard id="reset" label="04 · Reset password" width={390} height={844}>
+            <Phone theme={t.theme}><ResetMobile onNav={() => {}} /></Phone>
+          </DCArtboard>
+        </DCSection>
+
+        <DCSection id="browse-flow" title="Main flow → Home → Market → Product → Cart → Pay">
+          <DCArtboard id="prototype" label="🔵 LIVE PROTOTYPE — click through home → product → cart → pay" width={390} height={844}>
+            <Phone theme={t.theme}>
+              <PhoneFlowApp initial="home" heroVariant={t.heroVariant} cardVariant={t.cardVariant} navStyle={t.navStyle} />
+            </Phone>
+          </DCArtboard>
+          <DCArtboard id="home" label="01 · Home" width={390} height={844}>
+            <Phone theme={t.theme}><HomeMobile heroVariant={t.heroVariant} onNav={() => {}} /></Phone>
+          </DCArtboard>
+          <DCArtboard id="home-split" label="01b · Home — split hero variant" width={390} height={844}>
+            <Phone theme={t.theme}><HomeMobile heroVariant="split" onNav={() => {}} /></Phone>
+          </DCArtboard>
+          <DCArtboard id="market" label="02 · Marketplace — cards always shown" width={390} height={844}>
+            <Phone theme={t.theme}><MarketMobile cardVariant="always" onNav={() => {}} /></Phone>
+          </DCArtboard>
+          <DCArtboard id="market-hover" label="02b · Marketplace — actions on hover" width={390} height={844}>
+            <Phone theme={t.theme}><MarketMobile cardVariant="hover" onNav={() => {}} /></Phone>
+          </DCArtboard>
+          <DCArtboard id="product" label="03 · Product detail" width={390} height={844}>
+            <Phone theme={t.theme}><ProductDetail id={1} onNav={() => {}} /></Phone>
+          </DCArtboard>
+          <DCArtboard id="cart-1" label="04 · Cart — Step 1: Review" width={390} height={844}>
+            <Phone theme={t.theme}><CartMobile step={1} onNav={() => {}} onStep={() => {}} /></Phone>
+          </DCArtboard>
+          <DCArtboard id="cart-2" label="05 · Cart — Step 2: Delivery" width={390} height={844}>
+            <Phone theme={t.theme}><CartMobile step={2} onNav={() => {}} onStep={() => {}} /></Phone>
+          </DCArtboard>
+          <DCArtboard id="cart-3" label="06 · Cart — Step 3: Payment" width={390} height={844}>
+            <Phone theme={t.theme}><CartMobile step={3} onNav={() => {}} onStep={() => {}} /></Phone>
+          </DCArtboard>
+          <DCArtboard id="payment-success" label="07 · Payment success" width={390} height={844}>
+            <Phone theme={t.theme}><PaymentSuccessMobile onNav={() => {}} /></Phone>
+          </DCArtboard>
+          <DCArtboard id="checkout-success" label="07b · Checkout success" width={390} height={844}>
+            <Phone theme={t.theme}><CheckoutSuccessMobile onNav={() => {}} /></Phone>
+          </DCArtboard>
+        </DCSection>
+
+        <DCSection id="messaging" title="Messaging — Socket.io chat">
+          <DCArtboard id="msg-list" label="Inbox — conversations list" width={390} height={844}>
+            <Phone theme={t.theme}><div className="phone-scroll"><MsgList onOpen={() => {}} onNav={() => {}} /></div></Phone>
+          </DCArtboard>
+          <DCArtboard id="msg-thread" label="Chat thread (with product context)" width={390} height={844}>
+            <Phone theme={t.theme}><MessagesMobile onNav={() => {}} /></Phone>
+          </DCArtboard>
+        </DCSection>
+
+        <DCSection id="services-hostels" title="Services · Hostels · Sellers · Partner">
+          <DCArtboard id="services" label="Services — peer talent" width={390} height={844}>
+            <Phone theme={t.theme}><ServicesMobile onNav={() => {}} /></Phone>
+          </DCArtboard>
+          <DCArtboard id="hostel" label="Hostel hub — off-campus rentals" width={390} height={844}>
+            <Phone theme={t.theme}><HostelMobile onNav={() => {}} /></Phone>
+          </DCArtboard>
+          <DCArtboard id="store" label="Store — verified seller directory" width={390} height={844}>
+            <Phone theme={t.theme}><StoreMobile onNav={() => {}} /></Phone>
+          </DCArtboard>
+          <DCArtboard id="partner" label="Partner — become seller / provider" width={390} height={844}>
+            <Phone theme={t.theme}><PartnerMobile onNav={() => {}} /></Phone>
+          </DCArtboard>
+        </DCSection>
+
+        <DCSection id="desktop" title="Desktop (1440px) — data-heavy pages">
+          <DCArtboard id="d-home" label="Home — desktop" width={1440} height={2200}>
+            <HomeDesktop onNav={() => {}} />
+          </DCArtboard>
+          <DCArtboard id="d-market" label="Marketplace — desktop with sidebar filters" width={1440} height={1200}>
+            <MarketDesktop onNav={() => {}} />
+          </DCArtboard>
+          <DCArtboard id="d-messages" label="Messages — desktop split view" width={1440} height={900}>
+            <MessagesDesktop onNav={() => {}} />
+          </DCArtboard>
+          <DCArtboard id="d-cart" label="Cart — desktop with summary" width={1440} height={900}>
+            <CartDesktop onNav={() => {}} />
+          </DCArtboard>
+        </DCSection>
+      </DesignCanvas>
+    </>
+  );
+}
+
+function shade(hex) {
+  // darken the color a bit for 'accentDeep'
+  const c = hex.replace('#','');
+  const r = Math.max(0, parseInt(c.slice(0,2),16) - 24);
+  const g = Math.max(0, parseInt(c.slice(2,4),16) - 24);
+  const b = Math.max(0, parseInt(c.slice(4,6),16) - 24);
+  return '#' + [r,g,b].map(x=>x.toString(16).padStart(2,'0')).join('');
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<Root />);
+</script>
+</body>
+</html>

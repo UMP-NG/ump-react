@@ -1,0 +1,2033 @@
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { naira } from "../components/ProductCard";
+import { apiFetch } from "../utils/api";
+import { useUser } from "../context/UserContext";
+import { useToast } from "../context/ToastContext";
+import FloatingChat from "../components/FloatingChat";
+import Skel from "../components/Skel";
+
+// ─── Sidebar nav items ────────────────────────────────────────────────────────
+const NAV = [
+  { id: "Home",       icon: "house",          label: "Dashboard Home" },
+  { id: "Orders",     icon: "box-archive",     label: "Orders" },
+  { id: "Products",   icon: "boxes-stacked",   label: "Products" },
+  { id: "Apartments", icon: "building",        label: "Apartments" },
+  { id: "Messages",   icon: "message",         label: "Messages",   action: "navigate" },
+  { id: "Payouts",    icon: "wallet",          label: "Payouts" },
+  { id: "Settings",   icon: "gear",            label: "Settings" },
+];
+
+// ─── Sidebar ──────────────────────────────────────────────────────────────────
+function Sidebar({ tab, setTab, navigate, profile, user, unreadMessages }) {
+  const avatarUrl = user?.avatar?.url || (typeof user?.avatar === "string" ? user.avatar : null);
+  const initials = (user?.name || "S").split(" ").map((p) => p[0]).join("").slice(0, 2).toUpperCase();
+
+  return (
+    <aside className="seller-sidebar">
+      <div style={{ padding: "24px 20px 16px", borderBottom: "1px solid rgba(255,255,255,.08)" }}>
+        <div style={{ fontSize: "2.4rem", fontWeight: 900, letterSpacing: "-0.04em", color: "#fff" }}>
+          <span style={{ color: "var(--accent)" }}>U</span>MP
+        </div>
+        <div style={{ fontSize: "1.1rem", color: "rgba(255,255,255,.4)", marginTop: 2 }}>Seller Portal</div>
+      </div>
+
+      <div style={{ padding: "20px 20px 16px", display: "flex", alignItems: "center", gap: 12, borderBottom: "1px solid rgba(255,255,255,.08)" }}>
+        <div className="avatar" style={{ width: 44, height: 44, fontSize: "1.6rem", flexShrink: 0, overflow: "hidden", padding: avatarUrl ? 0 : undefined }}>
+          {avatarUrl ? <img src={avatarUrl} alt={user?.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : initials}
+        </div>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontWeight: 700, fontSize: "1.4rem", color: "#fff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {profile?.storeName || user?.name || "Seller"}
+          </div>
+          <div style={{ fontSize: "1.1rem", color: "rgba(255,255,255,.45)" }}>UMP Seller</div>
+        </div>
+      </div>
+
+      <nav style={{ flex: 1, padding: "8px 0" }}>
+        {NAV.map((item) => (
+          <button
+            key={item.id}
+            className={`seller-nav-item${tab === item.id ? " active" : ""}`}
+            onClick={() => {
+              if (item.action === "navigate") {
+                navigate(item.id === "Messages" ? "/messages" : "/settings");
+              } else {
+                setTab(item.id);
+              }
+            }}
+          >
+            <i className={`fas fa-${item.icon}`} style={{ width: 18, textAlign: "center", flexShrink: 0 }} />
+            {item.label}
+            {item.id === "Messages" && unreadMessages > 0 && (
+              <span className="nav-badge">{unreadMessages > 9 ? "9+" : unreadMessages}</span>
+            )}
+          </button>
+        ))}
+      </nav>
+
+      <div style={{ padding: "12px 0 20px", borderTop: "1px solid rgba(255,255,255,.08)" }}>
+        <button className="seller-nav-item" onClick={() => navigate("/")} style={{ color: "rgba(255,255,255,.5)" }}>
+          <i className="fas fa-arrow-left" style={{ width: 18, textAlign: "center" }} />
+          Return to UMP
+        </button>
+      </div>
+    </aside>
+  );
+}
+
+// ─── Alert banners ────────────────────────────────────────────────────────────
+function Alerts({ orders, products, kpis, setTab }) {
+  const [dismissed, setDismissed] = useState([]);
+  const dismiss = (id) => setDismissed((d) => [...d, id]);
+
+  const newOrders = orders.filter((o) => o.status === "pending").length;
+  const lowStock  = products.filter((p) => p.stock !== undefined && p.stock <= 5 && p.stock > 0).length;
+  const payout    = kpis?.walletBalance || 0;
+
+  const alerts = [
+    newOrders > 0 && { id: "orders", bg: "rgba(249,115,22,.12)", border: "rgba(249,115,22,.3)", color: "var(--accent)", icon: "box-archive", text: `${newOrders} New Order${newOrders > 1 ? "s" : ""}!`, cta: "View Now", action: () => setTab("Orders") },
+    lowStock > 0  && { id: "stock",  bg: "rgba(234,179,8,.1)",   border: "rgba(234,179,8,.3)",  color: "#d97706",       icon: "triangle-exclamation", text: `${lowStock} Product${lowStock > 1 ? "s" : ""} Low Stock`, cta: "Restock", action: () => setTab("Products") },
+    payout > 0    && { id: "payout", bg: "rgba(34,197,94,.1)",   border: "rgba(34,197,94,.3)",  color: "#16a34a",       icon: "wallet", text: `${naira(payout)} Payout Ready`, cta: "Withdraw", action: () => setTab("Payouts") },
+  ].filter(Boolean).filter((a) => !dismissed.includes(a.id));
+
+  if (alerts.length === 0) return null;
+
+  return (
+    <div style={{ marginBottom: 8 }}>
+      {alerts.map((a) => (
+        <div key={a.id} className="seller-alert" style={{ background: a.bg, border: `1px solid ${a.border}` }}>
+          <i className={`fas fa-${a.icon}`} style={{ color: a.color, fontSize: "1.6rem", flexShrink: 0 }} />
+          <span style={{ flex: 1, color: "var(--ink-1)" }}>{a.text}</span>
+          <button onClick={a.action} style={{ background: a.color, color: "#fff", border: "none", borderRadius: "var(--r-pill)", padding: "4px 12px", fontSize: "1.2rem", fontWeight: 700, cursor: "pointer", flexShrink: 0, fontFamily: "var(--font-sans)" }}>{a.cta}</button>
+          <button onClick={() => dismiss(a.id)} style={{ border: "none", background: "none", cursor: "pointer", color: "var(--ink-3)", padding: "0 4px", fontSize: "1.3rem" }}><i className="fas fa-xmark" /></button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── Status badge ─────────────────────────────────────────────────────────────
+const S_STYLE = {
+  pending:   { bg: "#fef3c7", color: "#d97706" },
+  confirmed: { bg: "#dbeafe", color: "#1d4ed8" },
+  shipped:   { bg: "#e0f2fe", color: "#0284c7" },
+  completed: { bg: "#dcfce7", color: "#16a34a" },
+  delivered: { bg: "#dcfce7", color: "#16a34a" },
+  cancelled: { bg: "#fee2e2", color: "#dc2626" },
+};
+function StatusBadge({ status }) {
+  const s = S_STYLE[status] || S_STYLE.pending;
+  return <span style={{ fontSize: "1.1rem", padding: "3px 10px", borderRadius: 20, background: s.bg, color: s.color, fontWeight: 700, whiteSpace: "nowrap" }}>{status || "pending"}</span>;
+}
+
+// ─── Verify banner ────────────────────────────────────────────────────────────
+function VerifyBanner({ requested, onRequest, loading }) {
+  if (requested) {
+    return (
+      <div style={{ padding: "12px 16px", borderRadius: "var(--r-md)", background: "rgba(59,130,246,.08)", border: "1px solid rgba(59,130,246,.25)", display: "flex", alignItems: "center", gap: 14, marginBottom: 16 }}>
+        <i className="fas fa-clock" style={{ fontSize: "1.6rem", color: "#3b82f6", flexShrink: 0 }} />
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: "1.3rem", fontWeight: 700, color: "#1d4ed8" }}>Verification pending</div>
+          <div style={{ fontSize: "1.15rem", color: "var(--ink-3)" }}>We're reviewing your store. You'll be notified once approved.</div>
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div style={{ padding: "12px 16px", borderRadius: "var(--r-md)", background: "rgba(249,115,22,.07)", border: "1px solid rgba(249,115,22,.25)", display: "flex", alignItems: "center", gap: 14, marginBottom: 16 }}>
+      <i className="fas fa-shield-halved" style={{ fontSize: "1.6rem", color: "var(--accent)", flexShrink: 0 }} />
+      <div style={{ flex: 1 }}>
+        <div style={{ fontSize: "1.3rem", fontWeight: 700 }}>Get your store verified</div>
+        <div style={{ fontSize: "1.15rem", color: "var(--ink-3)" }}>Earn a verified badge to build buyer trust and boost sales.</div>
+      </div>
+      <button className="btn btn-primary btn-sm" style={{ borderRadius: "var(--r-pill)", flexShrink: 0 }} onClick={onRequest} disabled={loading}>
+        {loading ? <i className="fas fa-spinner fa-spin" /> : <><i className="fas fa-badge-check" /> Get Verified</>}
+      </button>
+    </div>
+  );
+}
+
+// ─── Quick Edit Modal ─────────────────────────────────────────────────────────
+function QuickEditModal({ product, onClose, onSave, showToast }) {
+  const [form, setForm] = useState({
+    name: product.name || "",
+    price: product.price || "",
+    stock: product.stock ?? "",
+    desc: product.desc || "",
+    condition: product.condition || "New",
+    status: product.status || "active",
+    colors: Array.isArray(product.colors) ? product.colors : [],
+    specs: Object.entries(product.specs || {}).map(([k, v]) => ({ k, v })),
+    existingImages: Array.isArray(product.images)
+      ? product.images.map((img) => (typeof img === "string" ? { url: img, publicId: "" } : img))
+      : [],
+    removeImages: [],
+  });
+  const [saving, setSaving] = useState(false);
+  const [colorInput, setColorInput] = useState({ name: "", code: "#e0e0e0" });
+  const [specInput, setSpecInput] = useState({ k: "", v: "" });
+
+  const set = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.value }));
+
+  const addColor = () => {
+    if (!colorInput.name.trim()) return;
+    setForm((f) => ({ ...f, colors: [...f.colors, { ...colorInput }] }));
+    setColorInput({ name: "", code: "#e0e0e0" });
+  };
+  const removeColor = (i) => setForm((f) => ({ ...f, colors: f.colors.filter((_, idx) => idx !== i) }));
+
+  const addSpec = () => {
+    if (!specInput.k.trim()) return;
+    setForm((f) => ({ ...f, specs: [...f.specs, { ...specInput }] }));
+    setSpecInput({ k: "", v: "" });
+  };
+  const removeSpec = (i) => setForm((f) => ({ ...f, specs: f.specs.filter((_, idx) => idx !== i) }));
+
+  const markRemoveImage = (publicId) => setForm((f) => ({ ...f, removeImages: [...f.removeImages, publicId] }));
+
+  async function handleSave() {
+    if (!form.name.trim()) { showToast("Product name is required", "error"); return; }
+    if (!form.price || Number(form.price) <= 0) { showToast("Valid price is required", "error"); return; }
+    setSaving(true);
+    try {
+      const specsObj = {};
+      form.specs.forEach(({ k, v }) => { if (k) specsObj[k] = v; });
+      const updated = await apiFetch(`/api/products/${product._id}`, {
+        method: "PUT",
+        body: {
+          name: form.name.trim(),
+          price: Number(form.price),
+          stock: form.stock !== "" ? Number(form.stock) : undefined,
+          desc: form.desc,
+          condition: form.condition,
+          status: form.status,
+          colors: form.colors,
+          specs: specsObj,
+          removeImages: form.removeImages,
+        },
+      });
+      showToast("Product updated", "success");
+      onSave(updated.product || { ...product, name: form.name, price: Number(form.price), stock: Number(form.stock), desc: form.desc, condition: form.condition });
+      onClose();
+    } catch (err) {
+      showToast(err?.message || "Failed to update product", "error");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const iSty = { width: "100%", padding: "8px 12px", borderRadius: "var(--r-md)", border: "1px solid var(--line)", background: "var(--surface)", color: "var(--ink-1)", fontSize: "1.3rem", fontFamily: "var(--font-sans)", boxSizing: "border-box" };
+  const lSty = { fontSize: "1.15rem", color: "var(--ink-3)", fontWeight: 600, marginBottom: 4, display: "block" };
+
+  const visibleImages = form.existingImages.filter((img) => !form.removeImages.includes(img.publicId));
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.55)", zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }} onClick={onClose}>
+      <div className="card" style={{ maxWidth: 560, width: "100%", maxHeight: "90vh", overflowY: "auto", padding: 0 }} onClick={(e) => e.stopPropagation()}>
+        <div style={{ padding: "18px 20px", borderBottom: "1px solid var(--line)", display: "flex", justifyContent: "space-between", alignItems: "center", position: "sticky", top: 0, background: "var(--card)", zIndex: 1 }}>
+          <div style={{ fontWeight: 800, fontSize: "1.8rem" }}>Quick Edit</div>
+          <button onClick={onClose} style={{ border: "none", background: "none", cursor: "pointer", fontSize: "1.8rem", color: "var(--ink-3)" }}><i className="fas fa-xmark" /></button>
+        </div>
+
+        <div style={{ padding: 20 }}>
+          <div style={{ marginBottom: 14 }}>
+            <label style={lSty}>Product Name</label>
+            <input style={iSty} value={form.name} onChange={set("name")} placeholder="Product name" />
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 14 }}>
+            <div>
+              <label style={lSty}>Price (₦)</label>
+              <input style={iSty} type="number" min="0" value={form.price} onChange={set("price")} />
+            </div>
+            <div>
+              <label style={lSty}>Stock</label>
+              <input style={iSty} type="number" min="0" value={form.stock} onChange={set("stock")} />
+            </div>
+            <div>
+              <label style={lSty}>Condition</label>
+              <select style={{ ...iSty }} value={form.condition} onChange={set("condition")}>
+                <option value="New">New</option>
+                <option value="Used">Used</option>
+              </select>
+            </div>
+          </div>
+
+          <div style={{ marginBottom: 14 }}>
+            <label style={lSty}>Status</label>
+            <select style={{ ...iSty }} value={form.status} onChange={set("status")}>
+              <option value="active">Active</option>
+              <option value="draft">Draft</option>
+              <option value="archived">Archived</option>
+            </select>
+          </div>
+
+          <div style={{ marginBottom: 14 }}>
+            <label style={lSty}>Description</label>
+            <textarea style={{ ...iSty, height: 80, resize: "vertical" }} value={form.desc} onChange={set("desc")} placeholder="Product description..." />
+          </div>
+
+          {/* Images */}
+          {visibleImages.length > 0 && (
+            <div style={{ marginBottom: 14 }}>
+              <label style={lSty}>Images <span style={{ fontWeight: 400, color: "var(--ink-4)" }}>(click × to remove)</span></label>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                {visibleImages.map((img, i) => (
+                  <div key={i} style={{ position: "relative", width: 72, height: 72 }}>
+                    <img src={img.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 8 }} />
+                    {img.publicId && (
+                      <button onClick={() => markRemoveImage(img.publicId)} style={{ position: "absolute", top: -4, right: -4, width: 18, height: 18, borderRadius: "50%", background: "#dc2626", color: "#fff", border: "none", cursor: "pointer", fontSize: "0.9rem", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}>
+                        <i className="fas fa-xmark" />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Colors */}
+          <div style={{ marginBottom: 14 }}>
+            <label style={lSty}>Colors</label>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
+              {form.colors.map((c, i) => (
+                <span key={i} style={{ display: "flex", alignItems: "center", gap: 5, padding: "3px 8px", borderRadius: 20, background: "var(--surface)", border: "1px solid var(--line)", fontSize: "1.2rem" }}>
+                  <span style={{ width: 12, height: 12, borderRadius: "50%", background: c.code || "#999", border: "1px solid var(--line)", flexShrink: 0 }} />
+                  {c.name}
+                  <button onClick={() => removeColor(i)} style={{ border: "none", background: "none", cursor: "pointer", color: "var(--ink-3)", padding: 0, fontSize: "1rem", lineHeight: 1 }}><i className="fas fa-xmark" /></button>
+                </span>
+              ))}
+              {form.colors.length === 0 && <span style={{ fontSize: "1.2rem", color: "var(--ink-4)" }}>No colors added</span>}
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <input style={{ ...iSty, flex: 1 }} placeholder="Color name (e.g. Red)" value={colorInput.name} onChange={(e) => setColorInput((c) => ({ ...c, name: e.target.value }))} onKeyDown={(e) => e.key === "Enter" && addColor()} />
+              <input type="color" value={colorInput.code} onChange={(e) => setColorInput((c) => ({ ...c, code: e.target.value }))} style={{ width: 40, height: 38, border: "1px solid var(--line)", borderRadius: "var(--r-md)", cursor: "pointer", padding: 2, flexShrink: 0 }} />
+              <button className="btn btn-sm btn-ghost" onClick={addColor} style={{ flexShrink: 0 }}>Add</button>
+            </div>
+          </div>
+
+          {/* Specs */}
+          <div style={{ marginBottom: 4 }}>
+            <label style={lSty}>Specifications</label>
+            {form.specs.length > 0 && (
+              <div style={{ marginBottom: 8 }}>
+                {form.specs.map((s, i) => (
+                  <div key={i} style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+                    <div style={{ flex: 1, fontSize: "1.2rem", padding: "5px 10px", background: "var(--surface)", borderRadius: "var(--r-md)", border: "1px solid var(--line)" }}>
+                      <strong>{s.k}:</strong> {s.v}
+                    </div>
+                    <button onClick={() => removeSpec(i)} style={{ border: "none", background: "none", cursor: "pointer", color: "#dc2626", padding: "4px 6px" }}><i className="fas fa-trash" style={{ fontSize: "1.1rem" }} /></button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div style={{ display: "flex", gap: 8 }}>
+              <input style={{ ...iSty, flex: 1 }} placeholder="Key (e.g. Weight)" value={specInput.k} onChange={(e) => setSpecInput((s) => ({ ...s, k: e.target.value }))} />
+              <input style={{ ...iSty, flex: 1 }} placeholder="Value (e.g. 500g)" value={specInput.v} onChange={(e) => setSpecInput((s) => ({ ...s, v: e.target.value }))} onKeyDown={(e) => e.key === "Enter" && addSpec()} />
+              <button className="btn btn-sm btn-ghost" onClick={addSpec} style={{ flexShrink: 0 }}>Add</button>
+            </div>
+          </div>
+        </div>
+
+        <div style={{ padding: "14px 20px", borderTop: "1px solid var(--line)", display: "flex", gap: 10, justifyContent: "flex-end", position: "sticky", bottom: 0, background: "var(--card)" }}>
+          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+          <button className="btn btn-primary" disabled={saving} onClick={handleSave}>
+            {saving ? <i className="fas fa-spinner fa-spin" /> : <><i className="fas fa-check" /> Save Changes</>}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Listing Modal (Apartments) ───────────────────────────────────────────────
+const AMENITY_OPTIONS = ["WiFi", "Water", "Electricity", "Kitchen", "Bathroom", "Parking", "Security", "Laundry", "AC", "Generator"];
+
+function ListingModal({ listing, onClose, onSave, showToast }) {
+  const [form, setForm] = useState({
+    name: listing?.name || "",
+    type: listing?.type || "Apartment",
+    price: listing?.price || "",
+    rate: listing?.rate || "per Year",
+    location: listing?.location || "",
+    beds: listing?.beds || 1,
+    baths: listing?.baths || 1,
+    distance: listing?.distance || "",
+    description: listing?.description || "",
+    furnished: listing?.furnished || false,
+    available: listing?.available ?? true,
+    amenities: listing?.amenities || [],
+  });
+  const [imageFiles, setImageFiles] = useState([]);
+  const [imagePreviews, setImagePreviews] = useState([]);
+  const [videoFile, setVideoFile] = useState(null);
+  const [videoPreview, setVideoPreview] = useState(null);
+  const [customAmenity, setCustomAmenity] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const set = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.type === "checkbox" ? e.target.checked : e.target.value }));
+  const toggleAmenity = (a) => setForm((f) => ({
+    ...f,
+    amenities: f.amenities.includes(a) ? f.amenities.filter((x) => x !== a) : [...f.amenities, a],
+  }));
+
+  function handleImagePick(e) {
+    const files = Array.from(e.target.files).slice(0, 4 - imagePreviews.length);
+    const newFiles = [...imageFiles, ...files].slice(0, 4);
+    setImageFiles(newFiles);
+    setImagePreviews([...imagePreviews, ...files.map((f) => URL.createObjectURL(f))].slice(0, 4));
+  }
+
+  function removeImage(i) {
+    setImageFiles((prev) => prev.filter((_, idx) => idx !== i));
+    setImagePreviews((prev) => prev.filter((_, idx) => idx !== i));
+  }
+
+  function handleVideoPick(e) {
+    const f = e.target.files?.[0];
+    if (f) { setVideoFile(f); setVideoPreview(URL.createObjectURL(f)); }
+  }
+
+  async function handleSave() {
+    if (!form.name.trim() || !form.location.trim() || !form.price) {
+      showToast("Name, location, and price are required", "error");
+      return;
+    }
+    setSaving(true);
+    try {
+      const fd = new FormData();
+      fd.append("name", form.name.trim());
+      fd.append("type", form.type);
+      fd.append("price", Number(form.price));
+      fd.append("rate", form.rate);
+      fd.append("location", form.location.trim());
+      fd.append("beds", Number(form.beds));
+      fd.append("baths", Number(form.baths));
+      fd.append("distance", form.distance);
+      fd.append("description", form.description);
+      fd.append("furnished", form.furnished);
+      fd.append("available", form.available);
+      form.amenities.forEach((a) => fd.append("amenities", a));
+      imageFiles.forEach((f) => fd.append("images", f));
+      if (videoFile) fd.append("videos", videoFile);
+
+      let result;
+      if (listing) {
+        result = await apiFetch(`/api/listings/${listing._id}`, { method: "PUT", body: fd });
+      } else {
+        result = await apiFetch("/api/listings", { method: "POST", body: fd });
+      }
+      showToast(listing ? "Listing updated" : "Listing created", "success");
+      onSave(result.listing);
+    } catch (err) {
+      showToast(err?.message || "Failed to save listing", "error");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const iSty = { width: "100%", padding: "8px 12px", borderRadius: "var(--r-md)", border: "1px solid var(--line)", background: "var(--surface)", color: "var(--ink-1)", fontSize: "1.3rem", fontFamily: "var(--font-sans)", boxSizing: "border-box" };
+  const lSty = { fontSize: "1.15rem", color: "var(--ink-3)", fontWeight: 600, marginBottom: 4, display: "block" };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.55)", zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }} onClick={onClose}>
+      <div className="card" style={{ maxWidth: 560, width: "100%", maxHeight: "92vh", overflowY: "auto", padding: 0 }} onClick={(e) => e.stopPropagation()}>
+        <div style={{ padding: "18px 20px", borderBottom: "1px solid var(--line)", display: "flex", justifyContent: "space-between", alignItems: "center", position: "sticky", top: 0, background: "var(--card)", zIndex: 1 }}>
+          <div style={{ fontWeight: 800, fontSize: "1.8rem" }}>{listing ? "Edit Listing" : "New Listing"}</div>
+          <button onClick={onClose} style={{ border: "none", background: "none", cursor: "pointer", fontSize: "1.8rem", color: "var(--ink-3)" }}><i className="fas fa-xmark" /></button>
+        </div>
+
+        <div style={{ padding: 20 }}>
+          <div style={{ marginBottom: 14 }}>
+            <label style={lSty}>Property Name</label>
+            <input style={iSty} value={form.name} onChange={set("name")} placeholder="e.g. Luxury 2BR Apartment near UNILAG" />
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
+            <div>
+              <label style={lSty}>Type</label>
+              <select style={{ ...iSty }} value={form.type} onChange={set("type")}>
+                <option value="Apartment">Apartment</option>
+                <option value="Hostel">Hostel</option>
+              </select>
+            </div>
+            <div>
+              <label style={lSty}>Payment Plan</label>
+              <select style={{ ...iSty }} value={form.rate} onChange={set("rate")}>
+                <option value="per Year">Per Year</option>
+                <option value="per Month">Per Month</option>
+                <option value="per Semester">Per Semester</option>
+                <option value="per Day">Per Day</option>
+              </select>
+            </div>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
+            <div>
+              <label style={lSty}>Price (₦)</label>
+              <input style={iSty} type="number" min="0" value={form.price} onChange={set("price")} placeholder="0" />
+            </div>
+            <div>
+              <label style={lSty}>Distance to Campus</label>
+              <input style={iSty} value={form.distance} onChange={set("distance")} placeholder="e.g. 500m from gate" />
+            </div>
+          </div>
+
+          <div style={{ marginBottom: 14 }}>
+            <label style={lSty}>Location / Neighborhood</label>
+            <input style={iSty} value={form.location} onChange={set("location")} placeholder="e.g. Akoka, Yaba, Lagos" />
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 10, marginBottom: 14 }}>
+            <div>
+              <label style={lSty}>Bedrooms</label>
+              <input style={iSty} type="number" min="0" value={form.beds} onChange={set("beds")} />
+            </div>
+            <div>
+              <label style={lSty}>Bathrooms</label>
+              <input style={iSty} type="number" min="0" value={form.baths} onChange={set("baths")} />
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", justifyContent: "flex-end", paddingBottom: 6 }}>
+              <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: "1.2rem", color: "var(--ink-2)" }}>
+                <input type="checkbox" checked={form.furnished} onChange={set("furnished")} />
+                Furnished
+              </label>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", justifyContent: "flex-end", paddingBottom: 6 }}>
+              <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: "1.2rem", color: "var(--ink-2)" }}>
+                <input type="checkbox" checked={form.available} onChange={set("available")} />
+                Available
+              </label>
+            </div>
+          </div>
+
+          <div style={{ marginBottom: 14 }}>
+            <label style={lSty}>Description</label>
+            <textarea style={{ ...iSty, height: 80, resize: "vertical" }} value={form.description} onChange={set("description")} placeholder="Describe the property..." />
+          </div>
+
+          <div style={{ marginBottom: 14 }}>
+            <label style={lSty}>Amenities</label>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
+              {AMENITY_OPTIONS.map((a) => {
+                const active = form.amenities.includes(a);
+                return (
+                  <button key={a} type="button" onClick={() => toggleAmenity(a)} style={{ padding: "4px 12px", borderRadius: 20, border: `1px solid ${active ? "var(--accent)" : "var(--line)"}`, background: active ? "rgba(249,115,22,.1)" : "transparent", color: active ? "var(--accent)" : "var(--ink-2)", fontWeight: active ? 600 : 400, fontSize: "1.2rem", cursor: "pointer", transition: "all .15s", fontFamily: "var(--font-sans)" }}>
+                    {a}
+                  </button>
+                );
+              })}
+              {/* Custom amenities added by user */}
+              {form.amenities.filter((a) => !AMENITY_OPTIONS.includes(a)).map((a) => (
+                <span key={a} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "4px 10px", borderRadius: 20, border: "1px solid var(--accent)", background: "rgba(249,115,22,.1)", color: "var(--accent)", fontSize: "1.2rem", fontWeight: 600 }}>
+                  {a}
+                  <button type="button" onClick={() => toggleAmenity(a)} style={{ border: "none", background: "none", cursor: "pointer", color: "var(--accent)", padding: 0, lineHeight: 1, fontSize: "1rem", display: "flex", alignItems: "center" }}>
+                    <i className="fas fa-xmark" />
+                  </button>
+                </span>
+              ))}
+            </div>
+            {/* Add custom amenity */}
+            <div style={{ display: "flex", gap: 8 }}>
+              <input
+                style={{ ...iSty, flex: 1 }}
+                placeholder="Add custom (e.g. Rooftop, CCTV, Gym)…"
+                value={customAmenity}
+                onChange={(e) => setCustomAmenity(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    const val = customAmenity.trim();
+                    if (val && !form.amenities.includes(val)) {
+                      setForm((f) => ({ ...f, amenities: [...f.amenities, val] }));
+                    }
+                    setCustomAmenity("");
+                  }
+                }}
+              />
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                style={{ flexShrink: 0 }}
+                onClick={() => {
+                  const val = customAmenity.trim();
+                  if (val && !form.amenities.includes(val)) {
+                    setForm((f) => ({ ...f, amenities: [...f.amenities, val] }));
+                  }
+                  setCustomAmenity("");
+                }}
+              >
+                Add
+              </button>
+            </div>
+          </div>
+
+          {/* Photos */}
+          <div style={{ marginBottom: 14 }}>
+            <label style={lSty}>Photos <span style={{ fontWeight: 400, color: "var(--ink-4)" }}>(max 4)</span></label>
+            {listing?.images?.length > 0 && imagePreviews.length === 0 && (
+              <div style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
+                {listing.images.map((img, i) => (
+                  <img key={i} src={img.url} alt="" style={{ width: 72, height: 72, borderRadius: 8, objectFit: "cover", border: "1px solid var(--line)" }} />
+                ))}
+                <span style={{ fontSize: "1.1rem", color: "var(--ink-4)", alignSelf: "center" }}>Pick new photos below to replace</span>
+              </div>
+            )}
+            <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", padding: "8px 14px", borderRadius: "var(--r-md)", border: "1px dashed var(--line)", background: "var(--surface)", width: "fit-content" }}>
+              <i className="fas fa-cloud-arrow-up" style={{ color: "var(--accent)" }} />
+              <span style={{ fontSize: "1.2rem", color: "var(--ink-2)" }}>{imageFiles.length > 0 ? `${imageFiles.length} photo(s) selected` : "Choose photos"}</span>
+              <input type="file" accept="image/*" multiple style={{ display: "none" }} onChange={handleImagePick} />
+            </label>
+            {imagePreviews.length > 0 && (
+              <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+                {imagePreviews.map((src, i) => (
+                  <div key={i} style={{ position: "relative", width: 80, height: 80 }}>
+                    <img src={src} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 8 }} />
+                    <button onClick={() => removeImage(i)} style={{ position: "absolute", top: -4, right: -4, width: 18, height: 18, borderRadius: "50%", background: "#dc2626", color: "#fff", border: "none", cursor: "pointer", fontSize: "0.9rem", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}>
+                      <i className="fas fa-xmark" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Video Tour */}
+          <div style={{ marginBottom: 4 }}>
+            <label style={lSty}>Video Tour <span style={{ fontWeight: 400, color: "var(--ink-4)" }}>(optional)</span></label>
+            {!videoPreview && listing?.videos?.[0]?.url && (
+              <video src={listing.videos[0].url} controls style={{ width: "100%", borderRadius: 8, maxHeight: 160, marginBottom: 8 }} />
+            )}
+            {videoPreview ? (
+              <div style={{ position: "relative" }}>
+                <video src={videoPreview} controls style={{ width: "100%", borderRadius: 8, maxHeight: 160 }} />
+                <button onClick={() => { setVideoFile(null); setVideoPreview(null); }} style={{ position: "absolute", top: 8, right: 8, background: "#dc2626", color: "#fff", border: "none", borderRadius: "50%", width: 26, height: 26, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1rem" }}>
+                  <i className="fas fa-xmark" />
+                </button>
+              </div>
+            ) : (
+              <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", padding: "8px 14px", borderRadius: "var(--r-md)", border: "1px dashed var(--line)", background: "var(--surface)", width: "fit-content" }}>
+                <i className="fas fa-video" style={{ color: "var(--accent)" }} />
+                <span style={{ fontSize: "1.2rem", color: "var(--ink-2)" }}>{videoFile ? videoFile.name : "Upload video"}</span>
+                <input type="file" accept="video/*" style={{ display: "none" }} onChange={handleVideoPick} />
+              </label>
+            )}
+          </div>
+        </div>
+
+        <div style={{ padding: "14px 20px", borderTop: "1px solid var(--line)", display: "flex", gap: 10, justifyContent: "flex-end", position: "sticky", bottom: 0, background: "var(--card)" }}>
+          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+          <button className="btn btn-primary" disabled={saving} onClick={handleSave}>
+            {saving ? <i className="fas fa-spinner fa-spin" /> : listing ? <><i className="fas fa-check" /> Save Changes</> : <><i className="fas fa-plus" /> Add Listing</>}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Add Product Modal ────────────────────────────────────────────────────────
+function AddProductModal({ onClose, onSave, showToast }) {
+  const [form, setForm] = useState({ name: "", price: "", stock: "", desc: "", condition: "New", status: "active", category: "", colors: [], specs: [] });
+  const [imageFiles, setImageFiles] = useState([]);
+  const [imagePreviews, setImagePreviews] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [saving, setSaving] = useState(false);
+  const [colorInput, setColorInput] = useState({ name: "", code: "#e0e0e0" });
+  const [specInput, setSpecInput] = useState({ k: "", v: "" });
+
+  useEffect(() => {
+    apiFetch("/api/categories")
+      .then((d) => setCategories(d.categories || d || []))
+      .catch(() => setCategories([]));
+  }, []);
+
+  const set = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.value }));
+
+  function handleImages(e) {
+    const files = Array.from(e.target.files).slice(0, 4);
+    setImageFiles(files);
+    setImagePreviews(files.map((f) => URL.createObjectURL(f)));
+  }
+
+  function removePreview(i) {
+    const newFiles = imageFiles.filter((_, idx) => idx !== i);
+    setImageFiles(newFiles);
+    setImagePreviews(newFiles.map((f) => URL.createObjectURL(f)));
+  }
+
+  const addColor = () => { if (!colorInput.name.trim()) return; setForm((f) => ({ ...f, colors: [...f.colors, { ...colorInput }] })); setColorInput({ name: "", code: "#e0e0e0" }); };
+  const removeColor = (i) => setForm((f) => ({ ...f, colors: f.colors.filter((_, idx) => idx !== i) }));
+  const addSpec = () => { if (!specInput.k.trim()) return; setForm((f) => ({ ...f, specs: [...f.specs, { ...specInput }] })); setSpecInput({ k: "", v: "" }); };
+  const removeSpec = (i) => setForm((f) => ({ ...f, specs: f.specs.filter((_, idx) => idx !== i) }));
+
+  async function handleSave() {
+    if (!form.name.trim()) { showToast("Product name is required", "error"); return; }
+    if (!form.price || Number(form.price) <= 0) { showToast("Valid price is required", "error"); return; }
+    setSaving(true);
+    try {
+      const fd = new FormData();
+      fd.append("name", form.name.trim());
+      fd.append("price", Number(form.price));
+      if (form.stock) fd.append("stock", Number(form.stock));
+      if (form.desc) fd.append("desc", form.desc);
+      fd.append("condition", form.condition);
+      fd.append("status", form.status);
+      if (form.category) fd.append("category", form.category);
+      fd.append("colors", JSON.stringify(form.colors));
+      form.specs.forEach(({ k, v }) => { fd.append("specKey", k); fd.append("specValue", v); });
+      imageFiles.forEach((file) => fd.append("images", file));
+
+      const result = await apiFetch("/api/products/", { method: "POST", body: fd });
+      showToast("Product created!", "success");
+      onSave(result.product);
+      onClose();
+    } catch (err) {
+      showToast(err?.message || "Failed to create product", "error");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const iSty = { width: "100%", padding: "8px 12px", borderRadius: "var(--r-md)", border: "1px solid var(--line)", background: "var(--surface)", color: "var(--ink-1)", fontSize: "1.3rem", fontFamily: "var(--font-sans)", boxSizing: "border-box" };
+  const lSty = { fontSize: "1.15rem", color: "var(--ink-3)", fontWeight: 600, marginBottom: 4, display: "block" };
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.55)", zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }} onClick={onClose}>
+      <div className="card" style={{ maxWidth: 580, width: "100%", maxHeight: "92vh", overflowY: "auto", padding: 0 }} onClick={(e) => e.stopPropagation()}>
+        <div style={{ padding: "18px 20px", borderBottom: "1px solid var(--line)", display: "flex", justifyContent: "space-between", alignItems: "center", position: "sticky", top: 0, background: "var(--card)", zIndex: 1 }}>
+          <div style={{ fontWeight: 800, fontSize: "1.8rem" }}>Add Product</div>
+          <button onClick={onClose} style={{ border: "none", background: "none", cursor: "pointer", fontSize: "1.8rem", color: "var(--ink-3)" }}><i className="fas fa-xmark" /></button>
+        </div>
+
+        <div style={{ padding: 20 }}>
+          {/* Name */}
+          <div style={{ marginBottom: 14 }}>
+            <label style={lSty}>Product Name *</label>
+            <input style={iSty} value={form.name} onChange={set("name")} placeholder="e.g. iPhone 13 Pro Case" />
+          </div>
+
+          {/* Price / Stock / Condition */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 14 }}>
+            <div>
+              <label style={lSty}>Price (₦) *</label>
+              <input style={iSty} type="number" min="0" value={form.price} onChange={set("price")} placeholder="0" />
+            </div>
+            <div>
+              <label style={lSty}>Stock</label>
+              <input style={iSty} type="number" min="0" value={form.stock} onChange={set("stock")} placeholder="0" />
+            </div>
+            <div>
+              <label style={lSty}>Condition</label>
+              <select style={{ ...iSty }} value={form.condition} onChange={set("condition")}>
+                <option value="New">New</option>
+                <option value="Used">Used</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Category / Status */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
+            <div>
+              <label style={lSty}>Category</label>
+              <select style={{ ...iSty }} value={form.category} onChange={set("category")}>
+                <option value="">— Select category —</option>
+                {categories.map((c) => <option key={c._id} value={c._id}>{c.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={lSty}>Status</label>
+              <select style={{ ...iSty }} value={form.status} onChange={set("status")}>
+                <option value="active">Active</option>
+                <option value="draft">Draft</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Description */}
+          <div style={{ marginBottom: 14 }}>
+            <label style={lSty}>Description</label>
+            <textarea style={{ ...iSty, height: 80, resize: "vertical" }} value={form.desc} onChange={set("desc")} placeholder="Describe your product..." />
+          </div>
+
+          {/* Images */}
+          <div style={{ marginBottom: 14 }}>
+            <label style={lSty}>Images <span style={{ fontWeight: 400, color: "var(--ink-4)" }}>(max 4)</span></label>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", padding: "8px 14px", borderRadius: "var(--r-md)", border: "1px dashed var(--line)", background: "var(--surface)", width: "fit-content" }}>
+              <i className="fas fa-cloud-arrow-up" style={{ color: "var(--accent)" }} />
+              <span style={{ fontSize: "1.2rem", color: "var(--ink-2)" }}>{imageFiles.length > 0 ? `${imageFiles.length} file(s) selected` : "Choose photos"}</span>
+              <input type="file" accept="image/*" multiple style={{ display: "none" }} onChange={handleImages} />
+            </label>
+            {imagePreviews.length > 0 && (
+              <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+                {imagePreviews.map((src, i) => (
+                  <div key={i} style={{ position: "relative", width: 80, height: 80 }}>
+                    <img src={src} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 8 }} />
+                    <button onClick={() => removePreview(i)} style={{ position: "absolute", top: -4, right: -4, width: 18, height: 18, borderRadius: "50%", background: "#dc2626", color: "#fff", border: "none", cursor: "pointer", fontSize: "0.9rem", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}>
+                      <i className="fas fa-xmark" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Colors */}
+          <div style={{ marginBottom: 14 }}>
+            <label style={lSty}>Colors <span style={{ fontWeight: 400, color: "var(--ink-4)" }}>(optional)</span></label>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
+              {form.colors.map((c, i) => (
+                <span key={i} style={{ display: "flex", alignItems: "center", gap: 5, padding: "3px 8px", borderRadius: 20, background: "var(--surface)", border: "1px solid var(--line)", fontSize: "1.2rem" }}>
+                  <span style={{ width: 12, height: 12, borderRadius: "50%", background: c.code || "#999", flexShrink: 0 }} />
+                  {c.name}
+                  <button onClick={() => removeColor(i)} style={{ border: "none", background: "none", cursor: "pointer", color: "var(--ink-3)", padding: 0, fontSize: "1rem" }}><i className="fas fa-xmark" /></button>
+                </span>
+              ))}
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <input style={{ ...iSty, flex: 1 }} placeholder="Color name" value={colorInput.name} onChange={(e) => setColorInput((c) => ({ ...c, name: e.target.value }))} onKeyDown={(e) => e.key === "Enter" && addColor()} />
+              <input type="color" value={colorInput.code} onChange={(e) => setColorInput((c) => ({ ...c, code: e.target.value }))} style={{ width: 40, height: 38, border: "1px solid var(--line)", borderRadius: "var(--r-md)", cursor: "pointer", padding: 2, flexShrink: 0 }} />
+              <button className="btn btn-sm btn-ghost" onClick={addColor} style={{ flexShrink: 0 }}>Add</button>
+            </div>
+          </div>
+
+          {/* Specs */}
+          <div style={{ marginBottom: 4 }}>
+            <label style={lSty}>Specifications <span style={{ fontWeight: 400, color: "var(--ink-4)" }}>(optional)</span></label>
+            {form.specs.length > 0 && (
+              <div style={{ marginBottom: 8 }}>
+                {form.specs.map((s, i) => (
+                  <div key={i} style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+                    <div style={{ flex: 1, fontSize: "1.2rem", padding: "5px 10px", background: "var(--surface)", borderRadius: "var(--r-md)", border: "1px solid var(--line)" }}><strong>{s.k}:</strong> {s.v}</div>
+                    <button onClick={() => removeSpec(i)} style={{ border: "none", background: "none", cursor: "pointer", color: "#dc2626", padding: "4px 6px" }}><i className="fas fa-trash" style={{ fontSize: "1.1rem" }} /></button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div style={{ display: "flex", gap: 8 }}>
+              <input style={{ ...iSty, flex: 1 }} placeholder="Key (e.g. Weight)" value={specInput.k} onChange={(e) => setSpecInput((s) => ({ ...s, k: e.target.value }))} />
+              <input style={{ ...iSty, flex: 1 }} placeholder="Value (e.g. 500g)" value={specInput.v} onChange={(e) => setSpecInput((s) => ({ ...s, v: e.target.value }))} onKeyDown={(e) => e.key === "Enter" && addSpec()} />
+              <button className="btn btn-sm btn-ghost" onClick={addSpec} style={{ flexShrink: 0 }}>Add</button>
+            </div>
+          </div>
+        </div>
+
+        <div style={{ padding: "14px 20px", borderTop: "1px solid var(--line)", display: "flex", gap: 10, justifyContent: "flex-end", position: "sticky", bottom: 0, background: "var(--card)" }}>
+          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+          <button className="btn btn-primary" disabled={saving} onClick={handleSave}>
+            {saving ? <i className="fas fa-spinner fa-spin" /> : <><i className="fas fa-plus" /> Create Product</>}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Password strength ────────────────────────────────────────────────────────
+const STRENGTH_RULES = [
+  { key: "len",     label: "At least 6 characters",        test: (p) => p.length >= 6 },
+  { key: "upper",   label: "One uppercase letter (A–Z)",   test: (p) => /[A-Z]/.test(p) },
+  { key: "lower",   label: "One lowercase letter (a–z)",   test: (p) => /[a-z]/.test(p) },
+  { key: "number",  label: "One number (0–9)",              test: (p) => /\d/.test(p) },
+  { key: "special", label: "One special character (!@#…)",  test: (p) => /[^A-Za-z0-9]/.test(p) },
+];
+const STRENGTH_COLOR = ["", "#ef4444", "#f97316", "#eab308", "#22c55e", "#16a34a"];
+const STRENGTH_LABEL = ["", "Very weak", "Weak", "Fair", "Strong", "Very strong"];
+function strengthScore(p) { return STRENGTH_RULES.filter((r) => r.test(p)).length; }
+
+function StrengthMeter({ password }) {
+  if (!password) return null;
+  const score = strengthScore(password);
+  return (
+    <div style={{ marginTop: -4, marginBottom: 12 }}>
+      <div style={{ display: "flex", gap: 4, marginBottom: 6 }}>
+        {STRENGTH_RULES.map((_, i) => (
+          <div key={i} style={{ flex: 1, height: 4, borderRadius: 2, background: i < score ? STRENGTH_COLOR[score] : "var(--line)", transition: "background .2s" }} />
+        ))}
+      </div>
+      <div style={{ fontSize: "1.15rem", color: STRENGTH_COLOR[score], fontWeight: 600, marginBottom: 8 }}>{STRENGTH_LABEL[score]}</div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+        {STRENGTH_RULES.map((r) => {
+          const ok = r.test(password);
+          return (
+            <div key={r.key} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: "1.2rem", color: ok ? "#16a34a" : "var(--ink-3)" }}>
+              <i className={`fas fa-${ok ? "circle-check" : "circle"}`} style={{ fontSize: "1.1rem", flexShrink: 0 }} />
+              {r.label}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ─── Main component ───────────────────────────────────────────────────────────
+export default function SellerDashboard() {
+  const navigate = useNavigate();
+  const { user } = useUser();
+  const showToast = useToast();
+  const [tab, setTab] = useState("Home");
+  const [profile, setProfile] = useState(null);
+  const [kpis, setKpis] = useState(null);
+  const [products, setProducts] = useState([]);
+  const [productPerformance, setProductPerformance] = useState([]);
+  const [orders, setOrders] = useState([]);
+  const [payouts, setPayouts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [verifyLoading, setVerifyLoading] = useState(false);
+  const [unreadMessages, setUnreadMessages] = useState(0);
+  const [orderFilter, setOrderFilter] = useState("All");
+  const [statusUpdating, setStatusUpdating] = useState({});
+  const [confirmCancel, setConfirmCancel] = useState(null);
+
+  // Products
+  const [quickEdit, setQuickEdit] = useState(null);
+  const [addProductOpen, setAddProductOpen] = useState(false);
+  const [deleteProductId, setDeleteProductId] = useState(null);
+  const [productDeleting, setProductDeleting] = useState(false);
+
+  // Apartments
+  const [listings, setListings] = useState([]);
+  const [listingsLoading, setListingsLoading] = useState(false);
+  const [listingsFetched, setListingsFetched] = useState(false);
+  const [listingModal, setListingModal] = useState(null);
+  const [deleteListingId, setDeleteListingId] = useState(null);
+  const [listingDeleting, setListingDeleting] = useState(false);
+
+  // Settings
+  const [dashPwd, setDashPwd] = useState({ old: "", new: "", confirm: "" });
+  const [pwdSaving, setPwdSaving] = useState(false);
+  const [pwdShow, setPwdShow] = useState({ old: false, new: false, confirm: false });
+  const [dashStore, setDashStore] = useState({ storeName: "", desc: "", avatarUrl: "", avatarPublicId: "", bannerUrl: "", bannerPublicId: "" });
+  const [storeSaving, setStoreSaving] = useState(false);
+  const [storeAvatarUploading, setStoreAvatarUploading] = useState(false);
+  const [storeBannerUploading, setStoreBannerUploading] = useState(false);
+  const [dashNotifs, setDashNotifs] = useState({ orderUpdate: true, newMessage: true, lowStock: true, payoutReady: true });
+  const [notifSaving, setNotifSaving] = useState(false);
+  const [dashPolicy, setDashPolicy] = useState({ returnPolicy: "", fulfillmentTime: "" });
+  const [policySaving, setPolicySaving] = useState(false);
+
+  // Payouts
+  const [bankForm, setBankForm] = useState({ bankName: "", bankCode: "", accountNumber: "", accountName: "" });
+  const [bankSaving, setBankSaving] = useState(false);
+  const [banks, setBanks] = useState([]);
+  const [bankVerifying, setBankVerifying] = useState(false);
+  const [payoutAmount, setPayoutAmount] = useState("");
+  const [payoutSaving, setPayoutSaving] = useState(false);
+  const [retryingPayout, setRetryingPayout] = useState({});
+  const [payoutSearch, setPayoutSearch] = useState("");
+  const [payoutFilterStatus, setPayoutFilterStatus] = useState("All");
+
+  // Delivery codes (seller enters buyer's code to confirm delivery)
+  const [deliveryCodes, setDeliveryCodes] = useState({});
+  const [deliverySubmitting, setDeliverySubmitting] = useState({});
+
+  // ── Initial data load ────────────────────────────────────────────────────────
+  useEffect(() => {
+    Promise.all([
+      apiFetch("/api/seller-dashboard").catch(() => null),
+      apiFetch("/api/products/my").catch(() => []),
+      apiFetch("/api/seller-dashboard/orders").catch(() => []),
+      apiFetch("/api/payouts").catch(() => []),
+      apiFetch("/api/messages/unread-count").catch(() => ({ count: 0 })),
+      apiFetch("/api/payouts/details").catch(() => null),
+    ]).then(([dash, prods, ords, pays, unread, bankDets]) => {
+      setKpis(dash?.kpis || dash);
+      setProfile(dash?.profile || null);
+      setProductPerformance(dash?.productPerformance || []);
+      setProducts(prods.products || prods || []);
+      setOrders(ords.orders || ords || []);
+      setPayouts(pays.payouts || pays || []);
+      setUnreadMessages(unread?.count || unread?.unread || 0);
+
+      if (dash?.profile) {
+        setDashStore({
+          storeName: dash.profile.storeName || "",
+          desc: dash.profile.description || dash.profile.desc || "",
+          avatarUrl: dash.profile.logo?.url || dash.profile.avatar?.url || "",
+          avatarPublicId: dash.profile.logo?.publicId || dash.profile.avatar?.publicId || "",
+          bannerUrl: dash.profile.banner?.url || "",
+          bannerPublicId: dash.profile.banner?.publicId || "",
+        });
+        if (dash.profile.returnPolicy || dash.profile.fulfillmentTime) {
+          setDashPolicy({ returnPolicy: dash.profile.returnPolicy || "", fulfillmentTime: dash.profile.fulfillmentTime || "" });
+        }
+        if (dash.profile.notificationPreferences) {
+          setDashNotifs((n) => ({ ...n, ...dash.profile.notificationPreferences }));
+        }
+      }
+      if (bankDets?.accountDetails) {
+        setBankForm((f) => ({ ...f, ...bankDets.accountDetails }));
+      }
+      if (dash?.profile?.bankDetails) {
+        const bd = dash.profile.bankDetails;
+        setBankForm({ bankName: bd.bankName || "", bankCode: bd.bankCode || "", accountNumber: bd.accountNumber || "", accountName: bd.accountName || "" });
+      }
+    }).finally(() => setLoading(false));
+  }, []);
+
+  // ── Load banks when Payouts tab opens ───────────────────────────────────────
+  useEffect(() => {
+    if (tab !== "Payouts" || banks.length > 0) return;
+    apiFetch("/api/payments/banks")
+      .then((d) => setBanks(d.banks || []))
+      .catch(() => {});
+  }, [tab, banks.length]);
+
+  // ── Load listings when Apartments tab opens ──────────────────────────────────
+  useEffect(() => {
+    if (tab !== "Apartments" || listingsFetched) return;
+    setListingsFetched(true);
+    setListingsLoading(true);
+    apiFetch("/api/listings/my")
+      .then((d) => setListings(d.listings || []))
+      .catch(() => setListings([]))
+      .finally(() => setListingsLoading(false));
+  }, [tab, listingsFetched]);
+
+  // ── Verify ───────────────────────────────────────────────────────────────────
+  async function requestVerification() {
+    setVerifyLoading(true);
+    try {
+      await apiFetch("/api/sellers/request-verification", { method: "POST" });
+      setProfile((p) => ({ ...p, verificationRequested: true }));
+    } catch {}
+    finally { setVerifyLoading(false); }
+  }
+
+  // ── Order status update ───────────────────────────────────────────────────────
+  async function updateStatus(orderId, newStatus) {
+    setStatusUpdating((s) => ({ ...s, [orderId]: newStatus }));
+    try {
+      const d = await apiFetch(`/api/orders/${orderId}/status`, { method: "PUT", body: { status: newStatus } });
+      setOrders((prev) => prev.map((o) =>
+        (o._id || o.id) === orderId
+          ? { ...o, status: d.order.status, paymentStatus: d.order.paymentStatus, refund: d.order.refund }
+          : o
+      ));
+      const msgs = {
+        confirmed: "Order confirmed — buyer notified",
+        shipped:   "Order marked as shipped",
+        completed: "Order completed — funds released to your wallet",
+        cancelled: "Order cancelled" + (d.order.paymentStatus === "refunded" ? " — refund initiated for buyer" : ""),
+      };
+      showToast(msgs[newStatus] || "Order updated", "success");
+    } catch (err) {
+      showToast(err?.message || "Failed to update order", "error");
+    } finally {
+      setStatusUpdating((s) => { const n = { ...s }; delete n[orderId]; return n; });
+      setConfirmCancel(null);
+    }
+  }
+
+  // ── Product delete ────────────────────────────────────────────────────────────
+  async function handleDeleteProduct(productId) {
+    setProductDeleting(true);
+    try {
+      await apiFetch(`/api/products/${productId}`, { method: "DELETE" });
+      setProducts((p) => p.filter((x) => x._id !== productId));
+      showToast("Product deleted", "success");
+    } catch (err) {
+      showToast(err?.message || "Failed to delete product", "error");
+    } finally {
+      setProductDeleting(false);
+      setDeleteProductId(null);
+    }
+  }
+
+  // ── Listing CRUD ───────────────────────────────────────────────────────────────
+  function handleListingSaved(saved) {
+    setListings((prev) => {
+      const idx = prev.findIndex((l) => l._id === saved._id);
+      if (idx >= 0) { const copy = [...prev]; copy[idx] = saved; return copy; }
+      return [saved, ...prev];
+    });
+    setListingModal(null);
+  }
+
+  async function handleDeleteListing(id) {
+    setListingDeleting(true);
+    try {
+      await apiFetch(`/api/listings/${id}`, { method: "DELETE" });
+      setListings((l) => l.filter((li) => (li._id || li.id) !== id));
+      showToast("Listing deleted", "success");
+    } catch (err) {
+      showToast(err?.message || "Failed to delete listing", "error");
+    } finally {
+      setListingDeleting(false);
+      setDeleteListingId(null);
+    }
+  }
+
+  // ── Settings handlers ──────────────────────────────────────────────────────────
+  async function changePassword() {
+    if (!dashPwd.old || !dashPwd.new || !dashPwd.confirm) { showToast("All fields required", "error"); return; }
+    if (!STRENGTH_RULES.every((r) => r.test(dashPwd.new))) { showToast("Password doesn't meet all requirements", "error"); return; }
+    if (dashPwd.new !== dashPwd.confirm) { showToast("Passwords don't match", "error"); return; }
+    setPwdSaving(true);
+    try {
+      await apiFetch("/api/seller-dashboard/users/update-password", { method: "PUT", body: { currentPassword: dashPwd.old, newPassword: dashPwd.new } });
+      showToast("Password updated", "success");
+      setDashPwd({ old: "", new: "", confirm: "" });
+    } catch (err) {
+      showToast(err?.message || "Failed to update password", "error");
+    } finally { setPwdSaving(false); }
+  }
+
+  async function uploadStoreImage(file, field) {
+    const fd = new FormData();
+    fd.append("file", file);
+    const data = await apiFetch("/api/upload", { method: "POST", body: fd });
+    setDashStore((s) => ({ ...s, [`${field}Url`]: data.url, [`${field}PublicId`]: data.publicId || "" }));
+  }
+
+  async function saveStoreProfile() {
+    setStoreSaving(true);
+    try {
+      await apiFetch("/api/seller-dashboard/sellers/settings", {
+        method: "PUT",
+        body: {
+          storeName: dashStore.storeName,
+          description: dashStore.desc,
+          ...(dashStore.avatarUrl && { logoUrl: dashStore.avatarUrl, logoPublicId: dashStore.avatarPublicId }),
+          ...(dashStore.bannerUrl && { bannerUrl: dashStore.bannerUrl, bannerPublicId: dashStore.bannerPublicId }),
+        },
+      });
+      setProfile((p) => ({ ...p, storeName: dashStore.storeName, description: dashStore.desc }));
+      showToast("Store profile updated", "success");
+    } catch (err) {
+      showToast(err?.message || "Failed to update store profile", "error");
+    } finally { setStoreSaving(false); }
+  }
+
+  async function savePolicies() {
+    setPolicySaving(true);
+    try {
+      await apiFetch("/api/seller-dashboard/sellers/policies", { method: "PUT", body: dashPolicy });
+      showToast("Policies saved", "success");
+    } catch (err) {
+      showToast(err?.message || "Failed to save policies", "error");
+    } finally { setPolicySaving(false); }
+  }
+
+  async function saveNotifs() {
+    setNotifSaving(true);
+    try {
+      await apiFetch("/api/seller-dashboard/notifications/preferences", { method: "PUT", body: { notificationPreferences: dashNotifs } });
+      showToast("Notification preferences saved", "success");
+    } catch (err) {
+      showToast(err?.message || "Failed to save preferences", "error");
+    } finally { setNotifSaving(false); }
+  }
+
+  // ── Payout handlers ────────────────────────────────────────────────────────────
+  async function verifyAccount() {
+    if (!bankForm.accountNumber || !bankForm.bankCode) { showToast("Select a bank and enter account number first", "error"); return; }
+    setBankVerifying(true);
+    try {
+      const d = await apiFetch(`/api/payments/verify-account?account_number=${bankForm.accountNumber}&bank_code=${bankForm.bankCode}`);
+      setBankForm((f) => ({ ...f, accountName: d.account_name }));
+      showToast("Account verified: " + d.account_name, "success");
+    } catch (err) {
+      showToast(err?.message || "Could not verify account", "error");
+    } finally { setBankVerifying(false); }
+  }
+
+  async function saveBankDetails() {
+    if (!bankForm.bankCode || !bankForm.accountNumber || !bankForm.accountName) { showToast("Verify your account first", "error"); return; }
+    setBankSaving(true);
+    try {
+      await apiFetch("/api/payments/bank-details", {
+        method: "POST",
+        body: { bankName: bankForm.bankName, bankCode: bankForm.bankCode, accountName: bankForm.accountName, accountNumber: bankForm.accountNumber },
+      });
+      showToast("Bank details saved", "success");
+    } catch (err) {
+      showToast(err?.message || "Failed to save bank details", "error");
+    } finally { setBankSaving(false); }
+  }
+
+  async function confirmDeliveryByCode(orderId) {
+    const code = (deliveryCodes[orderId] || "").trim().toUpperCase();
+    if (!code) { showToast("Enter the delivery code from the buyer", "error"); return; }
+    setDeliverySubmitting((s) => ({ ...s, [orderId]: true }));
+    try {
+      const d = await apiFetch(`/api/orders/${orderId}/confirm-delivery`, {
+        method: "PUT",
+        body: { deliveryCode: code },
+      });
+      setOrders((prev) => prev.map((o) => (o._id || o.id) === orderId ? { ...o, status: "completed", paymentStatus: "released" } : o));
+      setDeliveryCodes((c) => { const n = { ...c }; delete n[orderId]; return n; });
+      showToast(d.message || "Delivery confirmed! Transfer initiated.", "success");
+    } catch (err) {
+      showToast(err?.message || "Invalid delivery code", "error");
+    } finally {
+      setDeliverySubmitting((s) => { const n = { ...s }; delete n[orderId]; return n; });
+    }
+  }
+
+  async function requestPayout() {
+    const amount = Number(payoutAmount);
+    if (!amount || amount < 100) { showToast("Minimum payout is ₦100", "error"); return; }
+    if (amount > (kpis?.walletBalance || 0)) { showToast("Amount exceeds available balance", "error"); return; }
+    setPayoutSaving(true);
+    try {
+      const result = await apiFetch("/api/payouts/request", { method: "POST", body: { amount, accountDetails: bankForm } });
+      showToast(result?.message || "Payout request submitted", "success");
+      setPayoutAmount("");
+      setKpis((k) => ({ ...k, walletBalance: (k?.walletBalance || 0) - amount }));
+      apiFetch("/api/payouts").then((d) => setPayouts(d.payouts || d || [])).catch(() => {});
+    } catch (err) {
+      showToast(err?.message || "Failed to request payout", "error");
+    } finally { setPayoutSaving(false); }
+  }
+
+  async function handleRetryPayout(payoutId) {
+    setRetryingPayout((r) => ({ ...r, [payoutId]: true }));
+    try {
+      const result = await apiFetch(`/api/payouts/${payoutId}/retry`, { method: "POST" });
+      showToast(result?.message || "Transfer initiated", "success");
+      setPayouts((prev) => prev.map((p) => p._id === payoutId ? { ...p, ...result.payout } : p));
+    } catch (err) {
+      showToast(err?.message || "Retry failed. Check bank details.", "error");
+    } finally {
+      setRetryingPayout((r) => { const n = { ...r }; delete n[payoutId]; return n; });
+    }
+  }
+
+  // ── Computed ──────────────────────────────────────────────────────────────────
+  const now = Date.now();
+  const ordersLast7 = orders.filter((o) => now - new Date(o.createdAt || 0).getTime() < 7 * 86400000);
+  const inventoryValue = products.reduce((sum, p) => sum + (p.price || 0) * (p.stock || 0), 0);
+  const productViews = products.reduce((sum, p) => sum + (p.views || 0), 0);
+  const filteredOrders = orderFilter === "All" ? orders : orders.filter((o) => o.status === orderFilter.toLowerCase());
+
+  const filteredPayouts = payouts.filter((p) => {
+    const matchStatus = payoutFilterStatus === "All" || p.status === payoutFilterStatus.toLowerCase();
+    const matchSearch = !payoutSearch || naira(p.amount).includes(payoutSearch) || (p.bank || "").toLowerCase().includes(payoutSearch.toLowerCase());
+    return matchStatus && matchSearch;
+  });
+
+  // ─── Input style helper ────────────────────────────────────────────────────────
+  const iSty = { width: "100%", padding: "9px 12px", borderRadius: "var(--r-md)", border: "1px solid var(--line)", background: "var(--surface)", color: "var(--ink-1)", fontSize: "1.3rem", fontFamily: "var(--font-sans)", boxSizing: "border-box" };
+  const lSty = { fontSize: "1.15rem", color: "var(--ink-3)", fontWeight: 600, marginBottom: 4, display: "block" };
+
+  // ═══════════════════════════════════════════════════════════════════════════════
+  const PAGE_CONTENT = (
+    <div style={{ padding: "20px 20px 80px" }}>
+      {!loading && !profile?.isVerified && (
+        <VerifyBanner requested={!!profile?.verificationRequested} onRequest={requestVerification} loading={verifyLoading} />
+      )}
+
+      <Alerts orders={orders} products={products} kpis={kpis} setTab={setTab} />
+
+      {/* ── Dashboard Home ── */}
+      {tab === "Home" && (
+        <>
+          <div style={{ marginBottom: 20 }}>
+            <h2 style={{ fontSize: "2rem", fontWeight: 800, margin: "0 0 4px" }}>Welcome to your seller dashboard</h2>
+            <p style={{ margin: 0, color: "var(--ink-3)", fontSize: "1.3rem" }}>Here's an overview of your store performance.</p>
+          </div>
+
+          {loading ? (
+            <div className="kpi-grid">
+              {[1,2,3,4].map(i => (
+                <div key={i} className="kpi-card" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  <Skel w={40} h={40} r={12} />
+                  <Skel w="55%" h={22} r={6} />
+                  <Skel w="70%" h={12} r={4} />
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="kpi-grid">
+              {[
+                { label: "Total Revenue",       value: naira(kpis?.totalRevenue || 0),                             icon: "naira-sign",    color: "#22c55e" },
+                { label: "Orders (Last 7 Days)", value: ordersLast7.length,                                          icon: "box-archive",   color: "var(--accent)" },
+                { label: "Product Views",        value: (kpis?.productViews || productViews).toLocaleString(),       icon: "eye",           color: "#3b82f6" },
+                { label: "Inventory Value",      value: naira(kpis?.inventoryValue || inventoryValue),               icon: "boxes-stacked", color: "#7c3aed" },
+              ].map((k) => (
+                <div key={k.label} className="kpi-card">
+                  <div style={{ width: 40, height: 40, borderRadius: 12, background: `${k.color}1a`, color: k.color, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: "1.6rem", marginBottom: 10 }}>
+                    <i className={`fas fa-${k.icon}`} />
+                  </div>
+                  <div style={{ fontSize: "2.2rem", fontWeight: 800, lineHeight: 1 }}>{k.value}</div>
+                  <div style={{ fontSize: "1.2rem", color: "var(--ink-3)", marginTop: 4 }}>{k.label}</div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Recent Orders */}
+          <div className="card" style={{ marginBottom: 20, overflow: "hidden", padding: 0 }}>
+            <div style={{ padding: "16px 16px 12px", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid var(--line)" }}>
+              <h3 style={{ margin: 0, fontSize: "1.6rem", fontWeight: 700 }}>Recent Orders</h3>
+              <span style={{ fontSize: "1.2rem", color: "var(--accent)", cursor: "pointer", fontWeight: 600 }} onClick={() => setTab("Orders")}>See all</span>
+            </div>
+            <div style={{ overflowX: "auto" }}>
+              {orders.length === 0 && !loading ? (
+                <p style={{ textAlign: "center", color: "var(--ink-3)", padding: "28px 0", margin: 0 }}>No orders yet</p>
+              ) : (
+                <table className="dash-table">
+                  <thead><tr><th>Order ID</th><th>Buyer</th><th>Items</th><th>Total</th><th>Status</th><th>Action</th></tr></thead>
+                  <tbody>
+                    {orders.slice(0, 5).map((o) => (
+                      <tr key={o._id || o.id}>
+                        <td style={{ fontFamily: "var(--font-mono)", fontSize: "1.15rem", color: "var(--ink-2)" }}>{(o._id || o.id || "").toString().slice(-10)}</td>
+                        <td style={{ fontWeight: 600 }}>{o.buyer?.name || "Buyer"}</td>
+                        <td>{(o.items || []).length}</td>
+                        <td style={{ fontWeight: 700, color: "var(--accent)" }}>{naira(o.totalAmount || o.total || 0)}</td>
+                        <td><StatusBadge status={o.status} /></td>
+                        <td><button className="btn btn-sm btn-ghost" style={{ padding: "4px 12px" }} onClick={() => setTab("Orders")}>View</button></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+
+          {/* Product Performance */}
+          <div className="card" style={{ marginBottom: 20, overflow: "hidden", padding: 0 }}>
+            <div style={{ padding: "16px 16px 12px", borderBottom: "1px solid var(--line)" }}>
+              <h3 style={{ margin: 0, fontSize: "1.6rem", fontWeight: 700 }}>Product Performance</h3>
+            </div>
+            <div style={{ overflowX: "auto" }}>
+              {products.length === 0 && !loading ? (
+                <p style={{ textAlign: "center", color: "var(--ink-3)", padding: "28px 0", margin: 0 }}>No products yet</p>
+              ) : (
+                <table className="dash-table">
+                  <thead><tr><th>Product</th><th>Sold</th><th>Stock</th><th>Revenue</th></tr></thead>
+                  <tbody>
+                    {products.map((p) => {
+                      const perf = productPerformance.find((x) => x.productId === p._id?.toString());
+                      const unitsSold = perf?.unitsSold ?? p.sold ?? 0;
+                      const revenue = perf?.revenue ?? (p.price || 0) * unitsSold;
+                      const variantStock = Array.isArray(p.variants) ? p.variants.reduce((s, v) => s + (v.stock || 0), 0) : 0;
+                      const stock = perf?.stock ?? ((p.stock || 0) + variantStock);
+                      return (
+                        <tr key={p._id}>
+                          <td>
+                            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                              <div style={{ width: 36, height: 36, borderRadius: 8, background: "var(--surface)", overflow: "hidden", flexShrink: 0 }}>
+                                {p.images?.[0]
+                                  ? <img src={typeof p.images[0] === "string" ? p.images[0] : p.images[0].url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                                  : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}><i className="fas fa-box" style={{ color: "var(--ink-4)", fontSize: "1.2rem" }} /></div>}
+                              </div>
+                              <span style={{ fontWeight: 600, fontSize: "1.3rem" }}>{p.name}</span>
+                            </div>
+                          </td>
+                          <td>{unitsSold}</td>
+                          <td>
+                            <span style={{ color: stock === 0 ? "#dc2626" : stock <= 5 ? "#d97706" : "inherit", fontWeight: stock <= 5 ? 700 : 400 }}>
+                              {stock === 0 ? "Out of stock" : stock}
+                              {stock > 0 && stock <= 5 && <span style={{ fontSize: "1rem", marginLeft: 4 }}>⚠</span>}
+                            </span>
+                          </td>
+                          <td style={{ fontWeight: 700 }}>{naira(revenue)}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+
+          {/* Earnings */}
+          <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+            <div style={{ padding: "16px 16px 12px", borderBottom: "1px solid var(--line)" }}>
+              <h3 style={{ margin: 0, fontSize: "1.6rem", fontWeight: 700 }}>Earnings & Payouts</h3>
+            </div>
+            <div style={{ padding: 16 }}>
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ fontSize: "1.2rem", color: "var(--ink-3)", fontWeight: 600, marginBottom: 4 }}>Available for Payout</div>
+                <div style={{ fontSize: "3.2rem", fontWeight: 900, letterSpacing: "-0.04em" }}>{naira(kpis?.walletBalance || 0)}</div>
+                <button className="btn btn-primary btn-sm" style={{ marginTop: 12 }} onClick={() => setTab("Payouts")}><i className="fas fa-wallet" /> Request Payout</button>
+              </div>
+              <div style={{ borderTop: "1px solid var(--line)", paddingTop: 14 }}>
+                <div style={{ fontSize: "1.3rem", fontWeight: 700, marginBottom: 10 }}>Recent Payout History</div>
+                {payouts.length === 0
+                  ? <p style={{ margin: 0, color: "var(--ink-3)", fontSize: "1.3rem" }}>No payout history yet</p>
+                  : payouts.slice(0, 3).map((p) => (
+                    <div key={p._id || p.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 0", borderBottom: "1px solid var(--line)" }}>
+                      <div>
+                        <div style={{ fontSize: "1.4rem", fontWeight: 700 }}>{naira(p.amount)}</div>
+                        <div style={{ fontSize: "1.1rem", color: "var(--ink-3)" }}>{new Date(p.createdAt || Date.now()).toLocaleDateString()} · {p.bank || "Bank transfer"}</div>
+                      </div>
+                      <span style={{ fontSize: "1.1rem", padding: "3px 10px", borderRadius: 20, background: "#dcfce7", color: "#16a34a", fontWeight: 700 }}>{p.status || "completed"}</span>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ── Orders tab ── */}
+      {tab === "Orders" && (
+        <div>
+          {confirmCancel && (
+            <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.5)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+              <div className="card" style={{ maxWidth: 380, width: "100%", padding: 24 }}>
+                <div style={{ width: 48, height: 48, borderRadius: "50%", background: "#fee2e2", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 16 }}>
+                  <i className="fas fa-triangle-exclamation" style={{ color: "#dc2626", fontSize: "2rem" }} />
+                </div>
+                <h3 style={{ margin: "0 0 8px", fontSize: "1.8rem", fontWeight: 800 }}>Cancel this order?</h3>
+                <p style={{ margin: "0 0 20px", color: "var(--ink-2)", fontSize: "1.3rem", lineHeight: 1.6 }}>
+                  This cannot be undone. If the buyer already paid, a refund will be automatically initiated.
+                </p>
+                <div style={{ display: "flex", gap: 10 }}>
+                  <button className="btn btn-ghost btn-block" onClick={() => setConfirmCancel(null)}>Keep order</button>
+                  <button className="btn btn-block" style={{ background: "#dc2626", color: "#fff", border: "none" }} disabled={!!statusUpdating[confirmCancel]} onClick={() => updateStatus(confirmCancel, "cancelled")}>
+                    {statusUpdating[confirmCancel] ? <i className="fas fa-spinner fa-spin" /> : "Yes, cancel"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <h2 style={{ fontSize: "2rem", fontWeight: 800, margin: "0 0 16px" }}>Orders</h2>
+          <div style={{ display: "flex", gap: 8, overflowX: "auto", scrollbarWidth: "none", marginBottom: 16 }}>
+            {["All", "Pending", "Confirmed", "Shipped", "Completed", "Cancelled"].map((s) => (
+              <span key={s} className={`chip${orderFilter === s ? " active" : ""}`} style={{ cursor: "pointer", flexShrink: 0 }} onClick={() => setOrderFilter(s)}>{s}</span>
+            ))}
+          </div>
+
+          {filteredOrders.length === 0
+            ? <div style={{ textAlign: "center", padding: "60px 0" }}>
+                <i className="fas fa-box-archive" style={{ fontSize: "3rem", color: "var(--ink-4)", marginBottom: 12 }} />
+                <p style={{ color: "var(--ink-3)", fontSize: "1.4rem" }}>No orders found</p>
+              </div>
+            : filteredOrders.map((o) => {
+                const oid = (o._id || o.id || "").toString();
+                const busy = !!statusUpdating[oid];
+                const status = o.status || "pending";
+                const isDone = status === "completed" || status === "cancelled";
+
+                const NEXT_ACTION = {
+                  pending:   { label: "Confirm Order", newStatus: "confirmed", color: "var(--accent)" },
+                  confirmed: { label: "Mark Shipped",  newStatus: "shipped",   color: "#3b82f6" },
+                  // shipped → completion handled via delivery code input above
+                };
+                const next = NEXT_ACTION[status];
+
+                return (
+                  <div key={oid} className="card" style={{ marginBottom: 12, padding: 0, overflow: "hidden" }}>
+                    <div style={{ padding: "14px 16px", borderBottom: "1px solid var(--line)", display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+                      <div>
+                        <div style={{ fontFamily: "var(--font-mono)", fontSize: "1.2rem", color: "var(--ink-3)" }}>#{oid.slice(-10)}</div>
+                        <div style={{ fontWeight: 700, fontSize: "1.4rem", marginTop: 2 }}>{o.buyer?.name || "Buyer"}</div>
+                        <div style={{ fontSize: "1.15rem", color: "var(--ink-3)", marginTop: 1 }}>{new Date(o.createdAt || Date.now()).toLocaleDateString()}</div>
+                      </div>
+                      <div style={{ textAlign: "right" }}>
+                        <div style={{ fontSize: "1.8rem", fontWeight: 900, color: "var(--accent)" }}>{naira(o.totalAmount || o.total || 0)}</div>
+                        <StatusBadge status={status} />
+                      </div>
+                    </div>
+
+                    <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--line)" }}>
+                      {(o.items || []).map((it, i) => (
+                        <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: "1.3rem", padding: "3px 0" }}>
+                          <span>{it.product?.name || it.name || "Item"} <span style={{ color: "var(--ink-3)" }}>×{it.quantity || 1}</span></span>
+                          <span style={{ fontWeight: 600 }}>{naira((it.price || 0) * (it.quantity || 1))}</span>
+                        </div>
+                      ))}
+                      {o.shippingAddress?.address && (
+                        <div style={{ marginTop: 8, fontSize: "1.15rem", color: "var(--ink-3)" }}>
+                          <i className="fas fa-location-dot" style={{ marginRight: 4 }} />
+                          {o.shippingAddress.address}{o.shippingAddress.city ? `, ${o.shippingAddress.city}` : ""}
+                        </div>
+                      )}
+                    </div>
+
+                    {!isDone && o.paymentStatus === "paid" && status !== "shipped" && (
+                      <div style={{ padding: "10px 16px", background: "rgba(59,130,246,.06)", borderBottom: "1px solid var(--line)", display: "flex", alignItems: "center", gap: 8, fontSize: "1.2rem", color: "#1d4ed8" }}>
+                        <i className="fas fa-lock" /> Funds held in UMP escrow — released when delivery is confirmed
+                      </div>
+                    )}
+
+                    {/* Delivery code input — shown once order is shipped and buyer has paid */}
+                    {status === "shipped" && o.paymentStatus === "paid" && (
+                      <div style={{ padding: "14px 16px", background: "rgba(99,102,241,.06)", borderBottom: "1px solid var(--line)" }}>
+                        <div style={{ fontSize: "1.2rem", fontWeight: 700, color: "#4f46e5", marginBottom: 8 }}>
+                          <i className="fas fa-key" style={{ marginRight: 6 }} />Confirm delivery — enter the buyer's code
+                        </div>
+                        <div style={{ fontSize: "1.15rem", color: "var(--ink-3)", marginBottom: 10 }}>
+                          Ask the buyer to show their delivery code from the UMP app. Enter it below to release payment.
+                        </div>
+                        <div style={{ display: "flex", gap: 8 }}>
+                          <input
+                            style={{ flex: 1, padding: "8px 12px", borderRadius: "var(--r-md)", border: "2px solid #6366f1", background: "var(--paper)", fontSize: "1.6rem", fontFamily: "monospace", fontWeight: 800, letterSpacing: ".12em", textTransform: "uppercase" }}
+                            placeholder="ABC123"
+                            maxLength={6}
+                            value={deliveryCodes[oid] || ""}
+                            onChange={(e) => setDeliveryCodes((c) => ({ ...c, [oid]: e.target.value.toUpperCase() }))}
+                            onKeyDown={(e) => { if (e.key === "Enter") confirmDeliveryByCode(oid); }}
+                          />
+                          <button
+                            className="btn btn-sm"
+                            style={{ background: "#4f46e5", color: "#fff", border: "none", flexShrink: 0 }}
+                            disabled={deliverySubmitting[oid] || !deliveryCodes[oid]}
+                            onClick={() => confirmDeliveryByCode(oid)}
+                          >
+                            {deliverySubmitting[oid] ? <i className="fas fa-spinner fa-spin" /> : <><i className="fas fa-check" /> Confirm</>}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                    {status === "cancelled" && o.refund?.status === "requested" && (
+                      <div style={{ padding: "10px 16px", background: "rgba(239,68,68,.06)", borderBottom: "1px solid var(--line)", display: "flex", alignItems: "center", gap: 8, fontSize: "1.2rem", color: "#dc2626" }}>
+                        <i className="fas fa-rotate-left" /> Refund of {naira(o.refund.amount)} initiated for buyer
+                      </div>
+                    )}
+                    {status === "completed" && (
+                      <div style={{ padding: "10px 16px", background: "rgba(34,197,94,.06)", borderBottom: "1px solid var(--line)", display: "flex", alignItems: "center", gap: 8, fontSize: "1.2rem", color: "#16a34a" }}>
+                        <i className="fas fa-wallet" /> {naira(Math.floor((o.totalAmount || 0) * 0.95))} added to your wallet <span style={{ opacity: 0.7, fontWeight: 400 }}>(after 5% UMP fee)</span>
+                      </div>
+                    )}
+
+                    {!isDone && (
+                      <div style={{ padding: "12px 16px", display: "flex", gap: 8 }}>
+                        {next && (
+                          <button className="btn btn-sm" style={{ background: next.color, color: "#fff", border: "none", flex: 1 }} disabled={busy} onClick={() => updateStatus(oid, next.newStatus)}>
+                            {busy && statusUpdating[oid] === next.newStatus ? <i className="fas fa-spinner fa-spin" /> : <><i className="fas fa-check" /> {next.label}</>}
+                          </button>
+                        )}
+                        <button className="btn btn-sm btn-ghost" style={{ color: "#dc2626", border: "1px solid #dc2626" }} disabled={busy} onClick={() => setConfirmCancel(oid)}>
+                          <i className="fas fa-xmark" /> Cancel
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+        </div>
+      )}
+
+      {/* ── Products tab ── */}
+      {tab === "Products" && (
+        <div>
+          {/* Delete confirmation modal */}
+          {deleteProductId && (
+            <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.5)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+              <div className="card" style={{ maxWidth: 360, width: "100%", padding: 24 }}>
+                <div style={{ width: 48, height: 48, borderRadius: "50%", background: "#fee2e2", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 16 }}>
+                  <i className="fas fa-trash" style={{ color: "#dc2626", fontSize: "1.8rem" }} />
+                </div>
+                <h3 style={{ margin: "0 0 8px", fontSize: "1.7rem", fontWeight: 800 }}>Delete this product?</h3>
+                <p style={{ margin: "0 0 20px", color: "var(--ink-2)", fontSize: "1.3rem" }}>This action cannot be undone.</p>
+                <div style={{ display: "flex", gap: 10 }}>
+                  <button className="btn btn-ghost btn-block" onClick={() => setDeleteProductId(null)}>Cancel</button>
+                  <button className="btn btn-block" style={{ background: "#dc2626", color: "#fff", border: "none" }} disabled={productDeleting} onClick={() => handleDeleteProduct(deleteProductId)}>
+                    {productDeleting ? <i className="fas fa-spinner fa-spin" /> : "Delete"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {quickEdit && <QuickEditModal product={quickEdit} onClose={() => setQuickEdit(null)} showToast={showToast} onSave={(updated) => { setProducts((p) => p.map((x) => x._id === updated._id ? { ...x, ...updated } : x)); setQuickEdit(null); }} />}
+          {addProductOpen && <AddProductModal onClose={() => setAddProductOpen(false)} showToast={showToast} onSave={(product) => { if (product) setProducts((p) => [product, ...p]); setAddProductOpen(false); }} />}
+
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+            <h2 style={{ fontSize: "2rem", fontWeight: 800, margin: 0 }}>Products</h2>
+            <button className="btn btn-primary btn-sm" onClick={() => setAddProductOpen(true)}><i className="fas fa-plus" /> Add product</button>
+          </div>
+
+          {products.length === 0 && !loading ? (
+            <div style={{ textAlign: "center", padding: "60px 0" }}>
+              <i className="fas fa-boxes-stacked" style={{ fontSize: "3.2rem", color: "var(--ink-4)", marginBottom: 16 }} />
+              <p style={{ color: "var(--ink-2)", fontSize: "1.4rem", marginBottom: 12 }}>No products listed yet.</p>
+              <button className="btn btn-primary" onClick={() => setAddProductOpen(true)}><i className="fas fa-plus" /> Add your first product</button>
+            </div>
+          ) : (
+            <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+              <div style={{ overflowX: "auto" }}>
+                <table className="dash-table">
+                  <thead><tr><th>Product</th><th>Price</th><th>Stock</th><th>Views</th><th>Actions</th></tr></thead>
+                  <tbody>
+                    {products.map((p) => (
+                      <tr key={p._id}>
+                        <td>
+                          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                            <div style={{ width: 44, height: 44, borderRadius: 8, background: "var(--surface)", overflow: "hidden", flexShrink: 0 }}>
+                              {p.images?.[0]
+                                ? <img src={typeof p.images[0] === "string" ? p.images[0] : p.images[0].url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                                : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}><i className="fas fa-box" style={{ color: "var(--ink-4)" }} /></div>}
+                            </div>
+                            <div>
+                              <div style={{ fontWeight: 600, fontSize: "1.3rem" }}>{p.name}</div>
+                              <div style={{ fontSize: "1.1rem", color: "var(--ink-3)" }}>{p.category?.name || p.condition || ""}</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td style={{ fontWeight: 700, color: "var(--accent)" }}>{naira(p.price)}</td>
+                        <td><span style={{ fontWeight: p.stock <= 5 ? 700 : 400, color: p.stock <= 5 ? "#dc2626" : "inherit" }}>{p.stock ?? "—"}</span></td>
+                        <td>{p.views || 0}</td>
+                        <td>
+                          <div style={{ display: "flex", gap: 6 }}>
+                            <button className="btn btn-sm btn-ghost" style={{ padding: "4px 10px" }} title="Quick Edit" onClick={() => setQuickEdit(p)}>
+                              <i className="fas fa-pen" />
+                            </button>
+                            <button className="btn btn-sm" style={{ padding: "4px 10px", color: "#dc2626", border: "1px solid #dc2626", background: "transparent" }} title="Delete" onClick={() => setDeleteProductId(p._id)}>
+                              <i className="fas fa-trash" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Apartments tab ── */}
+      {tab === "Apartments" && (
+        <div>
+          {listingModal && (
+            <ListingModal
+              listing={listingModal === "new" ? null : listingModal}
+              onClose={() => setListingModal(null)}
+              onSave={handleListingSaved}
+              showToast={showToast}
+            />
+          )}
+
+          {/* Delete listing confirm */}
+          {deleteListingId && (
+            <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.5)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+              <div className="card" style={{ maxWidth: 360, width: "100%", padding: 24 }}>
+                <div style={{ width: 48, height: 48, borderRadius: "50%", background: "#fee2e2", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 16 }}>
+                  <i className="fas fa-trash" style={{ color: "#dc2626", fontSize: "1.8rem" }} />
+                </div>
+                <h3 style={{ margin: "0 0 8px", fontSize: "1.7rem", fontWeight: 800 }}>Delete this listing?</h3>
+                <p style={{ margin: "0 0 20px", color: "var(--ink-2)", fontSize: "1.3rem" }}>This cannot be undone.</p>
+                <div style={{ display: "flex", gap: 10 }}>
+                  <button className="btn btn-ghost btn-block" onClick={() => setDeleteListingId(null)}>Cancel</button>
+                  <button className="btn btn-block" style={{ background: "#dc2626", color: "#fff", border: "none" }} disabled={listingDeleting} onClick={() => handleDeleteListing(deleteListingId)}>
+                    {listingDeleting ? <i className="fas fa-spinner fa-spin" /> : "Delete"}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+            <div>
+              <h2 style={{ fontSize: "2rem", fontWeight: 800, margin: "0 0 4px" }}>Apartments</h2>
+              <p style={{ margin: 0, color: "var(--ink-3)", fontSize: "1.3rem" }}>Manage your hostel and apartment listings.</p>
+            </div>
+            <button className="btn btn-primary btn-sm" onClick={() => setListingModal("new")}><i className="fas fa-plus" /> Add listing</button>
+          </div>
+
+          {listingsLoading ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              {[1, 2, 3].map((i) => <Skel.HostelCard key={i} />)}
+            </div>
+          ) : listings.length === 0 ? (
+            <div style={{ textAlign: "center", padding: "60px 0" }}>
+              <i className="fas fa-building" style={{ fontSize: "3.2rem", color: "var(--ink-4)", marginBottom: 16 }} />
+              <p style={{ color: "var(--ink-2)", fontSize: "1.4rem", marginBottom: 12 }}>No listings yet.</p>
+              <button className="btn btn-primary" onClick={() => setListingModal("new")}><i className="fas fa-plus" /> Add your first listing</button>
+            </div>
+          ) : (
+            <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+              <div style={{ overflowX: "auto" }}>
+                <table className="dash-table">
+                  <thead>
+                    <tr><th>Property</th><th>Type</th><th>Price</th><th>Beds/Baths</th><th>Available</th><th>Actions</th></tr>
+                  </thead>
+                  <tbody>
+                    {listings.map((l) => (
+                      <tr key={l._id}>
+                        <td>
+                          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                            <div style={{ width: 44, height: 44, borderRadius: 8, background: "var(--surface)", overflow: "hidden", flexShrink: 0 }}>
+                              {l.images?.[0]?.url
+                                ? <img src={l.images[0].url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                                : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}><i className="fas fa-building" style={{ color: "var(--ink-4)" }} /></div>}
+                            </div>
+                            <div>
+                              <div style={{ fontWeight: 600, fontSize: "1.3rem" }}>{l.name}</div>
+                              <div style={{ fontSize: "1.1rem", color: "var(--ink-3)" }}>{l.location || ""}</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td><span style={{ fontSize: "1.1rem", padding: "3px 8px", borderRadius: 20, background: "var(--surface)", border: "1px solid var(--line)" }}>{l.type || "—"}</span></td>
+                        <td style={{ fontWeight: 700, color: "var(--accent)" }}>{naira(l.price)}<span style={{ fontWeight: 400, fontSize: "1.1rem", color: "var(--ink-3)" }}> {l.rate || ""}</span></td>
+                        <td>{l.beds || 0} bed · {l.baths || 0} bath</td>
+                        <td>
+                          <span style={{ fontSize: "1.1rem", padding: "3px 8px", borderRadius: 20, background: l.available ? "#dcfce7" : "#fee2e2", color: l.available ? "#16a34a" : "#dc2626", fontWeight: 600 }}>
+                            {l.available ? "Yes" : "No"}
+                          </span>
+                        </td>
+                        <td>
+                          <div style={{ display: "flex", gap: 6 }}>
+                            <button className="btn btn-sm btn-ghost" style={{ padding: "4px 10px" }} onClick={() => setListingModal(l)}>
+                              <i className="fas fa-pen" />
+                            </button>
+                            <button className="btn btn-sm" style={{ padding: "4px 10px", color: "#dc2626", border: "1px solid #dc2626", background: "transparent" }} onClick={() => setDeleteListingId(l._id)}>
+                              <i className="fas fa-trash" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Payouts tab ── */}
+      {tab === "Payouts" && (
+        <div>
+          <h2 style={{ fontSize: "2rem", fontWeight: 800, margin: "0 0 20px" }}>Payouts</h2>
+
+          {/* Balance card */}
+          <div style={{ background: "linear-gradient(135deg, var(--navy-800), #1e1b4b)", color: "#fff", borderRadius: "var(--r-xl)", padding: 24, marginBottom: 20 }}>
+            <div style={{ fontSize: "1.2rem", opacity: 0.6, marginBottom: 4 }}>Available for Payout</div>
+            <div style={{ fontSize: "3.6rem", fontWeight: 900, letterSpacing: "-0.04em" }}>{naira(kpis?.walletBalance || 0)}</div>
+            <div style={{ fontSize: "1.2rem", opacity: 0.5, marginTop: 4 }}>Minimum payout: ₦100 · Processed in 1–2 business days</div>
+          </div>
+
+          {/* Bank Account & Request Payout side-by-side on desktop */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 16, marginBottom: 20 }}>
+            {/* Bank account */}
+            <div className="card" style={{ padding: 20 }}>
+              <h3 style={{ margin: "0 0 16px", fontSize: "1.6rem", fontWeight: 700 }}><i className="fas fa-university" style={{ marginRight: 8, color: "var(--accent)" }} />Bank Account</h3>
+              <div style={{ marginBottom: 12 }}>
+                <label style={lSty}>Bank</label>
+                <select
+                  style={iSty}
+                  value={bankForm.bankCode}
+                  onChange={(e) => {
+                    const selected = banks.find((b) => b.code === e.target.value);
+                    setBankForm((f) => ({ ...f, bankCode: e.target.value, bankName: selected?.name || "", accountName: "" }));
+                  }}
+                >
+                  <option value="">— Select bank —</option>
+                  {banks.map((b, i) => <option key={`${b.code}-${i}`} value={b.code}>{b.name}</option>)}
+                </select>
+              </div>
+              <div style={{ marginBottom: 12 }}>
+                <label style={lSty}>Account Number</label>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <input
+                    style={{ ...iSty, flex: 1 }}
+                    value={bankForm.accountNumber}
+                    onChange={(e) => setBankForm((f) => ({ ...f, accountNumber: e.target.value, accountName: "" }))}
+                    placeholder="10-digit account number"
+                    maxLength={10}
+                  />
+                  <button
+                    className="btn btn-sm btn-ghost"
+                    style={{ flexShrink: 0 }}
+                    disabled={bankVerifying || !bankForm.accountNumber || !bankForm.bankCode}
+                    onClick={verifyAccount}
+                  >
+                    {bankVerifying ? <i className="fas fa-spinner fa-spin" /> : "Verify"}
+                  </button>
+                </div>
+              </div>
+              <div style={{ marginBottom: 16 }}>
+                <label style={lSty}>Account Name</label>
+                <input
+                  style={{ ...iSty, background: bankForm.accountName ? "rgba(34,197,94,.07)" : undefined, color: bankForm.accountName ? "#16a34a" : undefined, fontWeight: bankForm.accountName ? 700 : 400 }}
+                  value={bankForm.accountName}
+                  readOnly
+                  placeholder="Will be auto-filled after verification"
+                />
+              </div>
+              {!bankForm.accountName && (
+                <p style={{ margin: "0 0 12px", fontSize: "1.15rem", color: "var(--ink-3)" }}>
+                  <i className="fas fa-circle-info" style={{ marginRight: 5 }} />Enter your account number and click Verify to confirm your account name.
+                </p>
+              )}
+              <button className="btn btn-primary btn-sm" disabled={bankSaving || !bankForm.accountName} onClick={saveBankDetails} style={{ width: "100%" }}>
+                {bankSaving ? <i className="fas fa-spinner fa-spin" /> : <><i className="fas fa-save" /> Save Bank Details</>}
+              </button>
+            </div>
+
+            {/* Request payout */}
+            <div className="card" style={{ padding: 20 }}>
+              <h3 style={{ margin: "0 0 16px", fontSize: "1.6rem", fontWeight: 700 }}><i className="fas fa-paper-plane" style={{ marginRight: 8, color: "var(--accent)" }} />Request Payout</h3>
+              <div style={{ marginBottom: 12 }}>
+                <label style={lSty}>Amount (₦)</label>
+                <input style={iSty} type="number" min="100" value={payoutAmount} onChange={(e) => setPayoutAmount(e.target.value)} placeholder="Enter amount (min ₦100)" />
+              </div>
+              <div style={{ padding: 12, borderRadius: "var(--r-md)", background: "var(--surface)", marginBottom: 16, fontSize: "1.2rem", color: "var(--ink-3)" }}>
+                <div><strong style={{ color: "var(--ink-1)" }}>To:</strong> {bankForm.accountName || "—"}</div>
+                <div><strong style={{ color: "var(--ink-1)" }}>Bank:</strong> {bankForm.bankName || "—"} {bankForm.accountNumber ? `· ${bankForm.accountNumber}` : ""}</div>
+              </div>
+              <button className="btn btn-primary btn-sm" disabled={payoutSaving || !bankForm.bankName} onClick={requestPayout} style={{ width: "100%" }}>
+                {payoutSaving ? <i className="fas fa-spinner fa-spin" /> : <><i className="fas fa-paper-plane" /> Request Payout Now</>}
+              </button>
+              {!bankForm.accountName && <p style={{ margin: "8px 0 0", fontSize: "1.15rem", color: "var(--ink-3)", textAlign: "center" }}>Add and verify bank details first</p>}
+            </div>
+          </div>
+
+          {/* Payout history */}
+          <div className="card" style={{ padding: 0, overflow: "hidden" }}>
+            <div style={{ padding: "16px 16px 12px", borderBottom: "1px solid var(--line)", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 }}>
+              <h3 style={{ margin: 0, fontSize: "1.6rem", fontWeight: 700 }}>Payout History</h3>
+              <div style={{ display: "flex", gap: 8 }}>
+                <input style={{ ...iSty, width: 160 }} placeholder="Search..." value={payoutSearch} onChange={(e) => setPayoutSearch(e.target.value)} />
+                <select style={{ ...iSty, width: 130 }} value={payoutFilterStatus} onChange={(e) => setPayoutFilterStatus(e.target.value)}>
+                  {["All", "Pending", "Completed", "Failed"].map((s) => <option key={s}>{s}</option>)}
+                </select>
+              </div>
+            </div>
+            {filteredPayouts.length === 0
+              ? <p style={{ textAlign: "center", color: "var(--ink-3)", padding: "40px 0", margin: 0 }}>No payout history yet</p>
+              : <div style={{ overflowX: "auto" }}>
+                  <table className="dash-table">
+                    <thead><tr><th>Amount</th><th>Bank</th><th>Date</th><th>Status</th><th></th></tr></thead>
+                    <tbody>
+                      {filteredPayouts.map((p) => (
+                        <tr key={p._id || p.id}>
+                          <td style={{ fontWeight: 800, fontSize: "1.4rem" }}>{naira(p.amount)}</td>
+                          <td style={{ fontSize: "1.2rem", color: "var(--ink-2)" }}>{p.accountDetails?.bankName || p.bank || "Bank transfer"}</td>
+                          <td style={{ fontSize: "1.2rem", color: "var(--ink-3)" }}>{new Date(p.createdAt || Date.now()).toLocaleDateString()}</td>
+                          <td>
+                            <span style={{
+                              fontSize: "1.1rem", padding: "3px 10px", borderRadius: 20, fontWeight: 700,
+                              background: p.status === "completed" ? "#dcfce7" : p.status === "failed" ? "#fee2e2" : p.status === "processing" ? "#dbeafe" : "#fef3c7",
+                              color: p.status === "completed" ? "#16a34a" : p.status === "failed" ? "#dc2626" : p.status === "processing" ? "#1d4ed8" : "#d97706",
+                            }}>{p.status || "pending"}</span>
+                          </td>
+                          <td>
+                            {p.status === "pending" && (
+                              <button
+                                className="btn btn-sm btn-primary"
+                                style={{ padding: "4px 12px", fontSize: "1.1rem" }}
+                                disabled={!!retryingPayout[p._id]}
+                                onClick={() => handleRetryPayout(p._id)}
+                              >
+                                {retryingPayout[p._id] ? <i className="fas fa-spinner fa-spin" /> : <><i className="fas fa-rotate-right" /> Retry</>}
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>}
+          </div>
+        </div>
+      )}
+
+      {/* ── Settings tab ── */}
+      {tab === "Settings" && (
+        <div>
+          <h2 style={{ fontSize: "2rem", fontWeight: 800, margin: "0 0 20px" }}>Dashboard Settings</h2>
+
+          {/* Change Password */}
+          <div className="card" style={{ padding: 20, marginBottom: 16 }}>
+            <h3 style={{ margin: "0 0 16px", fontSize: "1.6rem", fontWeight: 700 }}><i className="fas fa-lock" style={{ marginRight: 8, color: "var(--accent)" }} />Change Password</h3>
+            {[
+              { id: "old",     label: "Current Password",   val: dashPwd.old,     ph: "Current password" },
+              { id: "new",     label: "New Password",        val: dashPwd.new,     ph: "New password" },
+              { id: "confirm", label: "Confirm New Password",val: dashPwd.confirm, ph: "Repeat new password" },
+            ].map(({ id, label, val, ph }) => (
+              <div key={id} style={{ marginBottom: id === "new" ? 4 : 12 }}>
+                <label style={lSty}>{label}</label>
+                <div style={{ position: "relative" }}>
+                  <input
+                    style={{ ...iSty, paddingRight: 44 }}
+                    type={pwdShow[id] ? "text" : "password"}
+                    value={val}
+                    onChange={(e) => setDashPwd((p) => ({ ...p, [id]: e.target.value }))}
+                    placeholder={ph}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setPwdShow((s) => ({ ...s, [id]: !s[id] }))}
+                    style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", border: "none", background: "none", cursor: "pointer", color: "var(--ink-3)", fontSize: "1.4rem", padding: 0 }}
+                  >
+                    <i className={`fas fa-eye${pwdShow[id] ? "-slash" : ""}`} />
+                  </button>
+                </div>
+                {id === "new" && <StrengthMeter password={val} />}
+                {id === "confirm" && val && (
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "1.2rem", marginTop: 4, color: dashPwd.new === val ? "#16a34a" : "#ef4444" }}>
+                    <i className={`fas fa-circle-${dashPwd.new === val ? "check" : "xmark"}`} />
+                    {dashPwd.new === val ? "Passwords match" : "Passwords don't match"}
+                  </div>
+                )}
+              </div>
+            ))}
+            <button className="btn btn-primary btn-sm" style={{ marginTop: 8 }} disabled={pwdSaving} onClick={changePassword}>
+              {pwdSaving ? <i className="fas fa-spinner fa-spin" /> : <><i className="fas fa-save" /> Update Password</>}
+            </button>
+          </div>
+
+          {/* Store Profile */}
+          <div className="card" style={{ padding: 20, marginBottom: 16 }}>
+            <h3 style={{ margin: "0 0 16px", fontSize: "1.6rem", fontWeight: 700 }}><i className="fas fa-store" style={{ marginRight: 8, color: "var(--accent)" }} />Store Profile</h3>
+
+            {/* Store Avatar / Logo */}
+            <label style={lSty}>Store Logo / Profile Image</label>
+            <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 16 }}>
+              <div style={{ width: 72, height: 72, borderRadius: "50%", background: "var(--surface)", border: "2px solid var(--line)", overflow: "hidden", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", position: "relative" }}>
+                {storeAvatarUploading
+                  ? <i className="fas fa-spinner fa-spin" style={{ color: "var(--accent)", fontSize: "1.6rem" }} />
+                  : dashStore.avatarUrl
+                  ? <img src={dashStore.avatarUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                  : <i className="fas fa-store" style={{ color: "var(--ink-4)", fontSize: "2rem" }} />}
+              </div>
+              <div>
+                <label className="btn btn-sm btn-ghost" style={{ cursor: "pointer" }}>
+                  <i className="fas fa-camera" /> {dashStore.avatarUrl ? "Change" : "Upload"} logo
+                  <input type="file" accept="image/*" style={{ display: "none" }} disabled={storeAvatarUploading} onChange={async (e) => {
+                    const file = e.target.files[0];
+                    if (!file) return;
+                    setStoreAvatarUploading(true);
+                    try { await uploadStoreImage(file, "avatar"); } catch { showToast("Upload failed", "error"); } finally { setStoreAvatarUploading(false); }
+                    e.target.value = "";
+                  }} />
+                </label>
+                <div style={{ fontSize: "1.1rem", color: "var(--ink-3)", marginTop: 4 }}>JPG or PNG, max 5 MB</div>
+              </div>
+            </div>
+
+            {/* Store Banner */}
+            <label style={lSty}>Store Banner</label>
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ width: "100%", height: 100, borderRadius: "var(--r-md)", background: "var(--surface)", border: "2px dashed var(--line)", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", position: "relative", marginBottom: 8 }}>
+                {storeBannerUploading
+                  ? <i className="fas fa-spinner fa-spin" style={{ color: "var(--accent)", fontSize: "2rem" }} />
+                  : dashStore.bannerUrl
+                  ? <img src={dashStore.bannerUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                  : <div style={{ textAlign: "center", color: "var(--ink-4)" }}><i className="fas fa-image" style={{ fontSize: "2rem", display: "block", marginBottom: 4 }} /><span style={{ fontSize: "1.2rem" }}>No banner yet</span></div>}
+              </div>
+              <label className="btn btn-sm btn-ghost" style={{ cursor: "pointer" }}>
+                <i className="fas fa-upload" /> {dashStore.bannerUrl ? "Change" : "Upload"} banner
+                <input type="file" accept="image/*" style={{ display: "none" }} disabled={storeBannerUploading} onChange={async (e) => {
+                  const file = e.target.files[0];
+                  if (!file) return;
+                  setStoreBannerUploading(true);
+                  try { await uploadStoreImage(file, "banner"); } catch { showToast("Upload failed", "error"); } finally { setStoreBannerUploading(false); }
+                  e.target.value = "";
+                }} />
+              </label>
+              <div style={{ fontSize: "1.1rem", color: "var(--ink-3)", marginTop: 4 }}>Recommended: 1200 × 300 px</div>
+            </div>
+
+            <div style={{ marginBottom: 12 }}>
+              <label style={lSty}>Store Name</label>
+              <input style={iSty} value={dashStore.storeName} onChange={(e) => setDashStore((s) => ({ ...s, storeName: e.target.value }))} placeholder="Your store name" />
+            </div>
+            <div style={{ marginBottom: 16 }}>
+              <label style={lSty}>Store Description</label>
+              <textarea style={{ ...iSty, height: 80, resize: "vertical" }} value={dashStore.desc} onChange={(e) => setDashStore((s) => ({ ...s, desc: e.target.value }))} placeholder="Tell buyers about your store..." />
+            </div>
+            <button className="btn btn-primary btn-sm" disabled={storeSaving || storeAvatarUploading || storeBannerUploading} onClick={saveStoreProfile}>
+              {storeSaving ? <i className="fas fa-spinner fa-spin" /> : <><i className="fas fa-save" /> Save Store Profile</>}
+            </button>
+          </div>
+
+          {/* Notification Preferences */}
+          <div className="card" style={{ padding: 20, marginBottom: 16 }}>
+            <h3 style={{ margin: "0 0 16px", fontSize: "1.6rem", fontWeight: 700 }}><i className="fas fa-bell" style={{ marginRight: 8, color: "var(--accent)" }} />Notification Preferences</h3>
+            {[
+              { key: "orderUpdate", label: "New orders & order updates", desc: "Get notified when a buyer places an order" },
+              { key: "newMessage", label: "New messages", desc: "Get notified when a buyer messages you" },
+              { key: "lowStock", label: "Low stock alerts", desc: "Alert when a product has 5 or fewer items" },
+              { key: "payoutReady", label: "Payout ready", desc: "Notify when funds are ready to withdraw" },
+            ].map(({ key, label, desc }) => (
+              <div key={key} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 0", borderBottom: "1px solid var(--line)" }}>
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: "1.3rem" }}>{label}</div>
+                  <div style={{ fontSize: "1.15rem", color: "var(--ink-3)" }}>{desc}</div>
+                </div>
+                <label className="partner-toggle" style={{ flexShrink: 0, marginLeft: 16 }}>
+                  <input type="checkbox" checked={dashNotifs[key]} onChange={(e) => setDashNotifs((n) => ({ ...n, [key]: e.target.checked }))} />
+                  <span className="partner-toggle-track" />
+                </label>
+              </div>
+            ))}
+            <button className="btn btn-primary btn-sm" disabled={notifSaving} style={{ marginTop: 16 }} onClick={saveNotifs}>
+              {notifSaving ? <i className="fas fa-spinner fa-spin" /> : <><i className="fas fa-save" /> Save Preferences</>}
+            </button>
+          </div>
+
+          {/* Policies & Fulfillment */}
+          <div className="card" style={{ padding: 20, marginBottom: 16 }}>
+            <h3 style={{ margin: "0 0 16px", fontSize: "1.6rem", fontWeight: 700 }}><i className="fas fa-file-lines" style={{ marginRight: 8, color: "var(--accent)" }} />Policies & Fulfillment</h3>
+            <div style={{ marginBottom: 12 }}>
+              <label style={lSty}>Return Policy</label>
+              <textarea style={{ ...iSty, height: 80, resize: "vertical" }} value={dashPolicy.returnPolicy} onChange={(e) => setDashPolicy((p) => ({ ...p, returnPolicy: e.target.value }))} placeholder="Describe your return/refund policy..." />
+            </div>
+            <div style={{ marginBottom: 16 }}>
+              <label style={lSty}>Fulfillment Time</label>
+              <input style={iSty} value={dashPolicy.fulfillmentTime} onChange={(e) => setDashPolicy((p) => ({ ...p, fulfillmentTime: e.target.value }))} placeholder="e.g. Ships within 1–2 business days" />
+            </div>
+            <button className="btn btn-primary btn-sm" disabled={policySaving} onClick={savePolicies}>
+              {policySaving ? <i className="fas fa-spinner fa-spin" /> : <><i className="fas fa-save" /> Save Policies</>}
+            </button>
+          </div>
+
+          {/* Danger Zone */}
+          <div className="card" style={{ padding: 20, marginBottom: 16, border: "1px solid rgba(220,38,38,.3)" }}>
+            <h3 style={{ margin: "0 0 8px", fontSize: "1.6rem", fontWeight: 700, color: "#dc2626" }}><i className="fas fa-triangle-exclamation" style={{ marginRight: 8 }} />Danger Zone</h3>
+            <p style={{ margin: "0 0 16px", fontSize: "1.3rem", color: "var(--ink-2)" }}>Deactivating your account will hide your store and listings from buyers. You can reactivate by contacting support.</p>
+            <button className="btn btn-sm" style={{ color: "#dc2626", border: "1px solid #dc2626", background: "transparent" }} onClick={() => showToast("To deactivate your account, contact admin@myump.com.ng", "info")}>
+              <i className="fas fa-power-off" /> Deactivate Account
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
+  const MOB_TABS = [
+    { id: "Home",     icon: "house" },
+    { id: "Orders",   icon: "box-archive" },
+    { id: "Products", icon: "boxes-stacked" },
+    { id: "Payouts",  icon: "wallet" },
+    { id: "Settings", icon: "gear" },
+  ];
+
+  return (
+    <>
+      <FloatingChat />
+      <div className="seller-dash">
+        <Sidebar tab={tab} setTab={setTab} navigate={navigate} profile={profile} user={user} unreadMessages={unreadMessages} />
+
+        <main className="seller-main">
+          <div className="seller-mobile-header" style={{ padding: "14px 16px", background: "var(--navy-800)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div style={{ fontSize: "2rem", fontWeight: 900, letterSpacing: "-0.04em" }}>
+              <span style={{ color: "var(--accent)" }}>U</span>MP <span style={{ fontSize: "1.4rem", fontWeight: 600, opacity: 0.6 }}>Seller</span>
+            </div>
+            <button className="btn btn-sm" style={{ background: "rgba(255,255,255,.1)", color: "#fff", border: "none" }} onClick={() => navigate("/")}>
+              <i className="fas fa-arrow-left" /> UMP
+            </button>
+          </div>
+
+          {PAGE_CONTENT}
+
+          <div className="seller-mob-tabs" style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: "var(--navy-800)", display: "flex", borderTop: "1px solid rgba(255,255,255,.08)", zIndex: 55 }}>
+            {MOB_TABS.map((t) => (
+              <button
+                key={t.id}
+                onClick={() => setTab(t.id)}
+                style={{ flex: 1, padding: "10px 4px", border: "none", background: "transparent", color: tab === t.id ? "var(--accent)" : "rgba(255,255,255,.5)", fontSize: "1rem", fontWeight: 600, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 3, fontFamily: "var(--font-sans)" }}
+              >
+                <i className={`fas fa-${t.icon}`} style={{ fontSize: "1.6rem" }} />
+                {t.id}
+              </button>
+            ))}
+          </div>
+        </main>
+      </div>
+    </>
+  );
+}

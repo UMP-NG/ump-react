@@ -21,7 +21,7 @@ export default function WhatWeDo() {
   ];
 
   return (
-    <section>
+    <section className="what-we-do">
       <h2>💡 What We Do</h2>
       <p className="section-desc">
         We connect students across campuses, making buying and selling easier,

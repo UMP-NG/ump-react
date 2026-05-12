@@ -1,0 +1,103 @@
+import { useState, useEffect } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { apiFetch } from "../utils/api";
+
+export default function PaymentSuccess() {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const reference = searchParams.get("reference") || searchParams.get("trxref");
+  const [status, setStatus] = useState("verifying");
+  const [orderId, setOrderId] = useState(null);
+  const [countdown, setCountdown] = useState(5);
+
+  useEffect(() => {
+    if (!reference) { setStatus("failed"); return; }
+    apiFetch(`/api/payments/verify?reference=${encodeURIComponent(reference)}`)
+      .then((d) => {
+        if (d.status === "success") {
+          setStatus("success");
+          setOrderId(d.orderId || null);
+        } else {
+          setStatus("failed");
+        }
+      })
+      .catch(() => setStatus("failed"));
+  }, [reference]);
+
+  // Auto-redirect countdown on success
+  useEffect(() => {
+    if (status !== "success") return;
+    if (countdown <= 0) { navigate("/orders"); return; }
+    const t = setTimeout(() => setCountdown((c) => c - 1), 1000);
+    return () => clearTimeout(t);
+  }, [status, countdown, navigate]);
+
+  if (status === "verifying") {
+    return (
+      <div style={{ minHeight: "100vh", background: "var(--paper)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16 }}>
+        <i className="fas fa-spinner fa-spin" style={{ fontSize: "3rem", color: "var(--accent)" }} />
+        <p style={{ fontSize: "1.6rem", color: "var(--ink-2)" }}>Verifying your payment…</p>
+      </div>
+    );
+  }
+
+  if (status === "failed") {
+    return (
+      <div style={{ minHeight: "100vh", background: "var(--paper)", display: "flex", flexDirection: "column", alignItems: "center", padding: "80px 24px 0", textAlign: "center" }}>
+        <div style={{ width: 96, height: 96, borderRadius: "50%", background: "#fee2e2", color: "#dc2626", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: "4rem", marginBottom: 24 }}>
+          <i className="fas fa-xmark" />
+        </div>
+        <h1 style={{ fontSize: "2.8rem", fontWeight: 800, letterSpacing: "-0.02em", marginBottom: 8 }}>Payment failed</h1>
+        <p style={{ color: "var(--ink-2)", fontSize: "1.4rem", marginBottom: 32 }}>
+          Something went wrong. Your order has been saved — try paying again from your orders page.
+        </p>
+        <div style={{ maxWidth: 360, width: "100%" }}>
+          <button className="btn btn-primary btn-block btn-lg" onClick={() => navigate("/orders")}>View my orders</button>
+          <button className="btn btn-ghost btn-block" style={{ marginTop: 10 }} onClick={() => navigate("/cart")}>Back to cart</button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ minHeight: "100vh", background: "var(--paper)", display: "flex", flexDirection: "column" }}>
+      <div style={{ flex: 1, padding: "60px 24px 0", textAlign: "center", background: "linear-gradient(180deg, rgba(34,197,94,.08), transparent 60%)" }}>
+        <div style={{ width: 96, height: 96, borderRadius: "50%", background: "#22c55e", color: "#fff", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: "4rem", margin: "0 auto", boxShadow: "0 20px 40px -12px rgba(34,197,94,.5)" }}>
+          <i className="fas fa-check" />
+        </div>
+        <h1 style={{ fontSize: "3rem", fontWeight: 800, letterSpacing: "-0.02em", margin: "24px 0 8px" }}>Payment successful!</h1>
+        <p style={{ margin: "0 0 6px", color: "var(--ink-2)", fontSize: "1.4rem" }}>
+          Your order is confirmed and held in escrow. The seller has been notified.
+        </p>
+        <p style={{ margin: 0, fontSize: "1.2rem", color: "var(--ink-3)" }}>
+          Redirecting to your orders in {countdown}s…
+        </p>
+
+        <div className="card" style={{ padding: 20, margin: "24px auto", maxWidth: 360, textAlign: "left" }}>
+          {orderId && (
+            <div style={{ marginBottom: 12, paddingBottom: 12, borderBottom: "1px solid var(--line)" }}>
+              <div style={{ fontSize: "1.1rem", color: "var(--ink-3)", textTransform: "uppercase", letterSpacing: ".1em", fontWeight: 700, marginBottom: 4 }}>Order ID</div>
+              <div style={{ fontSize: "1.4rem", fontWeight: 800, fontFamily: "monospace" }}>#{orderId.toString().slice(-10)}</div>
+            </div>
+          )}
+          <div>
+            <div style={{ fontSize: "1.1rem", color: "var(--ink-3)", textTransform: "uppercase", letterSpacing: ".1em", fontWeight: 700, marginBottom: 4 }}>Payment reference</div>
+            <div style={{ fontSize: "1.3rem", fontWeight: 700, fontFamily: "monospace", wordBreak: "break-all" }}>{reference}</div>
+          </div>
+          <div style={{ marginTop: 14, padding: "10px 12px", borderRadius: "var(--r-md)", background: "rgba(59,130,246,.07)", border: "1px solid rgba(59,130,246,.2)", fontSize: "1.2rem", color: "#1d4ed8" }}>
+            <i className="fas fa-lock" style={{ marginRight: 6 }} />Your payment is held safely in escrow and will be released to the seller after delivery.
+          </div>
+        </div>
+
+        <div style={{ maxWidth: 360, margin: "0 auto" }}>
+          <button className="btn btn-primary btn-block btn-lg" onClick={() => navigate("/orders")}>
+            <i className="fas fa-box-archive" /> View my orders
+          </button>
+          <button className="btn btn-ghost btn-block" style={{ marginTop: 10 }} onClick={() => navigate("/market")}>
+            Continue shopping
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
