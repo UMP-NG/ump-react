@@ -79,7 +79,7 @@ export default function Store() {
   useEffect(() => {
     apiFetch("/api/sellers")
       .then((d) => {
-        const list = d.sellers || d || [];
+        const list = Array.isArray(d?.sellers) ? d.sellers : Array.isArray(d) ? d : [];
         setSellers(lcgShuffle(list, getSessionSeed("store-shuffle-seed")));
       })
       .catch(() => setSellers([]))

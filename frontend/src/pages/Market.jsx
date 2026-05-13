@@ -21,16 +21,6 @@ function getSessionSeed(key) {
   return parsed;
 }
 
-function lcgShuffle(arr, seed) {
-  const result = [...arr];
-  let s = seed >>> 0;
-  for (let i = result.length - 1; i > 0; i--) {
-    s = (Math.imul(1664525, s) + 1013904223) >>> 0;
-    const j = s % (i + 1);
-    [result[i], result[j]] = [result[j], result[i]];
-  }
-  return result;
-}
 
 const SORT_OPTIONS = [
   { label: "Featured", value: "random" },
@@ -59,6 +49,10 @@ export default function Market() {
 
   const [pendingSort, setPendingSort] = useState(sort);
   const [pendingCondition, setPendingCondition] = useState(condition);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const pageRef = useRef(1);
+  const PAGE_SIZE = 20;
 
   useEffect(() => {
     apiFetch("/api/categories")
@@ -86,20 +80,45 @@ export default function Market() {
   }, []);
 
   useEffect(() => {
+    pageRef.current = 1;
     setLoading(true);
+    setHasMore(false);
     const params = new URLSearchParams();
     if (cat !== "All") params.set("category", cat.toLowerCase());
     if (condition !== "All") params.set("condition", condition.toLowerCase());
     params.set("sort", sort);
+    params.set("limit", String(PAGE_SIZE));
     apiFetch(`/api/products?${params}`)
       .then((d) => {
-        const list = d.products || d || [];
+        const list = Array.isArray(d?.products) ? d.products : Array.isArray(d) ? d : [];
         setProducts(list);
-        setTotal(d.total || list.length);
+        const t = d?.total ?? list.length;
+        setTotal(t);
+        setHasMore(sort !== "random" && list.length === PAGE_SIZE && list.length < t);
       })
-      .catch(() => { setProducts([]); setTotal(0); })
+      .catch(() => { setProducts([]); setTotal(0); setHasMore(false); })
       .finally(() => setLoading(false));
   }, [cat, sort, condition]);
+
+  function loadMore() {
+    pageRef.current += 1;
+    setLoadingMore(true);
+    const params = new URLSearchParams();
+    if (cat !== "All") params.set("category", cat.toLowerCase());
+    if (condition !== "All") params.set("condition", condition.toLowerCase());
+    params.set("sort", sort);
+    params.set("limit", String(PAGE_SIZE));
+    params.set("skip", String((pageRef.current - 1) * PAGE_SIZE));
+    apiFetch(`/api/products?${params}`)
+      .then((d) => {
+        const list = Array.isArray(d?.products) ? d.products : Array.isArray(d) ? d : [];
+        setProducts((prev) => [...prev, ...list]);
+        const t = d?.total ?? 0;
+        setHasMore(sort !== "random" && list.length === PAGE_SIZE && (pageRef.current * PAGE_SIZE) < t);
+      })
+      .catch(() => setHasMore(false))
+      .finally(() => setLoadingMore(false));
+  }
 
   function openFilter() {
     setPendingSort(sort);
@@ -343,6 +362,14 @@ export default function Market() {
               ))
           }
         </div>
+
+        {hasMore && !loading && (
+          <div style={{ textAlign: "center", padding: "0 0 24px" }}>
+            <button className="btn btn-ghost" onClick={loadMore} disabled={loadingMore}>
+              {loadingMore ? <><i className="fas fa-spinner fa-spin" aria-hidden="true" /> Loading…</> : "Load more"}
+            </button>
+          </div>
+        )}
       </div>
 
       <Footer />

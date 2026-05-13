@@ -7,7 +7,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['images/ump-icon.svg', 'images/ump-banner.svg'],
+      includeAssets: ['images/ump-icon.svg', 'images/ump-banner.svg', 'images/market.png', 'images/hostel-hub.png'],
       manifest: {
         name: 'UMP – University Marketplace',
         short_name: 'UMP',
@@ -110,15 +110,19 @@ export default defineConfig({
             },
           },
           {
-            // API — always network-first, short cache for offline fallback
-            urlPattern: /\/api\//,
-            handler: 'NetworkFirst',
+            // Browse endpoints — serve cached immediately, revalidate in background (60s TTL)
+            urlPattern: /\/api\/(products|categories|listings|services|sellers)\b/,
+            handler: 'StaleWhileRevalidate',
             options: {
-              cacheName: 'api-responses',
-              networkTimeoutSeconds: 10,
-              expiration: { maxEntries: 50, maxAgeSeconds: 60 * 5 },
+              cacheName: 'api-browse',
+              expiration: { maxEntries: 60, maxAgeSeconds: 60 },
               cacheableResponse: { statuses: [0, 200] },
             },
+          },
+          {
+            // Transactional / auth endpoints — always fresh, never serve stale
+            urlPattern: /\/api\//,
+            handler: 'NetworkOnly',
           },
         ],
       },

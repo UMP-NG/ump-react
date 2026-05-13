@@ -28,8 +28,7 @@ export default function Cart() {
 
   const sub = items.reduce((s, i) => s + (i.product?.price || i.price || 0) * (i.quantity || i.qty || 1), 0);
   const deliveryFeeTotal = items.reduce((s, i) => s + (i.product?.deliveryFee || 0), 0);
-  const serviceChargeTotal = items.reduce((s, i) => s + (i.product?.serviceCharge || 0), 0);
-  const orderTotal = sub + deliveryFeeTotal + serviceChargeTotal;
+  const orderTotal = sub + deliveryFeeTotal;
 
   function getProductId(it) {
     return typeof it.product === "object" ? it.product?._id : it.product;
@@ -186,11 +185,6 @@ export default function Cart() {
                     {deliveryFeeTotal > 0 && (
                       <div style={{ display: "flex", justifyContent: "space-between", fontSize: "1.3rem", marginBottom: 6 }}>
                         <span style={{ opacity: 0.75 }}>Delivery fee</span><span>{naira(deliveryFeeTotal)}</span>
-                      </div>
-                    )}
-                    {serviceChargeTotal > 0 && (
-                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: "1.3rem", marginBottom: 6 }}>
-                        <span style={{ opacity: 0.75 }}>Service charge</span><span>{naira(serviceChargeTotal)}</span>
                       </div>
                     )}
                     <div style={{ height: 1, background: "rgba(255,255,255,.15)", margin: "8px 0" }} />

@@ -29,11 +29,16 @@ export default function InstallPrompt() {
   async function handleInstall() {
     if (!prompt) return;
     setInstalling(true);
-    prompt.prompt();
-    const { outcome } = await prompt.userChoice;
-    setInstalling(false);
-    setPrompt(null);
-    if (outcome === "accepted") setShow(false);
+    try {
+      prompt.prompt();
+      await prompt.userChoice;
+    } catch {
+      // prompt rejected or unsupported — fall through to finally
+    } finally {
+      setInstalling(false);
+      setPrompt(null);
+      setShow(false); // close regardless of outcome
+    }
   }
 
   function dismiss() {
@@ -48,7 +53,8 @@ export default function InstallPrompt() {
   return (
     <div
       role="dialog"
-      aria-label="Install UMP app"
+      aria-modal="true"
+      aria-labelledby="install-dialog-title"
       style={{
         position: "fixed",
         bottom: 72,
@@ -75,7 +81,7 @@ export default function InstallPrompt() {
       />
 
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontWeight: 700, fontSize: "1.35rem", lineHeight: 1.3 }}>Install UMP</div>
+        <div id="install-dialog-title" style={{ fontWeight: 700, fontSize: "1.35rem", lineHeight: 1.3 }}>Install UMP</div>
         <div style={{ fontSize: "1.1rem", color: "rgba(255,255,255,.65)", marginTop: 2 }}>
           Add to home screen for faster access
         </div>
@@ -100,6 +106,8 @@ export default function InstallPrompt() {
         <button
           onClick={handleInstall}
           disabled={installing}
+          aria-busy={installing}
+          aria-label={installing ? "Installing…" : "Install UMP"}
           style={{
             background: "#f97316",
             color: "#fff",
@@ -112,7 +120,7 @@ export default function InstallPrompt() {
             fontFamily: "var(--font-sans)",
           }}
         >
-          {installing ? <i className="fas fa-spinner fa-spin" /> : "Install"}
+          {installing ? <i className="fas fa-spinner fa-spin" aria-hidden="true" /> : "Install"}
         </button>
       </div>
     </div>

@@ -629,7 +629,7 @@ function ListingModal({ listing, onClose, onSave, showToast }) {
 
 // ─── Add Product Modal ────────────────────────────────────────────────────────
 function AddProductModal({ onClose, onSave, showToast }) {
-  const [form, setForm] = useState({ name: "", price: "", stock: "", desc: "", condition: "New", status: "active", category: "", colors: [], specs: [], deliveryFee: "", serviceCharge: "" });
+  const [form, setForm] = useState({ name: "", price: "", stock: "", desc: "", condition: "New", status: "active", category: "", colors: [], specs: [], deliveryFee: "" });
   const [imageFiles, setImageFiles] = useState([]);
   const [imagePreviews, setImagePreviews] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -677,7 +677,6 @@ function AddProductModal({ onClose, onSave, showToast }) {
       if (form.category) fd.append("category", form.category);
       fd.append("colors", JSON.stringify(form.colors));
       fd.append("deliveryFee", Number(form.deliveryFee) || 0);
-      fd.append("serviceCharge", Number(form.serviceCharge) || 0);
       form.specs.forEach(({ k, v }) => { fd.append("specKey", k); fd.append("specValue", v); });
       imageFiles.forEach((file) => fd.append("images", file));
 
@@ -747,16 +746,10 @@ function AddProductModal({ onClose, onSave, showToast }) {
             </div>
           </div>
 
-          {/* Delivery fee / Service charge */}
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
-            <div>
-              <label style={lSty}>Delivery fee (₦)</label>
-              <input style={iSty} type="number" min="0" value={form.deliveryFee} onChange={set("deliveryFee")} placeholder="0 = free" />
-            </div>
-            <div>
-              <label style={lSty}>Service charge (₦)</label>
-              <input style={iSty} type="number" min="0" value={form.serviceCharge} onChange={set("serviceCharge")} placeholder="0 = none" />
-            </div>
+          {/* Delivery fee */}
+          <div style={{ marginBottom: 14 }}>
+            <label style={lSty}>Delivery fee (₦)</label>
+            <input style={iSty} type="number" min="0" value={form.deliveryFee} onChange={set("deliveryFee")} placeholder="0 = free delivery" />
           </div>
 
           {/* Description */}

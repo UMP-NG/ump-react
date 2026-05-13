@@ -7,7 +7,7 @@ const escapeRegex = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 export const createProduct = async (req, res) => {
   try {
-    const { name, desc, price, category, condition, colors, deliveryFee, serviceCharge } = req.body;
+    const { name, desc, price, category, condition, colors, deliveryFee } = req.body;
 
     // --- 🎨 Parse Colors safely ---
     let parsedColors = [];
@@ -68,7 +68,6 @@ export const createProduct = async (req, res) => {
       images,
       seller: req.user?._id,
       deliveryFee: Math.max(0, Number(deliveryFee) || 0),
-      serviceCharge: Math.max(0, Number(serviceCharge) || 0),
     });
 
     // --- ✅ Link product to seller's products array ---
@@ -151,6 +150,7 @@ export const getAllProducts = async (req, res) => {
     const limit     = req.query.limit;
 
     const safeLimit = Math.min(Math.max(parseInt(limit, 10) || 100, 1), 200);
+    const skip = typeof req.query.skip === "string" ? Math.max(0, parseInt(req.query.skip, 10) || 0) : 0;
 
     let query = {};
 
@@ -190,35 +190,41 @@ export const getAllProducts = async (req, res) => {
 
     if (isRandom) {
       // Use $sample for true random selection across the full matching dataset
-      const sampled = await Product.aggregate([
-        { $match: query },
-        { $sample: { size: safeLimit } },
-        { $project: { viewedBy: 0, reviews: 0 } },
+      const [sampled, total] = await Promise.all([
+        Product.aggregate([
+          { $match: query },
+          { $sample: { size: safeLimit } },
+          { $project: { viewedBy: 0, reviews: 0 } },
+        ]),
+        Product.countDocuments(query),
       ]);
       products = await Product.populate(sampled, [
         { path: "seller",   select: "name email storeName", model: "User" },
         { path: "category", select: "name",                 model: "Category" },
       ]);
+      return res.status(200).json({ success: true, count: products.length, total, products });
     } else {
-      let sortObj = { createdAt: -1 };
-      if (sort === "oldest")                              sortObj = { createdAt:  1 };
-      else if (sort === "price-asc"  || sort === "price_asc")  sortObj = { price:      1 };
-      else if (sort === "price-desc" || sort === "price_desc") sortObj = { price:     -1 };
+      // Secondary _id sort ensures stable ordering across pages
+      let sortObj = { createdAt: -1, _id: -1 };
+      if (sort === "oldest")                                   sortObj = { createdAt:  1, _id:  1 };
+      else if (sort === "price-asc"  || sort === "price_asc") sortObj = { price:      1, _id: -1 };
+      else if (sort === "price-desc" || sort === "price_desc") sortObj = { price:     -1, _id: -1 };
+      else if (sort === "newest")                              sortObj = { createdAt: -1, _id: -1 };
 
-      products = await Product.find(query)
-        .populate("seller",   "name email storeName")
-        .populate("category", "name")
-        .select("-viewedBy -reviews")
-        .sort(sortObj)
-        .lean()
-        .limit(safeLimit);
+      const [fetchedProducts, total] = await Promise.all([
+        Product.find(query)
+          .populate("seller",   "name email storeName")
+          .populate("category", "name")
+          .select("-viewedBy -reviews")
+          .sort(sortObj)
+          .lean()
+          .skip(skip)
+          .limit(safeLimit),
+        Product.countDocuments(query),
+      ]);
+      products = fetchedProducts;
+      return res.status(200).json({ success: true, count: products.length, total, products });
     }
-
-    res.status(200).json({
-      success: true,
-      count: products.length,
-      products,
-    });
   } catch (error) {
     console.error("❌ Error fetching products:", error);
     res

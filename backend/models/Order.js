@@ -7,7 +7,7 @@ const orderItemSchema = new mongoose.Schema({
     required: true,
   },
   quantity: { type: Number, required: true, min: 1, default: 1 },
-  price: { type: Number, required: true },
+  price: { type: Number, required: true, min: [0, "Price cannot be negative"] },
   variant: {
     sku: String,
     attributes: mongoose.Schema.Types.Mixed,
@@ -40,11 +40,10 @@ const orderSchema = new mongoose.Schema(
 
     items: [orderItemSchema],
 
-    totalAmount: { type: Number, required: true },
-    subtotal: { type: Number, default: 0 },
-    tax: { type: Number, default: 0 },
-    deliveryFee: { type: Number, default: 0 },
-    serviceCharge: { type: Number, default: 0 },
+    totalAmount: { type: Number, required: true, min: [0, "Total amount cannot be negative"] },
+    subtotal:    { type: Number, default: 0,     min: [0, "Subtotal cannot be negative"] },
+    tax:         { type: Number, default: 0,     min: 0 },
+    deliveryFee: { type: Number, default: 0,     min: [0, "Delivery fee cannot be negative"] },
 
     shippingAddress: {
       name: String,

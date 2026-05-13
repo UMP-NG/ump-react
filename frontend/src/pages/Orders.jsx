@@ -1,6 +1,14 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
+const esc = (s) =>
+  String(s ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+
 function downloadReceipt(o) {
   const fmt = (n) => "₦" + Number(n || 0).toLocaleString("en-NG", { minimumFractionDigits: 2 });
   const orderId = (o._id || o.id || "").toString().slice(-10).toUpperCase();
@@ -9,7 +17,7 @@ function downloadReceipt(o) {
     const p = item.product || item;
     const qty = item.quantity || 1;
     return `<tr>
-      <td style="padding:6px 0;border-bottom:1px solid #e5e7eb">${p.name || "Product"}</td>
+      <td style="padding:6px 0;border-bottom:1px solid #e5e7eb">${esc(p.name || "Product")}</td>
       <td style="padding:6px 0;border-bottom:1px solid #e5e7eb;text-align:center">${qty}</td>
       <td style="padding:6px 0;border-bottom:1px solid #e5e7eb;text-align:right">${fmt((p.price || 0) * qty)}</td>
     </tr>`;
@@ -30,7 +38,7 @@ th{text-align:left;font-size:12px;color:#6b7280;text-transform:uppercase;padding
 <h2 style="margin:0 0 4px">Payment Receipt</h2>
 <p style="margin:2px 0;font-size:13px;color:#374151">Order #${orderId}</p>
 <p style="margin:2px 0;font-size:13px;color:#374151">Date: ${date}</p>
-<p style="margin:2px 0;font-size:13px;color:#374151">Status: <strong>${o.status}</strong> · Payment: <strong>${o.paymentStatus}</strong></p>
+<p style="margin:2px 0;font-size:13px;color:#374151">Status: <strong>${esc(o.status)}</strong> · Payment: <strong>${esc(o.paymentStatus)}</strong></p>
 <hr class="divider">
 <table>
   <thead><tr>
@@ -42,10 +50,9 @@ th{text-align:left;font-size:12px;color:#6b7280;text-transform:uppercase;padding
 <table>
   <tr><td style="padding:4px 0;color:#6b7280">Subtotal</td><td style="text-align:right">${fmt(o.subtotal || o.totalAmount)}</td></tr>
   ${o.deliveryFee > 0 ? `<tr><td style="padding:4px 0;color:#6b7280">Delivery fee</td><td style="text-align:right">${fmt(o.deliveryFee)}</td></tr>` : ""}
-  ${o.serviceCharge > 0 ? `<tr><td style="padding:4px 0;color:#6b7280">Service charge</td><td style="text-align:right">${fmt(o.serviceCharge)}</td></tr>` : ""}
   <tr class="total-row"><td style="padding:8px 0">Total paid</td><td style="text-align:right;color:#f97316">${fmt(o.totalAmount)}</td></tr>
 </table>
-${o.shippingAddress?.address ? `<hr class="divider"><p style="margin:4px 0;font-size:13px"><strong>Delivered to:</strong> ${o.shippingAddress.name || ""}, ${o.shippingAddress.address}${o.shippingAddress.city ? ", " + o.shippingAddress.city : ""}</p>` : ""}
+${o.shippingAddress?.address ? `<hr class="divider"><p style="margin:4px 0;font-size:13px"><strong>Delivered to:</strong> ${esc(o.shippingAddress.name || "")}, ${esc(o.shippingAddress.address)}${o.shippingAddress.city ? ", " + esc(o.shippingAddress.city) : ""}</p>` : ""}
 <div class="footer"><p>Thank you for shopping on UMP — University Marketplace</p><p style="margin-top:4px">Generated ${new Date().toLocaleString()}</p></div>
 </body></html>`;
   const win = window.open("", "_blank");
@@ -53,7 +60,11 @@ ${o.shippingAddress?.address ? `<hr class="divider"><p style="margin:4px 0;font-
   win.document.write(html);
   win.document.close();
   win.focus();
-  setTimeout(() => win.print(), 400);
+  if (win.document.readyState === "complete") {
+    win.print();
+  } else {
+    win.addEventListener("load", () => win.print());
+  }
 }
 import Navbar from "../components/Navbar";
 import BottomNav from "../components/BottomNav";
@@ -180,7 +191,7 @@ export default function Orders() {
 
   useEffect(() => {
     apiFetch("/api/orders/me")
-      .then((d) => setOrders(d.orders || d || []))
+      .then((d) => setOrders(Array.isArray(d?.orders) ? d.orders : Array.isArray(d) ? d : []))
       .catch(() => setOrders([]))
       .finally(() => setLoading(false));
   }, []);

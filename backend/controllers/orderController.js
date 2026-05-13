@@ -29,6 +29,7 @@ export const createOrder = async (req, res) => {
     }
 
     let subtotal = 0;
+    let deliveryFee = 0;
 
     // Process each item
     const processedItems = [];
@@ -41,10 +42,9 @@ export const createOrder = async (req, res) => {
           .json({ message: `Product not found: ${item.product}` });
       }
 
-      // calculate subtotal
-      subtotal += product.price * item.quantity;
+      subtotal    += product.price * item.quantity;
+      deliveryFee += Math.max(0, product.deliveryFee || 0);
 
-      // save full product info in the order item
       processedItems.push({
         product: {
           _id: product._id,
@@ -58,14 +58,15 @@ export const createOrder = async (req, res) => {
       });
     }
 
-    const tax = 0; // update if needed
-    const totalAmount = subtotal + tax;
+    const tax = 0;
+    const totalAmount = subtotal + tax + deliveryFee;
 
     const order = await Order.create({
       buyer: req.user._id,
       items: processedItems,
       subtotal,
       tax,
+      deliveryFee,
       totalAmount,
       shippingAddress,
       notes,
@@ -130,9 +131,8 @@ export const checkoutCart = async (req, res) => {
       return res.status(400).json({ message: "Cannot determine seller" });
 
     const subtotal = items.reduce((sum, i) => sum + i.price * i.quantity, 0);
-    const deliveryFee   = Math.max(0, cart.items.reduce((s, i) => s + (i.product.deliveryFee   || 0), 0));
-    const serviceCharge = Math.max(0, cart.items.reduce((s, i) => s + (i.product.serviceCharge || 0), 0));
-    const totalAmount = subtotal + deliveryFee + serviceCharge;
+    const deliveryFee = cart.items.reduce((s, i) => s + Math.max(0, i.product.deliveryFee || 0), 0);
+    const totalAmount = subtotal + deliveryFee;
 
     const order = new Order({
       buyer: userId,
@@ -140,7 +140,6 @@ export const checkoutCart = async (req, res) => {
       items,
       subtotal,
       deliveryFee,
-      serviceCharge,
       totalAmount,
       shippingAddress: shippingAddress || {},
       paymentMethod,
@@ -694,12 +693,25 @@ export const confirmTransfer = async (req, res) => {
         0
       );
 
+      // Look up delivery fees from DB — frontend items don't carry fee data
+      let deliveryFee = 0;
+      for (const item of sellerItems) {
+        if (item.product) {
+          const prod = await Product.findById(item.product).select("deliveryFee").lean();
+          if (prod) {
+            deliveryFee += Math.max(0, prod.deliveryFee || 0);
+          }
+        }
+      }
+      const totalAmount = subtotal + deliveryFee;
+
       const order = new Order({
         buyer: req.user._id,
         seller: sellerId,
         items: sellerItems,
         subtotal,
-        totalAmount: subtotal, // only product totals
+        deliveryFee,
+        totalAmount,
         shippingAddress,
         notes,
         paymentMethod: "transfer",

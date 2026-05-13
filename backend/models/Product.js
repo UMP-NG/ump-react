@@ -23,6 +23,7 @@ const productSchema = new mongoose.Schema(
     price: {
       type: Number,
       required: [true, "Product price is required"],
+      min: [0, "Price cannot be negative"],
     },
 
     images: [
@@ -98,8 +99,7 @@ const productSchema = new mongoose.Schema(
       default: 1,
     },
 
-    deliveryFee: { type: Number, default: 0 },
-    serviceCharge: { type: Number, default: 0 },
+    deliveryFee: { type: Number, default: 0, min: [0, "Delivery fee cannot be negative"] },
 
     // Optional hostel/real estate fields
     location: String,
