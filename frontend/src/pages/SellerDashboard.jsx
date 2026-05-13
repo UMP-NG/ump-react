@@ -1470,6 +1470,11 @@ export default function SellerDashboard() {
                     {/* Delivery code input — shown once order is shipped */}
                     {status === "shipped" && (
                       <div style={{ padding: "14px 16px", background: "rgba(99,102,241,.06)", borderBottom: "1px solid var(--line)" }}>
+                        {o.paymentStatus !== "paid" && (
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, background: "rgba(245,158,11,.1)", border: "1px solid rgba(245,158,11,.35)", borderRadius: "var(--r-md)", padding: "8px 12px", marginBottom: 10, fontSize: "1.15rem", color: "#92400e" }}>
+                            <i className="fas fa-triangle-exclamation" /> Payment not yet confirmed — delivery confirmation will only succeed once the buyer's payment clears.
+                          </div>
+                        )}
                         <div style={{ fontSize: "1.2rem", fontWeight: 700, color: "#4f46e5", marginBottom: 8 }}>
                           <i className="fas fa-key" style={{ marginRight: 6 }} />Confirm delivery — enter the buyer's code
                         </div>
@@ -1478,9 +1483,10 @@ export default function SellerDashboard() {
                         </div>
                         <div style={{ display: "flex", gap: 8 }}>
                           <input
-                            style={{ flex: 1, padding: "8px 12px", borderRadius: "var(--r-md)", border: "2px solid #6366f1", background: "var(--paper)", fontSize: "1.6rem", fontFamily: "monospace", fontWeight: 800, letterSpacing: ".12em", textTransform: "uppercase" }}
+                            style={{ flex: 1, padding: "8px 12px", borderRadius: "var(--r-md)", border: "2px solid #6366f1", background: "var(--paper)", fontSize: "1.6rem", fontFamily: "monospace", fontWeight: 800, letterSpacing: ".12em", textTransform: "uppercase", opacity: o.paymentStatus !== "paid" ? 0.5 : 1 }}
                             placeholder="ABC123"
                             maxLength={6}
+                            disabled={o.paymentStatus !== "paid"}
                             value={deliveryCodes[oid] || ""}
                             onChange={(e) => setDeliveryCodes((c) => ({ ...c, [oid]: e.target.value.toUpperCase() }))}
                             onKeyDown={(e) => { if (e.key === "Enter") confirmDeliveryByCode(oid); }}
@@ -1488,7 +1494,7 @@ export default function SellerDashboard() {
                           <button
                             className="btn btn-sm"
                             style={{ background: "#4f46e5", color: "#fff", border: "none", flexShrink: 0 }}
-                            disabled={deliverySubmitting[oid] || !deliveryCodes[oid]}
+                            disabled={deliverySubmitting[oid] || !deliveryCodes[oid] || o.paymentStatus !== "paid"}
                             onClick={() => confirmDeliveryByCode(oid)}
                           >
                             {deliverySubmitting[oid] ? <i className="fas fa-spinner fa-spin" /> : <><i className="fas fa-check" /> Confirm</>}

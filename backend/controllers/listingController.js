@@ -134,20 +134,26 @@ export const updateListing = async (req, res) => {
 // ===============================
 // Get all listings
 // ===============================
+const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
 export const getAllListings = async (req, res) => {
   try {
     const { search, type, limit } = req.query;
     const filter = {};
 
     if (search) {
-      const re = new RegExp(search.trim(), "i");
-      filter.$or = [{ name: re }, { description: re }, { location: re }, { type: re }];
+      const re = new RegExp(escapeRegex(search.trim()), "i");
+      // keep type out of $or — it is handled as an exact filter below
+      filter.$or = [{ name: re }, { description: re }, { location: re }];
     }
     if (type) filter.type = type;
 
+    const parsedLimit = parseInt(limit, 10);
+    const safeLimit = parsedLimit > 0 ? Math.min(parsedLimit, 100) : 50;
+
     const listings = await Listing.find(filter)
       .populate("owner", "name email")
-      .limit(limit ? Math.min(Number(limit), 100) : 0);
+      .limit(safeLimit);
 
     res.json({ success: true, count: listings.length, listings });
   } catch (error) {

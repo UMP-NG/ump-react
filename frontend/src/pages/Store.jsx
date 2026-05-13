@@ -1,4 +1,24 @@
 import { useState, useEffect } from "react";
+
+function getSessionSeed(key) {
+  let seed = sessionStorage.getItem(key);
+  if (!seed) {
+    seed = String((Date.now() ^ Math.floor(Math.random() * 0x7fffffff)) >>> 0);
+    sessionStorage.setItem(key, seed);
+  }
+  return parseInt(seed, 10);
+}
+
+function lcgShuffle(arr, seed) {
+  const result = [...arr];
+  let s = seed >>> 0;
+  for (let i = result.length - 1; i > 0; i--) {
+    s = (Math.imul(1664525, s) + 1013904223) >>> 0;
+    const j = s % (i + 1);
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+  return result;
+}
 import { useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
@@ -56,11 +76,7 @@ export default function Store() {
     apiFetch("/api/sellers")
       .then((d) => {
         const list = d.sellers || d || [];
-        for (let i = list.length - 1; i > 0; i--) {
-          const j = Math.floor(Math.random() * (i + 1));
-          [list[i], list[j]] = [list[j], list[i]];
-        }
-        setSellers(list);
+        setSellers(lcgShuffle(list, getSessionSeed("store-shuffle-seed")));
       })
       .catch(() => setSellers([]))
       .finally(() => setLoading(false));

@@ -8,6 +8,26 @@ import Ph from "../components/Ph";
 import { apiFetch } from "../utils/api";
 import Skel from "../components/Skel";
 
+function getSessionSeed(key) {
+  let seed = sessionStorage.getItem(key);
+  if (!seed) {
+    seed = String((Date.now() ^ Math.floor(Math.random() * 0x7fffffff)) >>> 0);
+    sessionStorage.setItem(key, seed);
+  }
+  return parseInt(seed, 10);
+}
+
+function lcgShuffle(arr, seed) {
+  const result = [...arr];
+  let s = seed >>> 0;
+  for (let i = result.length - 1; i > 0; i--) {
+    s = (Math.imul(1664525, s) + 1013904223) >>> 0;
+    const j = s % (i + 1);
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+  return result;
+}
+
 const SORT_OPTIONS = [
   { label: "Featured", value: "random" },
   { label: "Newest", value: "newest" },
@@ -40,9 +60,14 @@ export default function Market() {
     apiFetch("/api/categories")
       .then((d) => {
         const names = (d.categories || d || []).map((c) => c.name).filter(Boolean);
-        if (names.length) setCats(["All", ...names]);
+        const loaded = names.length ? ["All", ...names] : ["All"];
+        setCats(loaded);
+        // If URL-supplied category isn't in DB, reset to All
+        setCat((prev) => (prev !== "All" && !loaded.includes(prev) ? "All" : prev));
       })
-      .catch(() => {});
+      .catch(() => {
+        // Leave cats as ["All"] so filters still render
+      });
   }, []);
 
   useEffect(() => {
@@ -59,7 +84,12 @@ export default function Market() {
     if (condition !== "All") params.set("condition", condition.toLowerCase());
     params.set("sort", sort);
     apiFetch(`/api/products?${params}`)
-      .then((d) => { setProducts(d.products || d || []); setTotal(d.total || (d.products || d || []).length); })
+      .then((d) => {
+        let list = d.products || d || [];
+        if (sort === "random") list = lcgShuffle(list, getSessionSeed("market-shuffle-seed"));
+        setProducts(list);
+        setTotal(d.total || list.length);
+      })
       .catch(() => { setProducts([]); setTotal(0); })
       .finally(() => setLoading(false));
   }, [cat, sort, condition]);

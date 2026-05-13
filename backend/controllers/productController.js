@@ -3,6 +3,8 @@ import Review from "../models/Review.js";
 import Seller from "../models/Seller.js";
 import cloudinary from "../config/cloudinary.js";
 
+const escapeRegex = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
 export const createProduct = async (req, res) => {
   try {
     const { name, desc, price, category, condition, colors } = req.body;
@@ -149,7 +151,7 @@ export const getAllProducts = async (req, res) => {
         const cat = await Category.findOne({
           $or: [
             { slug: category.toLowerCase() },
-            { name: { $regex: new RegExp(`^${category}$`, "i") } },
+            { name: { $regex: new RegExp(`^${escapeRegex(category)}$`, "i") } },
           ],
         }).lean();
         if (cat) {
@@ -161,9 +163,9 @@ export const getAllProducts = async (req, res) => {
     }
 
     const searchTerm = search || keyword;
-    if (searchTerm) query.name = { $regex: searchTerm, $options: "i" };
+    if (searchTerm) query.name = { $regex: escapeRegex(searchTerm.trim()), $options: "i" };
 
-    if (condition && condition !== "all") query.condition = { $regex: `^${condition}$`, $options: "i" };
+    if (condition && condition !== "all") query.condition = { $regex: `^${escapeRegex(condition)}$`, $options: "i" };
 
     if (minPrice || maxPrice)
       query.price = {
@@ -184,7 +186,7 @@ export const getAllProducts = async (req, res) => {
       .select("-viewedBy -reviews")
       .sort(sortObj)
       .lean()
-      .limit(Number(limit) || 100);
+      .limit(Math.min(Math.max(parseInt(limit, 10) || 100, 1), 200));
 
     if (isRandom) {
       for (let i = products.length - 1; i > 0; i--) {

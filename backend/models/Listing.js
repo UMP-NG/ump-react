@@ -42,5 +42,7 @@ const listingSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+listingSchema.index({ name: "text", description: "text", location: "text" });
+
 export default mongoose.model("Listing", listingSchema);
 
