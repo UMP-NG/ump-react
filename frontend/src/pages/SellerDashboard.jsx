@@ -1467,8 +1467,8 @@ export default function SellerDashboard() {
                       </div>
                     )}
 
-                    {/* Delivery code input — shown once order is shipped and buyer has paid */}
-                    {status === "shipped" && o.paymentStatus === "paid" && (
+                    {/* Delivery code input — shown once order is shipped */}
+                    {status === "shipped" && (
                       <div style={{ padding: "14px 16px", background: "rgba(99,102,241,.06)", borderBottom: "1px solid var(--line)" }}>
                         <div style={{ fontSize: "1.2rem", fontWeight: 700, color: "#4f46e5", marginBottom: 8 }}>
                           <i className="fas fa-key" style={{ marginRight: 6 }} />Confirm delivery — enter the buyer's code

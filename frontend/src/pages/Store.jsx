@@ -54,7 +54,14 @@ export default function Store() {
 
   useEffect(() => {
     apiFetch("/api/sellers")
-      .then((d) => setSellers(d.sellers || d || []))
+      .then((d) => {
+        const list = d.sellers || d || [];
+        for (let i = list.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [list[i], list[j]] = [list[j], list[i]];
+        }
+        setSellers(list);
+      })
       .catch(() => setSellers([]))
       .finally(() => setLoading(false));
   }, []);

@@ -8,9 +8,8 @@ import Ph from "../components/Ph";
 import { apiFetch } from "../utils/api";
 import Skel from "../components/Skel";
 
-const CATS = ["All", "Electronics", "Books", "Fashion", "Food", "Beauty", "Other"];
-
 const SORT_OPTIONS = [
+  { label: "Featured", value: "random" },
   { label: "Newest", value: "newest" },
   { label: "Price: Low – High", value: "price-asc" },
   { label: "Price: High – Low", value: "price-desc" },
@@ -23,7 +22,8 @@ export default function Market() {
   const [searchParams] = useSearchParams();
 
   const [cat, setCat] = useState(searchParams.get("category") || "All");
-  const [sort, setSort] = useState("newest");
+  const [sort, setSort] = useState("random");
+  const [cats, setCats] = useState(["All"]);
   const [condition, setCondition] = useState("All");
   const [products, setProducts] = useState([]);
   const [total, setTotal] = useState(0);
@@ -35,6 +35,15 @@ export default function Market() {
 
   const [pendingSort, setPendingSort] = useState(sort);
   const [pendingCondition, setPendingCondition] = useState(condition);
+
+  useEffect(() => {
+    apiFetch("/api/categories")
+      .then((d) => {
+        const names = (d.categories || d || []).map((c) => c.name).filter(Boolean);
+        if (names.length) setCats(["All", ...names]);
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     const mq = window.matchMedia("(min-width: 768px)");
@@ -72,11 +81,11 @@ export default function Market() {
   }
 
   function resetFilter() {
-    setPendingSort("newest");
+    setPendingSort("random");
     setPendingCondition("All");
   }
 
-  const activeFilterCount = (sort !== "newest" ? 1 : 0) + (condition !== "All" ? 1 : 0);
+  const activeFilterCount = (sort !== "random" ? 1 : 0) + (condition !== "All" ? 1 : 0);
 
   const filterContent = (
     <>
@@ -252,7 +261,7 @@ export default function Market() {
         {/* Category chips */}
         <div style={{ padding: "12px 0 0", overflowX: "auto", scrollbarWidth: "none" }}>
           <div style={{ display: "flex", gap: 8 }}>
-            {CATS.map((c) => (
+            {cats.map((c) => (
               <span key={c} className={`chip${cat === c ? " active" : ""}`} onClick={() => setCat(c)} style={{ cursor: "pointer", flexShrink: 0 }}>{c}</span>
             ))}
           </div>

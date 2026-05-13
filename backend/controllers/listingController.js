@@ -136,7 +136,19 @@ export const updateListing = async (req, res) => {
 // ===============================
 export const getAllListings = async (req, res) => {
   try {
-    const listings = await Listing.find().populate("owner", "name email");
+    const { search, type, limit } = req.query;
+    const filter = {};
+
+    if (search) {
+      const re = new RegExp(search.trim(), "i");
+      filter.$or = [{ name: re }, { description: re }, { location: re }, { type: re }];
+    }
+    if (type) filter.type = type;
+
+    const listings = await Listing.find(filter)
+      .populate("owner", "name email")
+      .limit(limit ? Math.min(Number(limit), 100) : 0);
+
     res.json({ success: true, count: listings.length, listings });
   } catch (error) {
     console.error("Error fetching listings:", error);

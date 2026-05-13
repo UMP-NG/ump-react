@@ -700,6 +700,9 @@ body {
 
   /* market/store grids go 3-col at 768px+ */
   .grid-2col { grid-template-columns: repeat(3, 1fr); }
+
+  /* hostel listings: 2 cards per row on desktop */
+  .hostel-listing-grid { display: grid !important; grid-template-columns: 1fr 1fr; gap: 16px; }
 }
 
 @media (min-width: 1200px) {
@@ -707,6 +710,9 @@ body {
   /* 4-col at large screens */
   .grid-2col { grid-template-columns: repeat(4, 1fr); }
 }
+
+/* hostel listing grid — single column mobile, 2-col desktop (set in 768px block above) */
+.hostel-listing-grid { display: flex; flex-direction: column; gap: 14px; }
 
 /* ── Utility ── */
 .flex { display: flex; }

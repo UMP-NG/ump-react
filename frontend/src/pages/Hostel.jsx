@@ -115,7 +115,7 @@ export default function Hostel() {
           </label>
         </div>
 
-        <div style={{ padding: "16px 0 24px", display: "flex", flexDirection: "column", gap: 14 }}>
+        <div className="hostel-listing-grid" style={{ padding: "16px 0 24px" }}>
           {loading
             ? [1, 2, 3].map((i) => <Skel.HostelCard key={i} />)
             : visible.length === 0

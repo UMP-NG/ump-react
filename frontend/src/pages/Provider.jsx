@@ -55,6 +55,16 @@ export default function Provider() {
     setError("");
     try {
       if (tab === "seller") {
+        if (!seller.bannerFile) {
+          setError("Store banner image is required — please upload a banner.");
+          setLoading(false);
+          return;
+        }
+        if (!seller.logoFile) {
+          setError("Store logo is required — please upload a logo.");
+          setLoading(false);
+          return;
+        }
         const { bannerFile, logoFile, ...sellerData } = seller;
         const [bannerObj, logoObj] = await Promise.all([
           bannerFile ? uploadFile(bannerFile) : Promise.resolve(null),
@@ -301,11 +311,11 @@ function SellerForm({ seller, setSeller }) {
       <FormSection title="Branding">
         {/* Banner */}
         <div>
-          <div className="label" style={{ marginBottom: 6 }}>Store Banner Image</div>
+          <div className="label" style={{ marginBottom: 6 }}>Store Banner Image<span style={{ color: "var(--accent)", marginLeft: 2 }}>*</span></div>
           <button
             type="button"
             onClick={() => bannerRef.current?.click()}
-            style={{ width: "100%", height: 120, borderRadius: "var(--r-lg)", border: bannerPreview ? "none" : "2px dashed var(--line)", background: bannerPreview ? "transparent" : "var(--surface)", overflow: "hidden", cursor: "pointer", position: "relative", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8 }}
+            style={{ width: "100%", height: 120, borderRadius: "var(--r-lg)", border: bannerPreview ? "none" : "2px dashed #f97316", background: bannerPreview ? "transparent" : "rgba(249,115,22,.04)", overflow: "hidden", cursor: "pointer", position: "relative", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8 }}
           >
             {bannerPreview ? (
               <>
@@ -331,12 +341,12 @@ function SellerForm({ seller, setSeller }) {
 
         {/* Logo */}
         <div>
-          <div className="label" style={{ marginBottom: 6 }}>Store Logo / Avatar</div>
+          <div className="label" style={{ marginBottom: 6 }}>Store Logo / Avatar<span style={{ color: "var(--accent)", marginLeft: 2 }}>*</span></div>
           <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
             <button
               type="button"
               onClick={() => logoRef.current?.click()}
-              style={{ width: 96, height: 96, borderRadius: "var(--r-lg)", border: logoPreview ? "none" : "2px dashed var(--line)", background: logoPreview ? "transparent" : "var(--surface)", overflow: "hidden", cursor: "pointer", position: "relative", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}
+              style={{ width: 96, height: 96, borderRadius: "var(--r-lg)", border: logoPreview ? "none" : "2px dashed #f97316", background: logoPreview ? "transparent" : "rgba(249,115,22,.04)", overflow: "hidden", cursor: "pointer", position: "relative", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}
             >
               {logoPreview ? (
                 <>

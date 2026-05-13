@@ -28,7 +28,9 @@ export const searchListings = async (req, res) => {
       return res.status(400).json({ message: "Please provide a search query" });
 
     const searchRegex = new RegExp(query, "i");
-    const listings = await Listing.find({ title: searchRegex }).limit(20);
+    const listings = await Listing.find({
+      $or: [{ name: searchRegex }, { description: searchRegex }, { location: searchRegex }],
+    }).limit(20);
 
     res.json(listings);
   } catch (error) {
@@ -89,7 +91,7 @@ export const siteSearch = async (req, res) => {
 
     const [products, listings, services, sellers] = await Promise.all([
       Product.find({ name: searchRegex }).limit(10),
-      Listing.find({ title: searchRegex }).limit(10),
+      Listing.find({ $or: [{ name: searchRegex }, { description: searchRegex }, { location: searchRegex }] }).limit(10),
       Service.find({ title: searchRegex }).limit(10),
       Seller.find({
         $or: [

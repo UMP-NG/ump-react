@@ -141,15 +141,22 @@ export const getAllProducts = async (req, res) => {
     let query = {};
 
     if (category) {
-      // category can be a slug string or an ObjectId — resolve to ObjectId
       const mongoose = (await import("mongoose")).default;
       if (mongoose.Types.ObjectId.isValid(category)) {
         query.category = category;
       } else {
         const Category = (await import("../models/Category.js")).default;
-        const cat = await Category.findOne({ slug: category.toLowerCase() }).lean();
-        if (cat) query.category = cat._id;
-        // if slug not found, return empty list rather than 500
+        const cat = await Category.findOne({
+          $or: [
+            { slug: category.toLowerCase() },
+            { name: { $regex: new RegExp(`^${category}$`, "i") } },
+          ],
+        }).lean();
+        if (cat) {
+          query.category = cat._id;
+        } else {
+          return res.status(200).json({ success: true, count: 0, products: [] });
+        }
       }
     }
 
@@ -164,18 +171,27 @@ export const getAllProducts = async (req, res) => {
         ...(maxPrice ? { $lte: Number(maxPrice) } : {}),
       };
 
-    let sortObj = { createdAt: -1 };
+    const isRandom = !sort || sort === "random";
+    let sortObj = isRandom ? {} : { createdAt: -1 };
     if (sort === "oldest") sortObj = { createdAt: 1 };
     else if (sort === "price-asc" || sort === "price_asc") sortObj = { price: 1 };
     else if (sort === "price-desc" || sort === "price_desc") sortObj = { price: -1 };
+    else if (sort === "newest") sortObj = { createdAt: -1 };
 
-    const products = await Product.find(query)
+    let products = await Product.find(query)
       .populate("seller", "name email storeName")
       .populate("category", "name")
       .select("-viewedBy -reviews")
       .sort(sortObj)
       .lean()
       .limit(Number(limit) || 100);
+
+    if (isRandom) {
+      for (let i = products.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [products[i], products[j]] = [products[j], products[i]];
+      }
+    }
 
     res.status(200).json({
       success: true,
