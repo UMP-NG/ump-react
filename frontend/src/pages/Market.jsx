@@ -9,12 +9,16 @@ import { apiFetch } from "../utils/api";
 import Skel from "../components/Skel";
 
 function getSessionSeed(key) {
-  let seed = sessionStorage.getItem(key);
-  if (!seed) {
-    seed = String((Date.now() ^ Math.floor(Math.random() * 0x7fffffff)) >>> 0);
-    sessionStorage.setItem(key, seed);
+  const fresh = () => String((Date.now() ^ Math.floor(Math.random() * 0x7fffffff)) >>> 0);
+  let raw = sessionStorage.getItem(key);
+  if (!raw) { raw = fresh(); sessionStorage.setItem(key, raw); }
+  const parsed = parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    raw = fresh();
+    sessionStorage.setItem(key, raw);
+    return parseInt(raw, 10);
   }
-  return parseInt(seed, 10);
+  return parsed;
 }
 
 function lcgShuffle(arr, seed) {
@@ -62,8 +66,12 @@ export default function Market() {
         const names = (d.categories || d || []).map((c) => c.name).filter(Boolean);
         const loaded = names.length ? ["All", ...names] : ["All"];
         setCats(loaded);
-        // If URL-supplied category isn't in DB, reset to All
-        setCat((prev) => (prev !== "All" && !loaded.includes(prev) ? "All" : prev));
+        // Reconcile URL-supplied category case-insensitively; reset to All if not found
+        setCat((prev) => {
+          if (prev === "All") return prev;
+          const match = loaded.find((c) => c.toLowerCase() === prev.toLowerCase());
+          return match || "All";
+        });
       })
       .catch(() => {
         // Leave cats as ["All"] so filters still render
@@ -85,8 +93,7 @@ export default function Market() {
     params.set("sort", sort);
     apiFetch(`/api/products?${params}`)
       .then((d) => {
-        let list = d.products || d || [];
-        if (sort === "random") list = lcgShuffle(list, getSessionSeed("market-shuffle-seed"));
+        const list = d.products || d || [];
         setProducts(list);
         setTotal(d.total || list.length);
       })

@@ -136,23 +136,28 @@ export const updateListing = async (req, res) => {
 // ===============================
 const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
+const LISTING_TYPES = ["Apartment", "Hostel"];
+
 export const getAllListings = async (req, res) => {
   try {
-    const { search, type, limit } = req.query;
+    // Coerce query params — they can be string arrays when a key appears twice
+    const search = typeof req.query.search === "string" ? req.query.search : "";
+    const type   = typeof req.query.type   === "string" ? req.query.type   : "";
+    const limit  = req.query.limit;
     const filter = {};
 
-    if (search) {
+    if (search.trim()) {
       const re = new RegExp(escapeRegex(search.trim()), "i");
-      // keep type out of $or — it is handled as an exact filter below
       filter.$or = [{ name: re }, { description: re }, { location: re }];
     }
-    if (type) filter.type = type;
+    // Only apply type filter when it is one of the allowed enum values
+    if (type && LISTING_TYPES.includes(type)) filter.type = type;
 
     const parsedLimit = parseInt(limit, 10);
     const safeLimit = parsedLimit > 0 ? Math.min(parsedLimit, 100) : 50;
 
     const listings = await Listing.find(filter)
-      .populate("owner", "name email")
+      .populate("owner", "name")   // email omitted — not needed on public listing list
       .limit(safeLimit);
 
     res.json({ success: true, count: listings.length, listings });

@@ -9,7 +9,7 @@ export default function AdvertSlider() {
   const offsetRef = useRef(0);
 
   const slides = [
-    { title: "Have You Heard Of UMP", img: "/images/ump.jpg" },
+    { title: "Have You Heard Of UMP", img: "/images/ump-banner.svg" },
     { title: "Our Delivery System", img: "/images/walker.jpg" },
     { title: "Download Online Receipt", img: "/images/receipt.jpg" },
     { title: "How We Keep Your Money Safe", img: "/images/escrow.jpg" },

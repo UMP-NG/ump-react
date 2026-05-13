@@ -5,10 +5,13 @@ import Seller from "../models/Seller.js";
 
 const escapeRegex = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
+// Coerce a query param that might be an array (e.g. ?q=a&q=b) to a plain string
+const coerceStr = (v) => (typeof v === "string" ? v : Array.isArray(v) ? v[0] || "" : "");
+
 // ✅ Search products
 export const searchProducts = async (req, res) => {
   try {
-    const { query } = req.query;
+    const query = coerceStr(req.query.query);
     if (!query || query.trim() === "")
       return res.status(400).json({ message: "Please provide a search query" });
 
@@ -25,7 +28,7 @@ export const searchProducts = async (req, res) => {
 // ✅ Search listings
 export const searchListings = async (req, res) => {
   try {
-    const { query } = req.query;
+    const query = coerceStr(req.query.query);
     if (!query || query.trim() === "")
       return res.status(400).json({ message: "Please provide a search query" });
 
@@ -44,7 +47,7 @@ export const searchListings = async (req, res) => {
 // ✅ Search services
 export const searchServices = async (req, res) => {
   try {
-    const { query } = req.query;
+    const query = coerceStr(req.query.query);
     if (!query || query.trim() === "")
       return res.status(400).json({ message: "Please provide a search query" });
 
@@ -61,7 +64,7 @@ export const searchServices = async (req, res) => {
 // ✅ Search sellers
 export const searchSellers = async (req, res) => {
   try {
-    const { query } = req.query;
+    const query = coerceStr(req.query.query);
     if (!query || query.trim() === "")
       return res.status(400).json({ message: "Please provide a search query" });
 
@@ -85,7 +88,7 @@ export const searchSellers = async (req, res) => {
 // ✅ Optional: Combined site-wide search
 export const siteSearch = async (req, res) => {
   try {
-    const { query } = req.query;
+    const query = coerceStr(req.query.query);
     if (!query || query.trim() === "")
       return res.status(400).json({ message: "Please provide a search query" });
 

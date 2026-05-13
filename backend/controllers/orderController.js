@@ -130,8 +130,8 @@ export const checkoutCart = async (req, res) => {
       return res.status(400).json({ message: "Cannot determine seller" });
 
     const subtotal = items.reduce((sum, i) => sum + i.price * i.quantity, 0);
-    const deliveryFee = cart.items.reduce((s, i) => s + (i.product.deliveryFee || 0), 0);
-    const serviceCharge = cart.items.reduce((s, i) => s + (i.product.serviceCharge || 0), 0);
+    const deliveryFee   = Math.max(0, cart.items.reduce((s, i) => s + (i.product.deliveryFee   || 0), 0));
+    const serviceCharge = Math.max(0, cart.items.reduce((s, i) => s + (i.product.serviceCharge || 0), 0));
     const totalAmount = subtotal + deliveryFee + serviceCharge;
 
     const order = new Order({

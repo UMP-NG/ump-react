@@ -1,12 +1,17 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 
 function getSessionSeed(key) {
-  let seed = sessionStorage.getItem(key);
-  if (!seed) {
-    seed = String((Date.now() ^ Math.floor(Math.random() * 0x7fffffff)) >>> 0);
-    sessionStorage.setItem(key, seed);
+  const fresh = () => String((Date.now() ^ Math.floor(Math.random() * 0x7fffffff)) >>> 0);
+  let raw = sessionStorage.getItem(key);
+  if (!raw) { raw = fresh(); sessionStorage.setItem(key, raw); }
+  const parsed = parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    raw = fresh();
+    sessionStorage.setItem(key, raw);
+    return parseInt(raw, 10);
   }
-  return parseInt(seed, 10);
+  return parsed;
 }
 
 function lcgShuffle(arr, seed) {
@@ -19,7 +24,6 @@ function lcgShuffle(arr, seed) {
   }
   return result;
 }
-import { useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
 import BottomNav from "../components/BottomNav";

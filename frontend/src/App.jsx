@@ -1,6 +1,7 @@
 import { Routes, Route } from "react-router-dom";
 import FloatingChat from "./components/FloatingChat";
 import PrivateRoute from "./components/PrivateRoute";
+import InstallPrompt from "./components/InstallPrompt";
 
 import Home from "./pages/Home";
 import Market from "./pages/Market";
@@ -38,6 +39,7 @@ export default function App() {
   return (
     <>
     <FloatingChat />
+    <InstallPrompt />
     <Routes>
       {/* Core */}
       <Route path="/" element={<Home />} />
