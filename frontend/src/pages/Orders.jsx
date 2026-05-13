@@ -1,5 +1,60 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+
+function downloadReceipt(o) {
+  const fmt = (n) => "₦" + Number(n || 0).toLocaleString("en-NG", { minimumFractionDigits: 2 });
+  const orderId = (o._id || o.id || "").toString().slice(-10).toUpperCase();
+  const date = new Date(o.createdAt || Date.now()).toLocaleString("en-NG", { dateStyle: "long", timeStyle: "short" });
+  const rows = (o.items || []).map((item) => {
+    const p = item.product || item;
+    const qty = item.quantity || 1;
+    return `<tr>
+      <td style="padding:6px 0;border-bottom:1px solid #e5e7eb">${p.name || "Product"}</td>
+      <td style="padding:6px 0;border-bottom:1px solid #e5e7eb;text-align:center">${qty}</td>
+      <td style="padding:6px 0;border-bottom:1px solid #e5e7eb;text-align:right">${fmt((p.price || 0) * qty)}</td>
+    </tr>`;
+  }).join("");
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>UMP Receipt #${orderId}</title>
+<style>body{font-family:Arial,sans-serif;margin:0;padding:32px;color:#111}
+.logo{font-size:22px;font-weight:900;color:#f97316}
+.divider{border:none;border-top:2px solid #e5e7eb;margin:18px 0}
+table{width:100%;border-collapse:collapse}
+th{text-align:left;font-size:12px;color:#6b7280;text-transform:uppercase;padding-bottom:6px}
+.total-row{font-weight:700;font-size:16px}
+.footer{margin-top:32px;font-size:12px;color:#9ca3af;text-align:center}
+@media print{body{padding:16px}}
+</style></head><body>
+<div class="logo">UMP</div>
+<p style="margin:2px 0;color:#6b7280;font-size:13px">University Marketplace · UNILAG</p>
+<hr class="divider">
+<h2 style="margin:0 0 4px">Payment Receipt</h2>
+<p style="margin:2px 0;font-size:13px;color:#374151">Order #${orderId}</p>
+<p style="margin:2px 0;font-size:13px;color:#374151">Date: ${date}</p>
+<p style="margin:2px 0;font-size:13px;color:#374151">Status: <strong>${o.status}</strong> · Payment: <strong>${o.paymentStatus}</strong></p>
+<hr class="divider">
+<table>
+  <thead><tr>
+    <th>Item</th><th style="text-align:center">Qty</th><th style="text-align:right">Amount</th>
+  </tr></thead>
+  <tbody>${rows}</tbody>
+</table>
+<hr class="divider">
+<table>
+  <tr><td style="padding:4px 0;color:#6b7280">Subtotal</td><td style="text-align:right">${fmt(o.subtotal || o.totalAmount)}</td></tr>
+  ${o.deliveryFee > 0 ? `<tr><td style="padding:4px 0;color:#6b7280">Delivery fee</td><td style="text-align:right">${fmt(o.deliveryFee)}</td></tr>` : ""}
+  ${o.serviceCharge > 0 ? `<tr><td style="padding:4px 0;color:#6b7280">Service charge</td><td style="text-align:right">${fmt(o.serviceCharge)}</td></tr>` : ""}
+  <tr class="total-row"><td style="padding:8px 0">Total paid</td><td style="text-align:right;color:#f97316">${fmt(o.totalAmount)}</td></tr>
+</table>
+${o.shippingAddress?.address ? `<hr class="divider"><p style="margin:4px 0;font-size:13px"><strong>Delivered to:</strong> ${o.shippingAddress.name || ""}, ${o.shippingAddress.address}${o.shippingAddress.city ? ", " + o.shippingAddress.city : ""}</p>` : ""}
+<div class="footer"><p>Thank you for shopping on UMP — University Marketplace</p><p style="margin-top:4px">Generated ${new Date().toLocaleString()}</p></div>
+</body></html>`;
+  const win = window.open("", "_blank");
+  if (!win) return;
+  win.document.write(html);
+  win.document.close();
+  win.focus();
+  setTimeout(() => win.print(), 400);
+}
 import Navbar from "../components/Navbar";
 import BottomNav from "../components/BottomNav";
 import Ph from "../components/Ph";
@@ -302,6 +357,11 @@ export default function Orders() {
                         }}>
                         <i className="fas fa-message" /> Message seller
                       </button>
+                      {(o.paymentStatus === "paid" || o.paymentStatus === "released" || isCompleted) && (
+                        <button className="btn btn-sm btn-ghost" onClick={() => downloadReceipt(o)}>
+                          <i className="fas fa-download" /> Receipt
+                        </button>
+                      )}
                       {isCompleted && (
                         <button className="btn btn-sm btn-ghost" onClick={() => setReviewOrder(o)}>
                           <i className="fas fa-star" /> Write a Review

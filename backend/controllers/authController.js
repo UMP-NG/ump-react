@@ -228,7 +228,7 @@ export const login = async (req, res) => {
 
     const existingUser = await User.findOne({ email });
     if (!existingUser) {
-      return res.status(400).json({ message: "Invalid credentials" });
+      return res.status(400).json({ message: "No account found with this email" });
     }
 
     // Check email verification
@@ -243,7 +243,7 @@ export const login = async (req, res) => {
       existingUser.password
     );
     if (!isPasswordCorrect) {
-      return res.status(400).json({ message: "Invalid credentials" });
+      return res.status(400).json({ message: "Incorrect password" });
     }
 
     let token;

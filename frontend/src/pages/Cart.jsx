@@ -27,6 +27,9 @@ export default function Cart() {
   }, []);
 
   const sub = items.reduce((s, i) => s + (i.product?.price || i.price || 0) * (i.quantity || i.qty || 1), 0);
+  const deliveryFeeTotal = items.reduce((s, i) => s + (i.product?.deliveryFee || 0), 0);
+  const serviceChargeTotal = items.reduce((s, i) => s + (i.product?.serviceCharge || 0), 0);
+  const orderTotal = sub + deliveryFeeTotal + serviceChargeTotal;
 
   function getProductId(it) {
     return typeof it.product === "object" ? it.product?._id : it.product;
@@ -176,9 +179,25 @@ export default function Cart() {
                   </div>
 
                   {/* Total — hidden on desktop (sidebar shows it) */}
-                  <div className="mob-only" style={{ display: "flex", padding: 16, background: "var(--navy-800)", color: "#fff", borderRadius: "var(--r-lg)", marginBottom: 12, justifyContent: "space-between", fontSize: "1.4rem", fontWeight: 700 }}>
-                    <span>Total</span>
-                    <span style={{ color: "var(--accent)", fontSize: "2rem", fontWeight: 800 }}>{naira(sub)}</span>
+                  <div className="mob-only" style={{ padding: 16, background: "var(--navy-800)", color: "#fff", borderRadius: "var(--r-lg)", marginBottom: 12 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: "1.3rem", marginBottom: 6 }}>
+                      <span style={{ opacity: 0.75 }}>Subtotal</span><span>{naira(sub)}</span>
+                    </div>
+                    {deliveryFeeTotal > 0 && (
+                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: "1.3rem", marginBottom: 6 }}>
+                        <span style={{ opacity: 0.75 }}>Delivery fee</span><span>{naira(deliveryFeeTotal)}</span>
+                      </div>
+                    )}
+                    {serviceChargeTotal > 0 && (
+                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: "1.3rem", marginBottom: 6 }}>
+                        <span style={{ opacity: 0.75 }}>Service charge</span><span>{naira(serviceChargeTotal)}</span>
+                      </div>
+                    )}
+                    <div style={{ height: 1, background: "rgba(255,255,255,.15)", margin: "8px 0" }} />
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: "1.4rem", fontWeight: 700 }}>
+                      <span>Total</span>
+                      <span style={{ color: "var(--accent)", fontSize: "2rem", fontWeight: 800 }}>{naira(orderTotal)}</span>
+                    </div>
                   </div>
 
                   <button className="btn btn-primary btn-block btn-lg" style={{ borderRadius: "var(--r-pill)", marginBottom: 24 }} onClick={() => setStep(2)}>
@@ -241,9 +260,19 @@ export default function Cart() {
                   );
                 })}
                 <div style={{ height: 1, background: "var(--line)", margin: "10px 0" }} />
+                {deliveryFeeTotal > 0 && (
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: "1.3rem", marginBottom: 4 }}>
+                    <span style={{ color: "var(--ink-3)" }}>Delivery fee</span><span>{naira(deliveryFeeTotal)}</span>
+                  </div>
+                )}
+                {serviceChargeTotal > 0 && (
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: "1.3rem", marginBottom: 4 }}>
+                    <span style={{ color: "var(--ink-3)" }}>Service charge</span><span>{naira(serviceChargeTotal)}</span>
+                  </div>
+                )}
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <span style={{ fontSize: "1.5rem", fontWeight: 700 }}>Total</span>
-                  <span style={{ fontSize: "2.2rem", fontWeight: 800, color: "var(--accent)" }}>{naira(sub)}</span>
+                  <span style={{ fontSize: "2.2rem", fontWeight: 800, color: "var(--accent)" }}>{naira(orderTotal)}</span>
                 </div>
               </div>
 
@@ -275,7 +304,7 @@ export default function Cart() {
               <div style={{ display: "flex", gap: 8 }}>
                 <button className="btn btn-ghost" onClick={() => setStep(2)}><i className="fas fa-arrow-left" /></button>
                 <button className="btn btn-primary btn-lg" style={{ flex: 1, borderRadius: "var(--r-pill)" }} onClick={placeOrder} disabled={placing}>
-                  {placing ? <i className="fas fa-spinner fa-spin" /> : <><i className="fas fa-lock" /> Pay {naira(sub)}</>}
+                  {placing ? <i className="fas fa-spinner fa-spin" /> : <><i className="fas fa-lock" /> Pay {naira(orderTotal)}</>}
                 </button>
               </div>
               <p style={{ textAlign: "center", fontSize: "1.1rem", color: "var(--ink-3)", margin: "12px 0 0" }}>
@@ -311,9 +340,19 @@ export default function Cart() {
                 );
               })}
               <div style={{ height: 1, background: "var(--line)", margin: "10px 0" }} />
+              {deliveryFeeTotal > 0 && (
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "1.3rem", marginBottom: 4 }}>
+                  <span style={{ color: "var(--ink-3)" }}>Delivery fee</span><span>{naira(deliveryFeeTotal)}</span>
+                </div>
+              )}
+              {serviceChargeTotal > 0 && (
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "1.3rem", marginBottom: 4 }}>
+                  <span style={{ color: "var(--ink-3)" }}>Service charge</span><span>{naira(serviceChargeTotal)}</span>
+                </div>
+              )}
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <span style={{ fontSize: "1.4rem", fontWeight: 700 }}>Total</span>
-                <span style={{ fontSize: "2rem", fontWeight: 800, color: "var(--accent)" }}>{naira(sub)}</span>
+                <span style={{ fontSize: "2rem", fontWeight: 800, color: "var(--accent)" }}>{naira(orderTotal)}</span>
               </div>
               {delivery.address && (
                 <>

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import Logo from "../components/Logo";
 import { apiFetch } from "../utils/api";
 import { useUser } from "../context/UserContext";
@@ -46,6 +46,7 @@ function Rule({ ok, text }) {
 
 export default function Login() {
   const navigate = useNavigate();
+  const { state: routeState } = useLocation();
   const { setUser } = useUser();
   const [tab, setTab] = useState("signin");
   const [show, setShow] = useState(false);
@@ -118,6 +119,17 @@ export default function Login() {
       {/* Card wrapper — centers on desktop */}
       <div style={{ flex: 1, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "8px 16px 40px" }}>
         <div style={{ width: "100%", maxWidth: 460, background: "var(--white)", borderRadius: "var(--r-2xl)", boxShadow: "0 4px 32px rgba(0,0,0,.07)", padding: "28px 28px 32px" }}>
+
+          {/* Verified success banner */}
+          {routeState?.verified && (
+            <div style={{ marginBottom: 20, padding: "12px 14px", background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: "var(--r-md)", display: "flex", alignItems: "center", gap: 10, fontSize: "1.3rem", color: "#15803d" }}>
+              <i className="fas fa-circle-check" />
+              <div>
+                <div style={{ fontWeight: 700 }}>Email verified!</div>
+                <div style={{ fontSize: "1.15rem" }}>Your account is ready — sign in to continue.</div>
+              </div>
+            </div>
+          )}
 
           {/* Heading */}
           <h1 style={{ fontSize: "2.4rem", fontWeight: 800, letterSpacing: "-0.02em", margin: "0 0 4px" }}>

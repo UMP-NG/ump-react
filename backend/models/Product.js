@@ -98,6 +98,9 @@ const productSchema = new mongoose.Schema(
       default: 1,
     },
 
+    deliveryFee: { type: Number, default: 0 },
+    serviceCharge: { type: Number, default: 0 },
+
     // Optional hostel/real estate fields
     location: String,
     beds: Number,

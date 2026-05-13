@@ -7,7 +7,7 @@ const escapeRegex = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 export const createProduct = async (req, res) => {
   try {
-    const { name, desc, price, category, condition, colors } = req.body;
+    const { name, desc, price, category, condition, colors, deliveryFee, serviceCharge } = req.body;
 
     // --- 🎨 Parse Colors safely ---
     let parsedColors = [];
@@ -67,6 +67,8 @@ export const createProduct = async (req, res) => {
       specs,
       images,
       seller: req.user?._id,
+      deliveryFee: Number(deliveryFee) || 0,
+      serviceCharge: Number(serviceCharge) || 0,
     });
 
     // --- ✅ Link product to seller's products array ---

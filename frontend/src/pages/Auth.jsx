@@ -38,9 +38,8 @@ export default function Auth() {
     setLoading(true);
     setError("");
     try {
-      const data = await apiFetch("/api/auth/verify-otp", { method: "POST", body: { email, otp: code } });
-      setUser(data.user || data);
-      navigate("/");
+      await apiFetch("/api/auth/verify-otp", { method: "POST", body: { email, otp: code } });
+      navigate("/login", { state: { verified: true, email } });
     } catch (err) {
       setError(err.message || "Invalid code, try again");
     } finally {
