@@ -3,15 +3,19 @@ import { useNavigate } from "react-router-dom";
 
 function getSessionSeed(key) {
   const fresh = () => String((Date.now() ^ Math.floor(Math.random() * 0x7fffffff)) >>> 0);
-  let raw = sessionStorage.getItem(key);
-  if (!raw) { raw = fresh(); sessionStorage.setItem(key, raw); }
-  const parsed = parseInt(raw, 10);
-  if (!Number.isFinite(parsed) || parsed < 0) {
-    raw = fresh();
-    sessionStorage.setItem(key, raw);
-    return parseInt(raw, 10);
+  try {
+    let raw = sessionStorage.getItem(key);
+    if (!raw) { raw = fresh(); sessionStorage.setItem(key, raw); }
+    const parsed = parseInt(raw, 10);
+    if (!Number.isFinite(parsed) || parsed < 0) {
+      raw = fresh();
+      sessionStorage.setItem(key, raw);
+      return parseInt(raw, 10);
+    }
+    return parsed;
+  } catch {
+    return parseInt(fresh(), 10); // private-browsing or quota exceeded
   }
-  return parsed;
 }
 
 function lcgShuffle(arr, seed) {

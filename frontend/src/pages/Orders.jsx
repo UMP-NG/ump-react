@@ -9,9 +9,10 @@ const esc = (s) =>
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
 
-function downloadReceipt(o) {
+function downloadReceipt(o, onPopupBlocked) {
+  if (!o) return;
   const fmt = (n) => "₦" + Number(n || 0).toLocaleString("en-NG", { minimumFractionDigits: 2 });
-  const orderId = (o._id || o.id || "").toString().slice(-10).toUpperCase();
+  const orderId = esc((o._id || o.id || "").toString().slice(-10).toUpperCase());
   const date = new Date(o.createdAt || Date.now()).toLocaleString("en-NG", { dateStyle: "long", timeStyle: "short" });
   const rows = (o.items || []).map((item) => {
     const p = item.product || item;
@@ -56,7 +57,10 @@ ${o.shippingAddress?.address ? `<hr class="divider"><p style="margin:4px 0;font-
 <div class="footer"><p>Thank you for shopping on UMP — University Marketplace</p><p style="margin-top:4px">Generated ${new Date().toLocaleString()}</p></div>
 </body></html>`;
   const win = window.open("", "_blank");
-  if (!win) return;
+  if (!win) {
+    onPopupBlocked?.();
+    return;
+  }
   win.document.write(html);
   win.document.close();
   win.focus();
@@ -369,7 +373,7 @@ export default function Orders() {
                         <i className="fas fa-message" /> Message seller
                       </button>
                       {(o.paymentStatus === "paid" || o.paymentStatus === "released" || isCompleted) && (
-                        <button className="btn btn-sm btn-ghost" onClick={() => downloadReceipt(o)}>
+                        <button className="btn btn-sm btn-ghost" onClick={() => downloadReceipt(o, () => showToast("Allow pop-ups to download your receipt", "error"))}>
                           <i className="fas fa-download" /> Receipt
                         </button>
                       )}

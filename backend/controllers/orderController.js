@@ -131,7 +131,14 @@ export const checkoutCart = async (req, res) => {
       return res.status(400).json({ message: "Cannot determine seller" });
 
     const subtotal = items.reduce((sum, i) => sum + i.price * i.quantity, 0);
-    const deliveryFee = cart.items.reduce((s, i) => s + Math.max(0, i.product.deliveryFee || 0), 0);
+    // Charge each product's delivery fee once — deduplicate by product ID
+    const seenPids = new Set();
+    const deliveryFee = cart.items.reduce((s, i) => {
+      const pid = i.product._id?.toString();
+      if (pid && seenPids.has(pid)) return s;
+      if (pid) seenPids.add(pid);
+      return s + Math.max(0, i.product.deliveryFee || 0);
+    }, 0);
     const totalAmount = subtotal + deliveryFee;
 
     const order = new Order({
@@ -693,16 +700,11 @@ export const confirmTransfer = async (req, res) => {
         0
       );
 
-      // Look up delivery fees from DB — frontend items don't carry fee data
-      let deliveryFee = 0;
-      for (const item of sellerItems) {
-        if (item.product) {
-          const prod = await Product.findById(item.product).select("deliveryFee").lean();
-          if (prod) {
-            deliveryFee += Math.max(0, prod.deliveryFee || 0);
-          }
-        }
-      }
+      // Batch-fetch product fees to avoid N+1 queries; charge each product once
+      const productIds = [...new Set(sellerItems.map(i => i.product).filter(Boolean).map(String))];
+      const productDocs = await Product.find({ _id: { $in: productIds } }).select("_id deliveryFee").lean();
+      const feeMap = new Map(productDocs.map(p => [p._id.toString(), p.deliveryFee || 0]));
+      const deliveryFee = productIds.reduce((s, pid) => s + Math.max(0, feeMap.get(pid) || 0), 0);
       const totalAmount = subtotal + deliveryFee;
 
       const order = new Order({

@@ -42,7 +42,7 @@ const orderSchema = new mongoose.Schema(
 
     totalAmount: { type: Number, required: true, min: [0, "Total amount cannot be negative"] },
     subtotal:    { type: Number, default: 0,     min: [0, "Subtotal cannot be negative"] },
-    tax:         { type: Number, default: 0,     min: 0 },
+    tax:         { type: Number, default: 0,     min: [0, "Tax cannot be negative"] },
     deliveryFee: { type: Number, default: 0,     min: [0, "Delivery fee cannot be negative"] },
 
     shippingAddress: {

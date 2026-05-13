@@ -8,19 +8,6 @@ import Ph from "../components/Ph";
 import { apiFetch } from "../utils/api";
 import Skel from "../components/Skel";
 
-function getSessionSeed(key) {
-  const fresh = () => String((Date.now() ^ Math.floor(Math.random() * 0x7fffffff)) >>> 0);
-  let raw = sessionStorage.getItem(key);
-  if (!raw) { raw = fresh(); sessionStorage.setItem(key, raw); }
-  const parsed = parseInt(raw, 10);
-  if (!Number.isFinite(parsed) || parsed < 0) {
-    raw = fresh();
-    sessionStorage.setItem(key, raw);
-    return parseInt(raw, 10);
-  }
-  return parsed;
-}
-
 
 const SORT_OPTIONS = [
   { label: "Featured", value: "random" },
@@ -101,22 +88,23 @@ export default function Market() {
   }, [cat, sort, condition]);
 
   function loadMore() {
-    pageRef.current += 1;
+    const nextPage = pageRef.current + 1;
     setLoadingMore(true);
     const params = new URLSearchParams();
     if (cat !== "All") params.set("category", cat.toLowerCase());
     if (condition !== "All") params.set("condition", condition.toLowerCase());
     params.set("sort", sort);
     params.set("limit", String(PAGE_SIZE));
-    params.set("skip", String((pageRef.current - 1) * PAGE_SIZE));
+    params.set("skip", String((nextPage - 1) * PAGE_SIZE));
     apiFetch(`/api/products?${params}`)
       .then((d) => {
+        pageRef.current = nextPage; // advance only on success
         const list = Array.isArray(d?.products) ? d.products : Array.isArray(d) ? d : [];
         setProducts((prev) => [...prev, ...list]);
         const t = d?.total ?? 0;
-        setHasMore(sort !== "random" && list.length === PAGE_SIZE && (pageRef.current * PAGE_SIZE) < t);
+        setHasMore(sort !== "random" && list.length === PAGE_SIZE && (nextPage * PAGE_SIZE) < t);
       })
-      .catch(() => setHasMore(false))
+      .catch(() => setHasMore(false)) // leave pageRef unchanged so retry fetches same page
       .finally(() => setLoadingMore(false));
   }
 
@@ -222,7 +210,12 @@ export default function Market() {
               onClick={() => setFilterOpen(false)}
             />
           )}
-          <div style={{
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Filter and sort products"
+            aria-hidden={!filterOpen}
+            style={{
             position: "fixed",
             top: popoverPos.top,
             right: popoverPos.right,
@@ -269,7 +262,12 @@ export default function Market() {
               onClick={() => setFilterOpen(false)}
             />
           )}
-          <div style={{
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Filter and sort products"
+            aria-hidden={!filterOpen}
+            style={{
             position: "fixed", left: 0, right: 0, bottom: 0,
             zIndex: 81,
             background: "var(--white)",

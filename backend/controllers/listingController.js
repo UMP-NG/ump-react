@@ -147,6 +147,8 @@ export const getAllListings = async (req, res) => {
     const filter = {};
 
     if (search.trim()) {
+      if (search.length > 200)
+        return res.status(400).json({ message: "Search query is too long" });
       const re = new RegExp(escapeRegex(search.trim()), "i");
       filter.$or = [{ name: re }, { description: re }, { location: re }];
     }

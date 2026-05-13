@@ -4,16 +4,26 @@ import Service from "../models/Service.js";
 import Seller from "../models/Seller.js";
 
 const escapeRegex = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-
-// Coerce a query param that might be an array (e.g. ?q=a&q=b) to a plain string
 const coerceStr = (v) => (typeof v === "string" ? v : Array.isArray(v) ? v[0] || "" : "");
+
+const MAX_QUERY_LEN = 200;
+const validateQuery = (query, res) => {
+  if (!query || query.trim() === "") {
+    res.status(400).json({ message: "Please provide a search query" });
+    return false;
+  }
+  if (query.length > MAX_QUERY_LEN) {
+    res.status(400).json({ message: "Search query is too long" });
+    return false;
+  }
+  return true;
+};
 
 // ✅ Search products
 export const searchProducts = async (req, res) => {
   try {
     const query = coerceStr(req.query.query);
-    if (!query || query.trim() === "")
-      return res.status(400).json({ message: "Please provide a search query" });
+    if (!validateQuery(query, res)) return;
 
     const searchRegex = new RegExp(escapeRegex(query.trim()), "i");
     const products = await Product.find({ name: searchRegex }).limit(20);
@@ -29,8 +39,7 @@ export const searchProducts = async (req, res) => {
 export const searchListings = async (req, res) => {
   try {
     const query = coerceStr(req.query.query);
-    if (!query || query.trim() === "")
-      return res.status(400).json({ message: "Please provide a search query" });
+    if (!validateQuery(query, res)) return;
 
     const searchRegex = new RegExp(escapeRegex(query.trim()), "i");
     const listings = await Listing.find({
@@ -48,8 +57,7 @@ export const searchListings = async (req, res) => {
 export const searchServices = async (req, res) => {
   try {
     const query = coerceStr(req.query.query);
-    if (!query || query.trim() === "")
-      return res.status(400).json({ message: "Please provide a search query" });
+    if (!validateQuery(query, res)) return;
 
     const searchRegex = new RegExp(escapeRegex(query.trim()), "i");
     const services = await Service.find({ title: searchRegex }).limit(20);
@@ -65,8 +73,7 @@ export const searchServices = async (req, res) => {
 export const searchSellers = async (req, res) => {
   try {
     const query = coerceStr(req.query.query);
-    if (!query || query.trim() === "")
-      return res.status(400).json({ message: "Please provide a search query" });
+    if (!validateQuery(query, res)) return;
 
     const searchRegex = new RegExp(escapeRegex(query.trim()), "i");
     const sellers = await Seller.find({
@@ -89,8 +96,7 @@ export const searchSellers = async (req, res) => {
 export const siteSearch = async (req, res) => {
   try {
     const query = coerceStr(req.query.query);
-    if (!query || query.trim() === "")
-      return res.status(400).json({ message: "Please provide a search query" });
+    if (!validateQuery(query, res)) return;
 
     const searchRegex = new RegExp(escapeRegex(query.trim()), "i");
 

@@ -175,7 +175,11 @@ export const getAllProducts = async (req, res) => {
     }
 
     const searchTerm = search || keyword;
-    if (searchTerm.trim()) query.name = { $regex: escapeRegex(searchTerm.trim()), $options: "i" };
+    if (searchTerm.trim()) {
+      if (searchTerm.length > 200)
+        return res.status(400).json({ success: false, message: "Search query is too long" });
+      query.name = { $regex: escapeRegex(searchTerm.trim()), $options: "i" };
+    }
 
     if (condition && condition !== "all") query.condition = { $regex: `^${escapeRegex(condition)}$`, $options: "i" };
 
