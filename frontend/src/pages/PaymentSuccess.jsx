@@ -12,8 +12,11 @@ export default function PaymentSuccess() {
 
   useEffect(() => {
     if (!reference) { setStatus("failed"); return; }
-    apiFetch(`/api/payments/verify?reference=${encodeURIComponent(reference)}`)
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 15000);
+    apiFetch(`/api/payments/verify?reference=${encodeURIComponent(reference)}`, { signal: controller.signal })
       .then((d) => {
+        clearTimeout(timer);
         if (d.status === "success") {
           setStatus("success");
           setOrderId(d.orderId || null);
@@ -21,7 +24,15 @@ export default function PaymentSuccess() {
           setStatus("failed");
         }
       })
-      .catch(() => setStatus("failed"));
+      .catch((err) => {
+        clearTimeout(timer);
+        if (err?.name === "AbortError") {
+          setStatus("timeout");
+        } else {
+          setStatus("failed");
+        }
+      });
+    return () => { clearTimeout(timer); controller.abort(); };
   }, [reference]);
 
   // Auto-redirect countdown on success
@@ -37,6 +48,25 @@ export default function PaymentSuccess() {
       <div style={{ minHeight: "100vh", background: "var(--paper)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16 }}>
         <i className="fas fa-spinner fa-spin" style={{ fontSize: "3rem", color: "var(--accent)" }} />
         <p style={{ fontSize: "1.6rem", color: "var(--ink-2)" }}>Verifying your payment…</p>
+      </div>
+    );
+  }
+
+  if (status === "timeout") {
+    return (
+      <div style={{ minHeight: "100vh", background: "var(--paper)", display: "flex", flexDirection: "column", alignItems: "center", padding: "80px 24px 0", textAlign: "center" }}>
+        <div style={{ width: 96, height: 96, borderRadius: "50%", background: "#fef3c7", color: "#d97706", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: "4rem", marginBottom: 24 }}>
+          <i className="fas fa-clock" />
+        </div>
+        <h1 style={{ fontSize: "2.8rem", fontWeight: 800, letterSpacing: "-0.02em", marginBottom: 8 }}>Taking longer than expected</h1>
+        <p style={{ color: "var(--ink-2)", fontSize: "1.4rem", marginBottom: 8 }}>
+          Your payment may still be processing. Check your orders page in a moment — it will update automatically once confirmed.
+        </p>
+        <p style={{ color: "var(--ink-3)", fontSize: "1.2rem", marginBottom: 32 }}>Reference: <span style={{ fontFamily: "monospace", fontWeight: 700 }}>{reference}</span></p>
+        <div style={{ maxWidth: 360, width: "100%" }}>
+          <button className="btn btn-primary btn-block btn-lg" onClick={() => navigate("/orders")}>Check my orders</button>
+          <button className="btn btn-ghost btn-block" style={{ marginTop: 10 }} onClick={() => navigate("/market")}>Continue shopping</button>
+        </div>
       </div>
     );
   }

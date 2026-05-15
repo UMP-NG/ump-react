@@ -276,20 +276,23 @@ export default function ProviderAnalytics() {
       apiFetch("/api/bookings/provider").catch(() => []),
       apiFetch("/api/payouts").catch(() => []),
       apiFetch("/api/payouts/details").catch(() => null),
-      apiFetch("/api/provider/analytics").catch(() => null),
-    ]).then(([kpisData, sessData, bkgs, pays, bankDets, analytics]) => {
+      apiFetch("/api/services/mine").catch(() => null),
+    ]).then(([kpisData, sessData, bkgs, pays, bankDets, myServices]) => {
       setKpis(kpisData || {});
       setSessions(Array.isArray(sessData) ? sessData : sessData?.sessions || []);
       setBookings(bkgs.bookings || (Array.isArray(bkgs) ? bkgs : []));
       setPayouts(pays.payouts || (Array.isArray(pays) ? pays : []));
       if (bankDets?.accountDetails) setBankForm((f) => ({ ...f, ...bankDets.accountDetails }));
-      if (analytics?.service) {
-        setService(analytics.service);
-        setVerifyRequested(!!(analytics.service.verificationRequested));
+      const svc = Array.isArray(myServices)
+        ? myServices[0]
+        : myServices?.services?.[0] ?? null;
+      if (svc) {
+        setService(svc);
+        setVerifyRequested(!!(svc.verificationRequested));
         setSettingsForm({
-          title:     analytics.service.title || "",
-          desc:      analytics.service.description || analytics.service.desc || "",
-          timeSlots: analytics.service.timeSlots || "",
+          title:     svc.title || "",
+          desc:      svc.description || svc.desc || "",
+          timeSlots: svc.timeSlots || "",
         });
       }
     }).finally(() => setLoading(false));
