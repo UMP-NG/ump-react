@@ -61,6 +61,11 @@ export const addToCart = async (req, res) => {
       return res.status(400).json({ message: "This product is out of stock" });
     }
 
+    // Prevent seller from buying their own products
+    if (product.seller?.toString() === userId.toString()) {
+      return res.status(400).json({ message: "You cannot add your own products to your cart" });
+    }
+
     // Find or create user's cart
     let cart = await Cart.findOne({ user: userId });
     if (!cart) {

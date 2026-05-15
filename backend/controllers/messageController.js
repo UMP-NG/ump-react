@@ -1,7 +1,7 @@
 import Message from "../models/Message.js";
 import User from "../models/User.js";
 import mongoose from "mongoose";
-import { io } from "../server.js"; // Make sure io is exported from server.js
+import { getIO } from "../utils/socket.js";
 import cloudinary from "../config/cloudinary.js";
 
 // ---------- SEND MESSAGE ----------
@@ -43,8 +43,8 @@ export const sendMessage = async (req, res) => {
     });
 
     // ✅ Emit via Socket.io
-    io.to(receiver.toString()).emit("new_message", message);
-    io.to(req.user._id.toString()).emit("new_message", message);
+    getIO()?.to(receiver.toString()).emit("new_message", message);
+    getIO()?.to(req.user._id.toString()).emit("new_message", message);
 
     res.status(201).json({ success: true, message });
   } catch (error) {

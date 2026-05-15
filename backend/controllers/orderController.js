@@ -7,6 +7,7 @@ import { fileURLToPath } from "url";
 import PDFDocument from "pdfkit";
 import cloudinary from "../config/cloudinary.js";
 import paystack from "../utils/paystack.js";
+import { audit } from "../utils/auditLog.js";
 
 function generateDeliveryCode() {
   return Math.random().toString(36).substring(2, 8).toUpperCase();
@@ -46,12 +47,7 @@ export const createOrder = async (req, res) => {
       deliveryFee += Math.max(0, product.deliveryFee || 0);
 
       processedItems.push({
-        product: {
-          _id: product._id,
-          name: product.name,
-          image: product.image,
-          sku: product.sku,
-        },
+        product: product._id,
         quantity: item.quantity,
         price: product.price,
         variant: item.variant || {},
@@ -70,7 +66,7 @@ export const createOrder = async (req, res) => {
       totalAmount,
       shippingAddress,
       notes,
-      status: "processing",
+      status: "pending",
     });
 
     res.status(201).json({ success: true, order });
@@ -129,6 +125,9 @@ export const checkoutCart = async (req, res) => {
     const sellerId = cart.items[0].product.seller;
     if (!sellerId)
       return res.status(400).json({ message: "Cannot determine seller" });
+
+    if (sellerId.toString() === userId.toString())
+      return res.status(400).json({ message: "You cannot purchase your own products" });
 
     const subtotal = items.reduce((sum, i) => sum + i.price * i.quantity, 0);
     // Charge each product's delivery fee once — deduplicate by product ID
@@ -349,6 +348,15 @@ export const updateOrderStatus = async (req, res) => {
 
     await order.save();
 
+    audit(`ORDER_${status.toUpperCase()}`, {
+      actor: req.user._id,
+      entity: "Order",
+      entityId: order._id,
+      amount: order.totalAmount,
+      meta: { previousStatus: order.status, newStatus: status },
+      req,
+    });
+
     res.json({
       success: true,
       message: `Order marked as ${status}`,
@@ -487,7 +495,7 @@ export const getIncomingOrders = async (req, res) => {
 
     const orders = await Order.find({
       "items.product": { $in: productIds },
-      status: { $ne: "canceled" },
+      status: { $ne: "cancelled" },
     })
       .populate("buyer", "name email")
       .populate("items.product", "name price images")

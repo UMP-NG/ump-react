@@ -6,6 +6,9 @@ import compression from "compression";
 import path from "path";
 import cookieParser from "cookie-parser";
 import { fileURLToPath } from "url";
+import mongoSanitize from "express-mongo-sanitize";
+import hpp from "hpp";
+import { globalLimiter } from "./middleware/rateLimits.js";
 
 // 🧩 ROUTES
 import authRoutes from "./routes/authroutes.js";
@@ -107,15 +110,30 @@ app.options(/.*/, cors());
 
 app.use("/api/payments/webhook", express.raw({ type: "application/json" }));
 
-app.use(express.json({ limit: "10mb" }));
-app.use(express.urlencoded({ extended: true, limit: "10mb" }));
+app.use(express.json({ limit: "1mb" }));
+app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 app.use(cookieParser());
+
+// ── NoSQL injection prevention — strip $ and . from keys
+app.use(mongoSanitize({ replaceWith: "_", onSanitize: ({ key }) => { if (process.env.NODE_ENV !== "production") console.warn(`⚠️  Sanitized key: ${key}`); } }));
+
+// ── HTTP Parameter Pollution — use last value for duplicated params
+app.use(hpp());
+
+// ── Global rate limiter
+app.use(globalLimiter);
 
 // ----------------------------
 // 🛡️ Helmet with CSP tuned for your external assets
 // ----------------------------
 app.use(
   helmet({
+    // X-Frame-Options: DENY — stops clickjacking; meta tags are ignored by browsers for this header
+    frameguard: { action: "deny" },
+    // X-Content-Type-Options: nosniff — prevents MIME-type sniffing
+    noSniff: true,
+    // Strict-Transport-Security — force HTTPS for 1 year
+    hsts: { maxAge: 31536000, includeSubDomains: true, preload: true },
     contentSecurityPolicy: {
       useDefaults: false,
       directives: {
@@ -185,10 +203,6 @@ app.use(
   })
 );
 
-app.use((req, res, next) => {
-  next();
-});
-
 // ----------------------------
 // 📂 STATIC FILES — serve React build output only when frontend/dist exists (local monorepo)
 // ----------------------------
@@ -245,15 +259,6 @@ app.use(errorHandler);
 // ----------------------------
 app.get("/api/test", (req, res) => {
   res.json({ message: "Backend is working!" });
-});
-
-app.get("/api/debug", (req, res) => {
-  res.json({
-    message: "Debug info",
-    headers: req.headers,
-    cookies: req.cookies,
-    query: req.query,
-  });
 });
 
 // Catch-all: serve React app for SPA routing (only when frontend build exists)

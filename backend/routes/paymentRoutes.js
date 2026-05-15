@@ -6,13 +6,14 @@ import {
   getBanks,
   verifyAccount,
   saveBankDetails,
+  paystackWebhook,
 } from "../controllers/paymentController.js";
-import { paystackWebhook } from "../controllers/paystackWebhook.js";
+import { paymentLimiter } from "../middleware/rateLimits.js";
 
 const router = express.Router();
 
-router.post("/initialize", protect, initializePayment);
-router.get("/verify", protect, verifyPayment);
+router.post("/initialize", protect, paymentLimiter, initializePayment);
+router.get("/verify", protect, paymentLimiter, verifyPayment);
 router.post("/webhook", paystackWebhook);
 
 // Seller bank setup

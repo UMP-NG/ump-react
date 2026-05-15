@@ -1,6 +1,6 @@
 // productRoutes.js
 import express from "express";
-import { protect, requireRole } from "../middleware/authMiddleware.js";
+import { protect, requireRole, optionalAuth } from "../middleware/authMiddleware.js";
 import {
   createProduct,
   getAllProducts,
@@ -54,12 +54,12 @@ router.put(
 
 router.delete("/:id", protect, requireRole("seller", "admin"), deleteProduct);
 
-router.post("/:id/view", trackProductView);
+router.post("/:id/view", optionalAuth, trackProductView);
 router.get("/:id/related", getRelatedProducts);
 
 // 🧩 Dynamic route (MUST be last)
 router.get("/", getAllProducts);
-router.get("/:id", getProductById);
+router.get("/:id", optionalAuth, getProductById);
 
 export default router;
 

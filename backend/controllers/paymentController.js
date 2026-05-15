@@ -4,6 +4,7 @@ import Payment from "../models/Payment.js";
 import Order from "../models/Order.js";
 import Seller from "../models/Seller.js";
 import crypto from "crypto";
+import { audit } from "../utils/auditLog.js";
 
 // ----------------------------
 // 1️⃣ Initialize Payment (Card or Transfer)
@@ -120,6 +121,21 @@ export const verifyPayment = async (req, res) => {
         .status(404)
         .json({ success: false, message: "Payment not found" });
 
+    // Validate that the amount paid matches the expected order amount
+    const expectedKobo = Math.round(payment.amount * 100);
+    if (data.status === "success" && data.amount !== expectedKobo) {
+      await audit("PAYMENT_AMOUNT_MISMATCH", {
+        actor: req.user?._id,
+        entity: "Payment",
+        entityId: payment._id,
+        amount: data.amount / 100,
+        meta: { expected: payment.amount, received: data.amount / 100, reference: payment.reference },
+        req,
+        status: "fail",
+      });
+      return res.status(400).json({ success: false, message: "Payment amount mismatch. Contact support." });
+    }
+
     payment.status = data.status === "success" ? "success" : "failed";
     payment.paidAt = data.status === "success" ? new Date() : null;
     payment.metadata = data;
@@ -129,6 +145,14 @@ export const verifyPayment = async (req, res) => {
       await Order.findByIdAndUpdate(payment.order, {
         paymentStatus: "paid",
         status: "confirmed",
+      });
+      audit("PAYMENT_VERIFIED", {
+        actor: req.user?._id,
+        entity: "Order",
+        entityId: payment.order,
+        amount: payment.amount,
+        meta: { reference: payment.reference, provider: "Paystack" },
+        req,
       });
     }
 
@@ -225,6 +249,14 @@ export const saveBankDetails = async (req, res) => {
 
     if (!seller) return res.status(404).json({ success: false, message: "Seller profile not found" });
 
+    audit("BANK_DETAILS_UPDATED", {
+      actor: req.user._id,
+      entity: "Seller",
+      entityId: seller._id,
+      meta: { bankName, accountNumber: accountNumber.slice(-4).padStart(accountNumber.length, "*"), accountName },
+      req,
+    });
+
     return res.json({ success: true, message: "Bank details saved", recipientCode });
   } catch (err) {
     console.error("saveBankDetails error:", err.response?.data || err.message);
@@ -273,6 +305,13 @@ export const paystackWebhook = async (req, res) => {
         await Order.findByIdAndUpdate(orderId, {
           paymentStatus: "paid",
           status: "confirmed",
+        });
+        audit("WEBHOOK_PAYMENT_CONFIRMED", {
+          entity: "Order",
+          entityId: orderId,
+          amount: data.amount / 100,
+          meta: { reference: data.reference, provider: "Paystack" },
+          req,
         });
       }
     }

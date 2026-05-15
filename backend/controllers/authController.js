@@ -5,7 +5,7 @@ import crypto from "crypto";
 import sendMail from "../utils/sendMail.js";
 import generateToken from "../utils/generateToken.js";
 import Service from "../models/Service.js";
-import cloudinary from "../config/cloudinary.js";
+import { audit } from "../utils/auditLog.js";
 
 // ===============================
 // SIGNUP WITH OTP
@@ -49,7 +49,7 @@ export const signup = async (req, res) => {
 
       return res.status(200).json({
         message: "OTP sent successfully",
-        otp, // ✅ DEV ONLY (remove in production)
+        ...(process.env.NODE_ENV !== "production" && { otp }),
       });
     }
 
@@ -80,7 +80,7 @@ export const signup = async (req, res) => {
 
     res.status(201).json({
       message: "User created. OTP sent to your email.",
-      otp, // ✅ DEV ONLY (remove later)
+      ...(process.env.NODE_ENV !== "production" && { otp }),
     });
   } catch (error) {
     console.error("❌ [SIGNUP] Server error:", error.message);
@@ -153,7 +153,7 @@ export const signupProvider = async (req, res) => {
 
     await user.save();
 
-    // generate token and set cookie
+    const token = generateToken(user._id);
     res.cookie("token", token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production", // true in prod (HTTPS), false locally
@@ -232,6 +232,14 @@ export const login = async (req, res) => {
       return res.status(400).json({ message: "Invalid email or password" });
     }
 
+    // Check account lockout
+    if (existingUser.isLocked) {
+      await existingUser.incLoginAttempts();
+      const remainingMs = existingUser.lockUntil - Date.now();
+      const remainingMins = Math.ceil(remainingMs / 60000);
+      return res.status(429).json({ message: `Account temporarily locked. Try again in ${remainingMins} minute(s).` });
+    }
+
     // Check email verification
     if (!existingUser.isVerified) {
       return res
@@ -244,7 +252,15 @@ export const login = async (req, res) => {
       existingUser.password
     );
     if (!isPasswordCorrect) {
+      await existingUser.incLoginAttempts();
       return res.status(400).json({ message: "Invalid email or password" });
+    }
+
+    // Reset lockout counter on successful login
+    if (existingUser.loginAttempts > 0) {
+      await existingUser.updateOne({ $set: { loginAttempts: 0, lastLogin: new Date() }, $unset: { lockUntil: 1 } });
+    } else {
+      await existingUser.updateOne({ $set: { lastLogin: new Date() } });
     }
 
     let token;
@@ -275,6 +291,8 @@ export const login = async (req, res) => {
       return res.status(500).json({ message: "Cookie configuration error" });
     }
     
+    audit("LOGIN_SUCCESS", { actor: existingUser._id, entity: "User", entityId: existingUser._id, req });
+
     res.status(200).json({
       message: "Login successful",
       user: {

@@ -19,7 +19,7 @@ const userSchema = new mongoose.Schema(
     password: {
       type: String,
       required: true,
-      minlength: [6, "Password must be at least 6 characters"],
+      minlength: [8, "Password must be at least 8 characters"],
     },
 
     // ===============================
@@ -111,6 +111,10 @@ const userSchema = new mongoose.Schema(
     lastLogin: Date,
     twoFactorEnabled: { type: Boolean, default: false },
 
+    // Brute-force lockout
+    loginAttempts: { type: Number, default: 0 },
+    lockUntil: { type: Date },
+
     // ===============================
     // NOTIFICATIONS & STATUS
     // ===============================
@@ -129,6 +133,28 @@ const userSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+// ===============================
+// LOCKOUT VIRTUAL + METHOD
+// ===============================
+const MAX_LOGIN_ATTEMPTS = 5;
+const LOCK_TIME_MS = 15 * 60 * 1000; // 15 minutes
+
+userSchema.virtual("isLocked").get(function () {
+  return !!(this.lockUntil && this.lockUntil > Date.now());
+});
+
+userSchema.methods.incLoginAttempts = function () {
+  // If a previous lock has expired, restart the counter
+  if (this.lockUntil && this.lockUntil < Date.now()) {
+    return this.updateOne({ $set: { loginAttempts: 1 }, $unset: { lockUntil: 1 } });
+  }
+  const update = { $inc: { loginAttempts: 1 } };
+  if (this.loginAttempts + 1 >= MAX_LOGIN_ATTEMPTS && !this.isLocked) {
+    update.$set = { lockUntil: Date.now() + LOCK_TIME_MS };
+  }
+  return this.updateOne(update);
+};
 
 // ===============================
 // PASSWORD HASHING

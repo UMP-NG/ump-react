@@ -34,7 +34,7 @@ const orderSchema = new mongoose.Schema(
 
     status: {
       type: String,
-      enum: ["pending", "confirmed", "shipped", "completed", "cancelled"],
+      enum: ["pending", "pending-verification", "confirmed", "shipped", "completed", "cancelled"],
       default: "pending",
     },
 
@@ -84,6 +84,7 @@ const orderSchema = new mongoose.Schema(
       },
       initiatedAt: Date,
     },
+    paymentProof: { type: String },
     deliveryCode: { type: String },
     deliveryCodeUsed: { type: Boolean, default: false },
     escrowReleasedAt: Date,

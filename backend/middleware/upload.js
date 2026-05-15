@@ -41,15 +41,45 @@ const uploadToCloudinary = (buffer, filename, folder, isVideo = false) => {
   });
 };
 
+const ALLOWED_IMAGE_MIMES = new Set([
+  "image/jpeg",
+  "image/jpg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+]);
+
+const ALLOWED_PROOF_MIMES = new Set([
+  "image/jpeg",
+  "image/jpg",
+  "image/png",
+  "image/webp",
+  "application/pdf",
+]);
+
+const imageFilter = (req, file, cb) => {
+  if (ALLOWED_IMAGE_MIMES.has(file.mimetype)) return cb(null, true);
+  cb(new Error(`File type "${file.mimetype}" is not allowed. Upload JPEG, PNG, or WebP images only.`), false);
+};
+
+const proofFilter = (req, file, cb) => {
+  if (ALLOWED_PROOF_MIMES.has(file.mimetype)) return cb(null, true);
+  cb(new Error(`File type "${file.mimetype}" is not allowed. Upload an image or PDF.`), false);
+};
+
 // Use memory storage to collect files first
 const memoryStorage = multer.memoryStorage();
 
 const upload = multer({
   storage: memoryStorage,
-  limits: { fileSize: 10 * 1024 * 1024 },
-  fileFilter: (req, file, cb) => {
-    cb(null, true);
-  },
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB max
+  fileFilter: imageFilter,
+});
+
+const uploadProof = multer({
+  storage: memoryStorage,
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: proofFilter,
 });
 
 // Custom middleware for seller uploads
@@ -183,7 +213,7 @@ export const uploadAvatar = (req, res, cb) => {
 };
 
 export const uploadPaymentProof = (req, res, cb) => {
-  const multerUpload = upload.single("paymentProof");
+  const multerUpload = uploadProof.single("paymentProof");
 
   multerUpload(req, res, async (err) => {
     if (err) {

@@ -54,6 +54,23 @@ export const protect = async (req, res, next) => {
   }
 };
 
+// Sets req.user if a valid token is present; never rejects the request
+export const optionalAuth = async (req, res, next) => {
+  try {
+    if (req.user) return next();
+    let token = req.header("Authorization")?.replace("Bearer ", "");
+    if (!token && req.headers.cookie) {
+      token = cookie.parse(req.headers.cookie || "").token;
+    }
+    if (!token) return next();
+    let decoded;
+    try { decoded = jwt.verify(token, process.env.JWT_SECRET); } catch { return next(); }
+    const user = await User.findById(decoded.id).select("-password -wishlist -cart -orders -services -following").lean();
+    if (user) req.user = user;
+  } catch { /* ignore */ }
+  next();
+};
+
 // ✅ Role-based access control middleware
 export const requireRole = (...allowedRoles) => {
   return (req, res, next) => {

@@ -22,9 +22,15 @@ export const errorHandler = (err, req, res, next) => {
   }
 
   // Fallback for other errors
+  const statusCode = err.statusCode || err.status || 500;
   console.error("🔥 Error:", err && err.stack ? err.stack : err);
-  res.status(err.statusCode || 500).json({
+
+  // Never leak internals or stack traces to clients in production
+  const isProd = process.env.NODE_ENV === "production";
+  const message = isProd && statusCode >= 500 ? "Internal server error" : (err.message || "Server Error");
+
+  res.status(statusCode).json({
     success: false,
-    message: err.message || "Server Error",
+    message,
   });
 };

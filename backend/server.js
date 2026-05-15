@@ -4,6 +4,7 @@ import mongoose from "mongoose";
 import dotenv from "dotenv";
 import app from "./app.js";
 import Message from "./models/Message.js";
+import { setIO } from "./utils/socket.js";
 
 dotenv.config();
 
@@ -75,6 +76,9 @@ export const io = new Server(server, {
     credentials: true,
   },
 });
+
+// Register io singleton so controllers can use it without importing server.js
+setIO(io);
 
 // 🧠 Track online users
 const onlineUsers = new Map();
