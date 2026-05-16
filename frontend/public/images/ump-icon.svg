@@ -1,7 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <!-- Orange rounded square card -->
+  <!--
+    Full-bleed solid background MUST come first.
+    The maskable icon safe zone is the central 80% (40px padding per side on a 512px canvas).
+    A full background ensures corners are filled when the OS uses a square mask.
+  -->
+  <rect width="512" height="512" fill="#f97316"/>
+  <!-- Rounded visual card — purely decorative, sits on top of the full-bleed layer -->
   <rect width="512" height="512" rx="96" fill="#f97316"/>
-  <!-- Bold UMP text centred -->
+  <!-- Bold UMP text — centred, cap-height ~153px, horizontally ~381px: well within safe zone -->
   <text
     x="256" y="256"
     font-family="'Arial Black','Helvetica Neue',Arial,Impact,sans-serif"

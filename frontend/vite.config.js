@@ -21,11 +21,14 @@ export default defineConfig({
         categories: ['shopping', 'education'],
         icons: [
           {
+            // SVG with full-bleed background — safe for both any-shape and maskable masks
             src: 'images/ump-icon.svg',
             sizes: 'any',
             type: 'image/svg+xml',
+            purpose: 'any maskable',
           },
           {
+            // JPEG fallback for platforms that do not support SVG icons
             src: 'images/ump-logo.jpeg',
             sizes: '192x192',
             type: 'image/jpeg',
@@ -34,12 +37,6 @@ export default defineConfig({
             src: 'images/ump-logo.jpeg',
             sizes: '512x512',
             type: 'image/jpeg',
-          },
-          {
-            src: 'images/ump-logo.jpeg',
-            sizes: '512x512',
-            type: 'image/jpeg',
-            purpose: 'maskable',
           },
         ],
         shortcuts: [

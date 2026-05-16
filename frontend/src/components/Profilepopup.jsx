@@ -9,8 +9,10 @@ export default function ProfilePopup({ onClose }) {
   const roles = user?.roles || [];
   const isSeller   = roles.includes("seller");
   const isProvider = roles.includes("service_provider");
+  const isAdmin    = Array.isArray(user?.roles) ? user.roles.includes("admin") : user?.role === "admin";
 
   const MENU = [
+    ...(isAdmin ? [{ icon: "user-shield", label: "Admin panel", path: "/admin", admin: true }] : []),
     { icon: "box-archive",        label: "My orders",           path: "/orders" },
     { icon: "heart",              label: "Wishlist",            path: "/wishlist" },
     ...(isSeller   ? [{ icon: "store",             label: "Seller dashboard",   path: "/seller-dashboard" }] : []),
@@ -60,7 +62,14 @@ export default function ProfilePopup({ onClose }) {
             <button
               key={it.label}
               onClick={() => handleNav(it.path)}
-              style={{ width: "100%", padding: "12px 14px", display: "flex", alignItems: "center", gap: 12, border: "none", background: "transparent", cursor: "pointer", fontSize: "1.4rem", borderRadius: "var(--r-md)", color: it.accent ? "var(--accent)" : "var(--ink-1)", fontWeight: it.accent ? 600 : 500, textAlign: "left" }}
+              style={{
+                width: "100%", padding: "12px 14px", display: "flex", alignItems: "center",
+                gap: 12, border: "none", cursor: "pointer", fontSize: "1.4rem",
+                borderRadius: "var(--r-md)", textAlign: "left",
+                background: it.admin ? "linear-gradient(135deg,#fff7ed,#fff)" : "transparent",
+                color: it.admin ? "var(--accent)" : it.accent ? "var(--accent)" : "var(--ink-1)",
+                fontWeight: it.admin || it.accent ? 700 : 500,
+              }}
             >
               <i className={`fas fa-${it.icon}`} style={{ width: 20, textAlign: "center" }} /> {it.label}
             </button>

@@ -2,6 +2,7 @@ import { Routes, Route } from "react-router-dom";
 import FloatingChat from "./components/FloatingChat";
 import PrivateRoute from "./components/PrivateRoute";
 import InstallPrompt from "./components/InstallPrompt";
+import AdminRoutes from "./admin/index";
 
 import Home from "./pages/Home";
 import Market from "./pages/Market";
@@ -84,6 +85,9 @@ export default function App() {
       <Route path="/help" element={<HelpSupport />} />
       <Route path="/seller-dashboard" element={<PrivateRoute><SellerDashboard /></PrivateRoute>} />
       <Route path="/provider-analytics" element={<PrivateRoute><ProviderAnalytics /></PrivateRoute>} />
+
+      {/* Admin panel */}
+      <Route path="/admin/*" element={<AdminRoutes />} />
 
       {/* 404 catch-all */}
       <Route path="*" element={<NotFound />} />

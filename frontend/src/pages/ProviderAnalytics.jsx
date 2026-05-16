@@ -393,7 +393,8 @@ export default function ProviderAnalytics() {
     setSettingsSaving(true);
     try {
       await apiFetch(`/api/services/${service?._id}`, { method: "PUT", body: { title: settingsForm.title, desc: settingsForm.desc, timeSlots: settingsForm.timeSlots } });
-      setService((s) => ({ ...s, ...settingsForm }));
+      // Update both field names so the local state stays consistent regardless of which the API returns
+      setService((s) => ({ ...s, title: settingsForm.title, desc: settingsForm.desc, description: settingsForm.desc, timeSlots: settingsForm.timeSlots }));
       showToast("Settings saved", "success");
     } catch (err) { showToast(err?.message || "Failed", "error"); }
     finally { setSettingsSaving(false); }
@@ -564,7 +565,7 @@ export default function ProviderAnalytics() {
             <button className="btn btn-primary btn-sm" onClick={() => setServiceModal("new")}><i className="fas fa-plus" /> Add Service</button>
           </div>
 
-          {servicesLoading ? (
+          {(servicesLoading || !servicesFetched) ? (
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
               {[1, 2, 3].map((i) => <Skel.ServiceCard key={i} />)}
             </div>
@@ -719,24 +720,35 @@ export default function ProviderAnalytics() {
       {tab === "Settings" && (
         <div>
           <h2 style={{ fontSize: "2rem", fontWeight: 800, margin: "0 0 20px" }}>Settings</h2>
-          <div className="card" style={{ padding: 20 }}>
-            <h3 style={{ margin: "0 0 16px", fontSize: "1.6rem", fontWeight: 700 }}><i className="fas fa-briefcase" style={{ marginRight: 8, color: "var(--accent)" }} />Service Settings</h3>
-            <div style={{ marginBottom: 12 }}>
-              <label style={lSty}>Service Title</label>
-              <input style={iSty} value={settingsForm.title} onChange={(e) => setSettingsForm((f) => ({ ...f, title: e.target.value }))} placeholder="e.g. Software Developer" />
+          {!service ? (
+            <div style={{ textAlign: "center", padding: "60px 20px" }}>
+              <i className="fas fa-briefcase" style={{ fontSize: "3.2rem", color: "var(--ink-4)", marginBottom: 16, display: "block" }} />
+              <p style={{ color: "var(--ink-2)", fontSize: "1.4rem", marginBottom: 8 }}>No service found.</p>
+              <p style={{ color: "var(--ink-3)", fontSize: "1.25rem", marginBottom: 20 }}>Create your first service to access settings.</p>
+              <button className="btn btn-primary" onClick={() => setTab("Services")}>
+                <i className="fas fa-plus" /> Go to Services
+              </button>
             </div>
-            <div style={{ marginBottom: 12 }}>
-              <label style={lSty}>Description</label>
-              <textarea style={{ ...iSty, height: 80, resize: "vertical" }} value={settingsForm.desc} onChange={(e) => setSettingsForm((f) => ({ ...f, desc: e.target.value }))} placeholder="Describe your service..." />
+          ) : (
+            <div className="card" style={{ padding: 20 }}>
+              <h3 style={{ margin: "0 0 16px", fontSize: "1.6rem", fontWeight: 700 }}><i className="fas fa-briefcase" style={{ marginRight: 8, color: "var(--accent)" }} />Service Settings</h3>
+              <div style={{ marginBottom: 12 }}>
+                <label style={lSty}>Service Title</label>
+                <input style={iSty} value={settingsForm.title} onChange={(e) => setSettingsForm((f) => ({ ...f, title: e.target.value }))} placeholder="e.g. Software Developer" />
+              </div>
+              <div style={{ marginBottom: 12 }}>
+                <label style={lSty}>Description</label>
+                <textarea style={{ ...iSty, height: 80, resize: "vertical" }} value={settingsForm.desc} onChange={(e) => setSettingsForm((f) => ({ ...f, desc: e.target.value }))} placeholder="Describe your service..." />
+              </div>
+              <div style={{ marginBottom: 16 }}>
+                <label style={lSty}>Availability Time Slots</label>
+                <input style={iSty} value={settingsForm.timeSlots} onChange={(e) => setSettingsForm((f) => ({ ...f, timeSlots: e.target.value }))} placeholder="e.g. Mon 9am–11am, Wed 2pm–4pm" />
+              </div>
+              <button className="btn btn-primary btn-sm" disabled={settingsSaving} onClick={saveSettings}>
+                {settingsSaving ? <i className="fas fa-spinner fa-spin" /> : <><i className="fas fa-save" /> Save Settings</>}
+              </button>
             </div>
-            <div style={{ marginBottom: 16 }}>
-              <label style={lSty}>Availability Time Slots</label>
-              <input style={iSty} value={settingsForm.timeSlots} onChange={(e) => setSettingsForm((f) => ({ ...f, timeSlots: e.target.value }))} placeholder="e.g. Mon 9am–11am, Wed 2pm–4pm" />
-            </div>
-            <button className="btn btn-primary btn-sm" disabled={settingsSaving || !service?._id} onClick={saveSettings}>
-              {settingsSaving ? <i className="fas fa-spinner fa-spin" /> : <><i className="fas fa-save" /> Save Settings</>}
-            </button>
-          </div>
+          )}
         </div>
       )}
     </div>
