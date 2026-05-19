@@ -20,6 +20,7 @@ export default function Config() {
   ]);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState('');
 
   useEffect(() => {
     apiFetch('/api/admins/config').then(d => {
@@ -30,15 +31,36 @@ export default function Config() {
   }, []);
 
   async function save() {
+    const platformFee = parseFloat(fees.platformFee);
+    const serviceFee  = parseFloat(fees.serviceFee);
+    const minPayout   = parseInt(fees.minPayout, 10);
+    if (isNaN(platformFee) || platformFee < 0 || platformFee > 100) {
+      setSaveError('Platform fee must be a number between 0 and 100.');
+      return;
+    }
+    if (isNaN(serviceFee) || serviceFee < 0 || serviceFee > 100) {
+      setSaveError('Service fee must be a number between 0 and 100.');
+      return;
+    }
+    if (isNaN(minPayout) || minPayout < 0) {
+      setSaveError('Minimum payout must be a positive number.');
+      return;
+    }
+    setSaveError('');
     setSaving(true);
     const flagsObj = Object.fromEntries(flags.map(f => [f.key, f.on]));
-    await apiFetch('/api/admins/config', {
-      method: 'PUT',
-      body: { fees, flags: flagsObj, slides },
-    }).catch(() => null);
-    setSaving(false);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2500);
+    try {
+      await apiFetch('/api/admins/config', {
+        method: 'PUT',
+        body: { fees: { ...fees, platformFee, serviceFee, minPayout }, flags: flagsObj, slides },
+      });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+    } catch (err) {
+      setSaveError(err?.message || 'Failed to save configuration. Please try again.');
+    } finally {
+      setSaving(false);
+    }
   }
 
   function toggleFlag(key) {
@@ -53,7 +75,8 @@ export default function Config() {
           <p>Platform-wide settings</p>
         </div>
         <div className="right">
-          <button className="abtn ghost" onClick={() => window.location.reload()}>Discard</button>
+          {saveError && <span style={{ color: '#ef4444', fontSize: '1.2rem', marginRight: 8 }}>{saveError}</span>}
+          <button className="abtn ghost" onClick={() => { window.location.reload(); }}>Discard</button>
           <button className="abtn primary" disabled={saving} onClick={save}>
             {saving ? <i className="fa-solid fa-circle-notch fa-spin"></i> : <><i className="fa-solid fa-check"></i> Save changes</>}
             {saved && !saving && ' ✓'}

@@ -89,6 +89,7 @@ io.on("connection", (socket) => {
   socket.on("register", (userId) => {
     if (userId) {
       onlineUsers.set(userId, socket.id);
+      socket.join(userId); // enables io.to(userId) in controllers
     }
   });
 

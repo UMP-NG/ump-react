@@ -4,16 +4,11 @@ import { StatCard } from '../components/StatCard';
 import { LineChart } from '../components/charts';
 import { apiFetch } from '../../utils/api';
 
-const MOCK_SERIES = {
-  orders:  [120,138,142,160,155,170,182,178,195,210,205,220,234,228,240,255,248,262,270,265,280,295,310,302,320,335,328,340,355,372],
-  revenue: [820,940,1020,1180,1100,1240,1320,1280,1410,1490,1450,1580,1670,1620,1740,1830,1780,1900,1980,1950,2080,2210,2330,2280,2420,2540,2480,2580,2700,2840],
-  users:   [42,55,48,62,71,68,80,75,88,92,95,103,98,110,118,115,124,132,128,140,148,144,156,162,158,170,178,175,188,196],
-};
-
 export default function Dashboard() {
   const navigate = useNavigate();
   const [metric, setMetric] = useState('orders');
   const [stats, setStats] = useState(null);
+  const [chartSeries, setChartSeries] = useState({ orders: [], revenue: [], users: [] });
   const [recentOrders, setRecentOrders] = useState([]);
   const [pendingVerif, setPendingVerif] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -21,10 +16,12 @@ export default function Dashboard() {
   useEffect(() => {
     Promise.all([
       apiFetch('/api/admins/stats').catch(() => null),
+      apiFetch('/api/admins/activity-chart').catch(() => null),
       apiFetch('/api/admins/recent-orders?limit=6').catch(() => []),
       apiFetch('/api/admins/pending-verifications?limit=4').catch(() => []),
-    ]).then(([s, orders, verif]) => {
+    ]).then(([s, chart, orders, verif]) => {
       setStats(s);
+      if (chart) setChartSeries({ orders: chart.orders || [], revenue: chart.revenue || [], users: chart.users || [] });
       setRecentOrders(Array.isArray(orders) ? orders : orders?.orders || []);
       setPendingVerif(Array.isArray(verif) ? verif : verif?.results || []);
     }).finally(() => setLoading(false));
@@ -48,42 +45,42 @@ export default function Dashboard() {
       <div className="adm-stats">
         <StatCard
           label="Total users"
-          value={loading ? '—' : (stats?.totalUsers?.toLocaleString() ?? '14,283')}
-          delta={stats?.newUsersToday ? `+${stats.newUsersToday} today` : '+126 today'}
+          value={loading ? '—' : (stats?.totalUsers?.toLocaleString() ?? '—')}
+          delta={stats?.newUsersToday ? `+${stats.newUsersToday} today` : '—'}
           icon="fa-users"
         />
         <StatCard
           label="Total sellers"
-          value={loading ? '—' : (stats?.totalSellers?.toLocaleString() ?? '942')}
-          delta={stats?.newSellersToday ? `+${stats.newSellersToday} today` : '+8 today'}
+          value={loading ? '—' : (stats?.totalSellers?.toLocaleString() ?? '—')}
+          delta={stats?.newSellersToday ? `+${stats.newSellersToday} today` : '—'}
           icon="fa-store"
           badge={stats?.pendingSellers ? <span className="pill-warn">{stats.pendingSellers} pending</span> : null}
         />
         <StatCard
           label="Active orders"
-          value={loading ? '—' : (stats?.activeOrdersValue ?? '₦4.82M')}
-          delta="+12.4% vs last 30d"
+          value={loading ? '—' : (stats?.activeOrdersValue ?? '—')}
+          delta={stats?.activeOrdersDelta ?? '—'}
           icon="fa-receipt"
         />
         <StatCard
           label="Platform revenue (30d)"
-          value={loading ? '—' : (stats?.platformRevenue30d ?? '₦612K')}
-          delta="3.2% fee · +18.7%"
+          value={loading ? '—' : (stats?.platformRevenue30d ?? '—')}
+          delta={stats?.revenueDelta ?? '—'}
           icon="fa-naira-sign"
         />
         <StatCard
           label="Pending payouts"
-          value={loading ? '—' : (stats?.pendingPayoutsValue ?? '₦1.84M')}
-          delta={stats?.pendingPayoutsCount ? `${stats.pendingPayoutsCount} requests` : '8 requests'}
+          value={loading ? '—' : (stats?.pendingPayoutsValue ?? '—')}
+          delta={stats?.pendingPayoutsCount ? `${stats.pendingPayoutsCount} requests` : '—'}
           icon="fa-money-bill-transfer"
-          badge={<span className="pill-warn">action</span>}
+          badge={stats?.pendingPayoutsCount > 0 ? <span className="pill-warn">action</span> : null}
         />
         <StatCard
           label="Flagged content"
-          value={loading ? '—' : (stats?.flaggedCount ?? '10')}
-          delta={stats ? `${stats.disputes ?? 3} disputes · ${stats.reports ?? 7} reports` : '3 disputes · 7 reports'}
+          value={loading ? '—' : (stats?.flaggedCount ?? '—')}
+          delta={stats ? `${stats.disputes ?? 0} disputes · ${stats.reports ?? 0} reports` : '—'}
           icon="fa-flag"
-          badge={<span className="pill-red">review</span>}
+          badge={stats?.flaggedCount > 0 ? <span className="pill-red">review</span> : null}
           down
         />
       </div>
@@ -107,7 +104,7 @@ export default function Dashboard() {
         </div>
         <div className="adm-card-body">
           <div className="chart-area">
-            <LineChart data={MOCK_SERIES[metric]} />
+            <LineChart data={chartSeries[metric] || []} />
           </div>
         </div>
       </div>

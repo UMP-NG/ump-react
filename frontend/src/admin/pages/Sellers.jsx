@@ -16,20 +16,21 @@ export default function Sellers() {
   const [tab, setTab] = useState(1);
   const [sellers, setSellers] = useState([]);
   const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [drawer, setDrawer] = useState(null);
   const [search, setSearch] = useState('');
 
   const fetchSellers = useCallback(() => {
     setLoading(true);
-    const params = new URLSearchParams({ limit: 20 });
+    const params = new URLSearchParams({ page, limit: 20 });
     if (TABS[tab].filter) params.set('status', TABS[tab].filter);
     if (search) params.set('q', search);
     apiFetch(`/api/admins/sellers?${params}`)
       .then(d => { setSellers(d?.sellers || d || []); setTotal(d?.total || 0); })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [tab, search]);
+  }, [tab, page, search]);
 
   useEffect(() => { fetchSellers(); }, [fetchSellers]);
 
@@ -60,7 +61,7 @@ export default function Sellers() {
       <div className="adm-filterbar">
         <div className="adm-tabs">
           {TABS.map((t, i) => (
-            <button key={t.label} className={`tab${tab === i ? ' active' : ''}`} onClick={() => setTab(i)}>
+            <button key={t.label} className={`tab${tab === i ? ' active' : ''}`} onClick={() => { setTab(i); setPage(1); }}>
               {t.label}
             </button>
           ))}
@@ -68,7 +69,7 @@ export default function Sellers() {
         <div style={{ flex: 1 }}></div>
         <div className="adm-search" style={{ maxWidth: 280 }}>
           <i className="fa-solid fa-magnifying-glass"></i>
-          <input placeholder="Search stores…" value={search} onChange={e => setSearch(e.target.value)} />
+          <input placeholder="Search stores…" value={search} onChange={e => { setSearch(e.target.value); setPage(1); }} />
         </div>
       </div>
 
@@ -130,6 +131,22 @@ export default function Sellers() {
             </tbody>
           </table>
         </div>
+        {total > 20 && (
+          <div className="adm-pagination">
+            <span>Showing {((page - 1) * 20) + 1}–{Math.min(page * 20, total)} of {total.toLocaleString()}</span>
+            <div className="pages">
+              <button className="icon-action" disabled={page === 1} onClick={() => setPage(p => p - 1)}>
+                <i className="fa-solid fa-chevron-left"></i>
+              </button>
+              {page > 1 && <button className="abtn sm ghost" onClick={() => setPage(page - 1)}>{page - 1}</button>}
+              <button className="abtn sm dark">{page}</button>
+              {page * 20 < total && <button className="abtn sm ghost" onClick={() => setPage(page + 1)}>{page + 1}</button>}
+              <button className="icon-action" disabled={page * 20 >= total} onClick={() => setPage(p => p + 1)}>
+                <i className="fa-solid fa-chevron-right"></i>
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {drawer && (

@@ -57,7 +57,7 @@ const ALLOWED_PROOF_MIMES = new Set([
 
 const imageFilter = (req, file, cb) => {
   if (ALLOWED_IMAGE_MIMES.has(file.mimetype)) return cb(null, true);
-  cb(new Error(`File type "${file.mimetype}" is not allowed. Upload JPEG, PNG, or WebP images only.`), false);
+  cb(new Error(`File type "${file.mimetype}" is not allowed. Upload JPEG, PNG, WebP, or GIF images.`), false);
 };
 
 const proofFilter = (req, file, cb) => {

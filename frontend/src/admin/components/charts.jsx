@@ -1,11 +1,14 @@
 export function LineChart({ data, color = 'var(--accent)', height = 240, fill = true }) {
+  if (!data || data.length === 0) {
+    return <div style={{ height, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontSize: '1.2rem' }}>No data</div>;
+  }
   const w = 800, h = height - 30;
   const max = Math.max(...data);
   const min = Math.min(...data);
   const range = max - min || 1;
-  const stepX = w / (data.length - 1);
+  const stepX = data.length > 1 ? w / (data.length - 1) : w;
   const pts = data.map((v, i) => [
-    i * stepX,
+    data.length > 1 ? i * stepX : w / 2,
     h - ((v - min) / range) * (h - 20) - 10,
   ]);
   const path = pts.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ');
@@ -30,7 +33,7 @@ export function LineChart({ data, color = 'var(--accent)', height = 240, fill = 
         <circle key={i} cx={p[0]} cy={p[1]} r="3" fill="#fff" stroke={color} strokeWidth="2" />
       ))}
       {labelIdxs.map(i => (
-        <text key={i} x={i * stepX} y={h + 18} fontSize="11" fill="#94a3b8" textAnchor="middle">
+        <text key={i} x={data.length > 1 ? i * stepX : w / 2} y={h + 18} fontSize="11" fill="#94a3b8" textAnchor="middle">
           {i}
         </text>
       ))}
@@ -39,8 +42,11 @@ export function LineChart({ data, color = 'var(--accent)', height = 240, fill = 
 }
 
 export function BarChart({ data, labels, height = 240 }) {
+  if (!data || data.length === 0) {
+    return <div style={{ height, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontSize: '1.2rem' }}>No data</div>;
+  }
   const w = 800, h = height - 30;
-  const max = Math.max(...data);
+  const max = Math.max(...data) || 1;
   const bw = w / data.length;
   return (
     <svg className="chart-svg" viewBox={`0 0 ${w} ${h + 26}`} preserveAspectRatio="none">
@@ -66,6 +72,9 @@ export function BarChart({ data, labels, height = 240 }) {
 
 export function PieChart({ data, size = 200 }) {
   const total = data.reduce((a, b) => a + b.v, 0);
+  if (!total) {
+    return <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} style={{ flexShrink: 0 }}><circle cx={size/2} cy={size/2} r={size/2-6} fill="#f1f5f9" /><circle cx={size/2} cy={size/2} r={(size/2-6)*0.55} fill="#fff" /></svg>;
+  }
   const r = size / 2 - 6;
   const cx = size / 2, cy = size / 2;
   let acc = 0;
@@ -96,7 +105,8 @@ export function PieChart({ data, size = 200 }) {
 }
 
 export function Spark({ data }) {
-  const max = Math.max(...data);
+  if (!data || data.length === 0) return <span className="spark" />;
+  const max = Math.max(...data) || 1;
   return (
     <span className="spark">
       {data.map((v, i) => (

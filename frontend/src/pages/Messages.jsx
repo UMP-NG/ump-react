@@ -130,10 +130,7 @@ export default function Messages() {
                   <>
                     <p style={{ fontSize: "1.4rem", color: "var(--ink-2)", marginBottom: 8 }}>Session expired</p>
                     <p style={{ fontSize: "1.2rem", color: "var(--ink-3)", marginBottom: 16 }}>Your session timed out. Sign in again to continue.</p>
-                    <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
-                      <button className="btn btn-ghost btn-sm" onClick={loadConvos}>Retry</button>
-                      <button className="btn btn-primary btn-sm" onClick={() => navigate("/login")}>Sign in again</button>
-                    </div>
+                    <button className="btn btn-primary btn-sm" onClick={() => navigate("/login")}>Sign in again</button>
                   </>
                 ) : (
                   <>

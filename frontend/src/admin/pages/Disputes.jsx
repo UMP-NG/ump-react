@@ -16,6 +16,7 @@ export default function Disputes() {
   const [outcome, setOutcome] = useState('Refund buyer in full');
   const [note, setNote] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [resolveError, setResolveError] = useState('');
 
   useEffect(() => {
     apiFetch('/api/admins/disputes?status=open')
@@ -31,15 +32,22 @@ export default function Disputes() {
   async function resolve() {
     if (!active) return;
     setSubmitting(true);
-    await apiFetch(`/api/admins/disputes/${active._id}/resolve`, {
-      method: 'POST',
-      body: { outcome, note },
-    }).catch(() => null);
-    setSubmitting(false);
-    const updated = disputes.filter(d => d._id !== active._id);
-    setDisputes(updated);
-    setActive(updated[0] || null);
-    setNote('');
+    setResolveError('');
+    try {
+      await apiFetch(`/api/admins/disputes/${active._id}/resolve`, {
+        method: 'POST',
+        body: { outcome, note },
+      });
+      const updated = disputes.filter(d => d._id !== active._id);
+      setDisputes(updated);
+      setActive(updated[0] || null);
+      setNote('');
+      setOutcome('Refund buyer in full');
+    } catch (err) {
+      setResolveError(err?.message || 'Failed to resolve dispute. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   return (
@@ -76,7 +84,7 @@ export default function Disputes() {
                       style={{ cursor: 'pointer', background: active?._id === d._id ? '#fff7ed' : undefined }}
                       onClick={() => setActive(d)}
                     >
-                      <td className="mono">{d.caseRef || `D-${d._id?.slice(-4)}`}</td>
+                      <td className="mono">{d.caseRef || `D-${d._id ? d._id.slice(-4) : '???'}`}</td>
                       <td className="mono">{d.order?.orderRef || d.orderId?.toString().slice(-6)}</td>
                       <td>{d.reason}</td>
                       <td>
@@ -147,6 +155,11 @@ export default function Disputes() {
                     ></textarea>
                   </div>
                 </div>
+                {resolveError && (
+                  <div style={{ color: '#ef4444', fontSize: '1.2rem', marginTop: 8, padding: '8px 12px', background: '#fef2f2', borderRadius: 8 }}>
+                    <i className="fa-solid fa-circle-exclamation" style={{ marginRight: 6 }}></i>{resolveError}
+                  </div>
+                )}
                 <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
                   <button className="abtn ghost" style={{ flex: 1 }}>Save draft</button>
                   <button

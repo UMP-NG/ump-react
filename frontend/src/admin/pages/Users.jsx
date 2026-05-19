@@ -32,7 +32,7 @@ export default function Users() {
   useEffect(() => { fetchUsers(); }, [fetchUsers]);
 
   const initials = name => name ? name.split(' ').map(n => n[0]).slice(0, 2).join('') : 'U';
-  const AV_COLORS = ['', 'av-b', 'av-c', 'av-d', 'av-e', 'av-f', 'av-g'];
+  const AV_COLORS = ['av-a', 'av-b', 'av-c', 'av-d', 'av-e', 'av-f', 'av-g'];
   const avColor = idx => AV_COLORS[idx % AV_COLORS.length];
 
   async function toggleBan(userId, currentStatus) {

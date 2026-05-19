@@ -11,6 +11,8 @@ export default function Admins() {
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviting, setInviting] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
+  const [inviteError, setInviteError] = useState('');
+  const [inviteSuccess, setInviteSuccess] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -24,11 +26,24 @@ export default function Admins() {
 
   async function invite() {
     if (!inviteEmail) return;
+    const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRe.test(inviteEmail)) {
+      setInviteError('Enter a valid email address.');
+      return;
+    }
+    setInviteError('');
     setInviting(true);
-    await apiFetch('/api/admins/invite', { method: 'POST', body: { email: inviteEmail } }).catch(() => null);
-    setInviting(false);
-    setInviteEmail('');
-    setShowInvite(false);
+    try {
+      await apiFetch('/api/admins/invite', { method: 'POST', body: { email: inviteEmail } });
+      setInviteEmail('');
+      setShowInvite(false);
+      setInviteSuccess(true);
+      setTimeout(() => setInviteSuccess(false), 3000);
+    } catch (err) {
+      setInviteError(err?.message || 'Failed to send invite. Please try again.');
+    } finally {
+      setInviting(false);
+    }
   }
 
   const initials = name => name ? name.split(' ').map(n => n[0]).slice(0, 2).join('') : 'AD';
@@ -47,23 +62,29 @@ export default function Admins() {
         </div>
       </div>
 
+      {inviteSuccess && (
+        <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '10px 16px', marginBottom: 12, fontSize: '1.3rem', color: '#166534' }}>
+          <i className="fa-solid fa-circle-check" style={{ marginRight: 6 }}></i> Invite sent successfully.
+        </div>
+      )}
       {showInvite && (
         <div className="adm-card" style={{ marginBottom: 16 }}>
           <div className="adm-card-body">
             <div style={{ display: 'flex', gap: 10 }}>
               <input
                 className="adm-field"
-                style={{ flex: 1, height: 38, border: '1px solid #e3e5eb', borderRadius: 9, padding: '0 12px', fontSize: '1.3rem', fontFamily: 'inherit', outline: 'none' }}
+                style={{ flex: 1, height: 38, border: `1px solid ${inviteError ? '#ef4444' : '#e3e5eb'}`, borderRadius: 9, padding: '0 12px', fontSize: '1.3rem', fontFamily: 'inherit', outline: 'none' }}
                 placeholder="admin@unilag.edu.ng"
                 value={inviteEmail}
-                onChange={e => setInviteEmail(e.target.value)}
+                onChange={e => { setInviteEmail(e.target.value); setInviteError(''); }}
                 onKeyDown={e => e.key === 'Enter' && invite()}
               />
               <button className="abtn primary" disabled={inviting || !inviteEmail} onClick={invite}>
                 {inviting ? <i className="fa-solid fa-circle-notch fa-spin"></i> : 'Send invite'}
               </button>
-              <button className="abtn ghost" onClick={() => setShowInvite(false)}>Cancel</button>
+              <button className="abtn ghost" onClick={() => { setShowInvite(false); setInviteError(''); }}>Cancel</button>
             </div>
+            {inviteError && <div style={{ color: '#ef4444', fontSize: '1.2rem', marginTop: 6 }}>{inviteError}</div>}
           </div>
         </div>
       )}

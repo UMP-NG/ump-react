@@ -71,8 +71,11 @@ export const updateUserRole = async (req, res) => {
   try {
     const { role, roles } = req.body;
 
-    // Block any attempt to grant admin via API — admin can only be set directly in the database
-    const requested = role ? [role] : Array.isArray(roles) ? roles : [];
+    // Block any attempt to grant admin via API — validate BOTH fields to prevent dual-field bypass
+    const requested = [
+      ...(role ? [role] : []),
+      ...(Array.isArray(roles) ? roles : []),
+    ];
     if (requested.some((r) => !ASSIGNABLE_ROLES.includes(r))) {
       return res.status(403).json({
         message: "Cannot assign that role via API. Privileged roles must be set directly in the database.",

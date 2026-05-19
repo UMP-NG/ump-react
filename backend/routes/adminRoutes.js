@@ -1,28 +1,26 @@
 import express from "express";
 import Admin from "../models/Admin.js";
-import { bulkImportProducts } from "../controllers/adminController.js";
+import { bulkImportProducts, updateUserRole, deleteUser, updateProduct, deleteProduct, updateListing, deleteListing, updateService, deleteService, updateOrder, deleteOrder, updateSellerStatus } from "../controllers/adminController.js";
 import { protect, requireRole } from "../middleware/authMiddleware.js";
 import { uploadSingle } from "../middleware/upload.js";
 import {
-  getAllUsers,
-  updateUserRole,
-  deleteUser,
-  getAllSellers,
-  updateSellerStatus,
-  deleteSeller,
-  getAllProducts,
-  updateProduct,
-  deleteProduct,
-  getAllListings,
-  updateListing,
-  deleteListing,
-  getAllServices,
-  updateService,
-  deleteService,
-  getAllOrders,
-  updateOrder,
-  deleteOrder,
-} from "../controllers/adminController.js";
+  getAdminStats,
+  getActivityChart,
+  getRecentOrders,
+  getPendingVerifications,
+  getAdminUsers,
+  banUser,
+  unbanUser,
+  getAdminSellers,
+  approveSeller,
+  rejectSeller,
+  getAdminOrders,
+  getOrdersSummary,
+  getAdminPayouts,
+  getPayoutsSummary,
+  approvePayout,
+  getAnalytics,
+} from "../controllers/adminDashboardController.js";
 
 const router = express.Router();
 
@@ -48,100 +46,53 @@ router.get("/", async (req, res) => {
   }
 });
 
-// ===============================
-// Users
-// ===============================
-router.get("/users", protect, requireRole("admin"), getAllUsers);
-router.put(
-  "/users/:userId/role",
-  protect,
-  requireRole("admin"),
-  updateUserRole
-);
-router.delete("/users/:userId", protect, requireRole("admin"), deleteUser);
+const adm = [protect, requireRole("admin")];
 
-// ===============================
-// Sellers
-// ===============================
-router.get("/sellers", protect, requireRole("admin"), getAllSellers);
-router.put(
-  "/sellers/:sellerId/status",
-  protect,
-  requireRole("admin"),
-  updateSellerStatus
-);
-router.delete(
-  "/sellers/:sellerId",
-  protect,
-  requireRole("admin"),
-  deleteSeller
-);
+// ── Dashboard ──────────────────────────────────────────────────────────────
+router.get("/stats",                  ...adm, getAdminStats);
+router.get("/activity-chart",         ...adm, getActivityChart);
+router.get("/recent-orders",          ...adm, getRecentOrders);
+router.get("/pending-verifications",  ...adm, getPendingVerifications);
+router.get("/analytics",              ...adm, getAnalytics);
 
-// ===============================
-// Products
-// ===============================
-router.get("/products", protect, requireRole("admin"), getAllProducts);
-router.put(
-  "/products/:productId",
-  protect,
-  requireRole("admin"),
-  updateProduct
-);
-router.delete(
-  "/products/:productId",
-  protect,
-  requireRole("admin"),
-  deleteProduct
-);
+// ── Users ──────────────────────────────────────────────────────────────────
+router.get   ("/users",                  ...adm, getAdminUsers);
+router.put   ("/users/:userId/role",     ...adm, updateUserRole);
+router.post  ("/users/:userId/ban",      ...adm, banUser);
+router.post  ("/users/:userId/unban",    ...adm, unbanUser);
+router.delete("/users/:userId",          ...adm, deleteUser);
 
-// ===============================
-// Listings
-// ===============================
-router.get("/listings", protect, requireRole("admin"), getAllListings);
-router.put(
-  "/listings/:listingId",
-  protect,
-  requireRole("admin"),
-  updateListing
-);
-router.delete(
-  "/listings/:listingId",
-  protect,
-  requireRole("admin"),
-  deleteListing
-);
+// ── Sellers ────────────────────────────────────────────────────────────────
+router.get   ("/sellers",                    ...adm, getAdminSellers);
+router.post  ("/sellers/:sellerId/approve",  ...adm, approveSeller);
+router.post  ("/sellers/:sellerId/reject",   ...adm, rejectSeller);
+router.put   ("/sellers/:sellerId/status",   ...adm, updateSellerStatus);
 
-// ===============================
-// Services
-// ===============================
-router.get("/services", protect, requireRole("admin"), getAllServices);
-router.put(
-  "/services/:serviceId",
-  protect,
-  requireRole("admin"),
-  updateService
-);
-router.delete(
-  "/services/:serviceId",
-  protect,
-  requireRole("admin"),
-  deleteService
-);
+// ── Orders ─────────────────────────────────────────────────────────────────
+router.get   ("/orders/summary",    ...adm, getOrdersSummary);
+router.get   ("/orders",            ...adm, getAdminOrders);
+router.put   ("/orders/:orderId",   ...adm, updateOrder);
+router.delete("/orders/:orderId",   ...adm, deleteOrder);
 
-// ===============================
-// Orders
-// ===============================
-router.get("/orders", protect, requireRole("admin"), getAllOrders);
-router.put("/orders/:orderId", protect, requireRole("admin"), updateOrder);
-router.delete("/orders/:orderId", protect, requireRole("admin"), deleteOrder);
+// ── Payouts ────────────────────────────────────────────────────────────────
+router.get ("/payouts/summary",            ...adm, getPayoutsSummary);
+router.get ("/payouts",                    ...adm, getAdminPayouts);
+router.post("/payouts/:payoutId/approve",  ...adm, approvePayout);
 
-router.post(
-  "/import-products",
-  protect,
-  requireRole("admin"),
-  uploadSingle,
-  bulkImportProducts
-);
+// ── Products ───────────────────────────────────────────────────────────────
+router.put   ("/products/:productId",  ...adm, updateProduct);
+router.delete("/products/:productId",  ...adm, deleteProduct);
+
+// ── Listings ───────────────────────────────────────────────────────────────
+router.put   ("/listings/:listingId",  ...adm, updateListing);
+router.delete("/listings/:listingId",  ...adm, deleteListing);
+
+// ── Services ───────────────────────────────────────────────────────────────
+router.put   ("/services/:serviceId",  ...adm, updateService);
+router.delete("/services/:serviceId",  ...adm, deleteService);
+
+// ── Bulk import ────────────────────────────────────────────────────────────
+router.post("/import-products", ...adm, uploadSingle, bulkImportProducts);
 
 export default router;
 

@@ -16,22 +16,9 @@ export default function Analytics() {
       .finally(() => setLoading(false));
   }, []);
 
-  const gmvSeries = data?.gmvDaily || Array.from({ length: 30 }, (_, i) => 800 + i * 70 + Math.random() * 200);
-  const categoryMix = data?.categoryMix || [
-    { label: 'Electronics', pct: 38, value: '54.3M', v: 38 },
-    { label: 'Books',       pct: 22, value: '31.4M', v: 22 },
-    { label: 'Food',        pct: 18, value: '25.7M', v: 18 },
-    { label: 'Fashion',     pct: 12, value: '17.1M', v: 12 },
-    { label: 'Beauty',      pct: 6,  value: '8.6M',  v: 6  },
-    { label: 'Other',       pct: 4,  value: '5.7M',  v: 4  },
-  ];
-  const topSellers = data?.topSellers || [
-    ['Bolaji Tech Hub',      412,  '8.42M'],
-    ['Aisha Wears',          386,  '6.12M'],
-    ['Mama Nkechi Kitchen',  824,  '4.84M'],
-    ['Lekan Books',         1024,  '3.20M'],
-    ['Akin Fitness',         211,  '2.18M'],
-  ];
+  const gmvSeries = data?.gmvDaily || [];
+  const categoryMix = data?.categoryMix || [];
+  const topSellers = data?.topSellers || [];
 
   return (
     <>
@@ -47,10 +34,10 @@ export default function Analytics() {
       </div>
 
       <div className="adm-stats" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
-        <MiniStat label="GMV (90d)"         value={loading ? '—' : (data?.gmv90d || '₦142.8M')}     icon="fa-naira-sign"    color="#f97316" />
-        <MiniStat label="Platform fees"     value={loading ? '—' : (data?.fees90d || '₦4.57M')}     icon="fa-percent"       color="#22c55e" />
-        <MiniStat label="Avg order value"   value={loading ? '—' : (data?.avgOrder || '₦18,420')}   icon="fa-cart-shopping" color="#3b82f6" />
-        <MiniStat label="Repeat buyer rate" value={loading ? '—' : (data?.repeatRate || '48.2%')}   icon="fa-rotate"        color="#8b5cf6" />
+        <MiniStat label="GMV (90d)"         value={loading ? '—' : (data?.gmv90d || '—')}     icon="fa-naira-sign"    color="#f97316" />
+        <MiniStat label="Platform fees"     value={loading ? '—' : (data?.fees90d || '—')}     icon="fa-percent"       color="#22c55e" />
+        <MiniStat label="Avg order value"   value={loading ? '—' : (data?.avgOrder || '—')}   icon="fa-cart-shopping" color="#3b82f6" />
+        <MiniStat label="Repeat buyer rate" value={loading ? '—' : (data?.repeatRate || '—')}   icon="fa-rotate"        color="#8b5cf6" />
       </div>
 
       <div className="adm-card" style={{ marginBottom: 16 }}>
@@ -74,20 +61,24 @@ export default function Analytics() {
       <div className="adm-2col">
         <div className="adm-card">
           <div className="adm-card-head"><h3>Category mix (GMV)</h3></div>
-          <div className="adm-card-body" style={{ display: 'flex', gap: 24, alignItems: 'center' }}>
-            <PieChart
-              data={categoryMix.map((c, i) => ({ v: c.v || c.pct, c: PIE_COLORS[i] }))}
-              size={180}
-            />
-            <div className="pie-legend" style={{ flex: 1 }}>
-              {categoryMix.map((c, i) => (
-                <div className="row" key={c.label}>
-                  <span className="lbl" style={{ '--c': PIE_COLORS[i] }}>{c.label}</span>
-                  <span className="v">{c.pct}% · <span className="naira"></span>{c.value}</span>
-                </div>
-              ))}
+          {categoryMix.length === 0 ? (
+            <div className="adm-empty"><i className="fa-solid fa-chart-pie"></i><p>No category data yet</p></div>
+          ) : (
+            <div className="adm-card-body" style={{ display: 'flex', gap: 24, alignItems: 'center' }}>
+              <PieChart
+                data={categoryMix.map((c, i) => ({ v: c.v || c.pct, c: PIE_COLORS[i] }))}
+                size={180}
+              />
+              <div className="pie-legend" style={{ flex: 1 }}>
+                {categoryMix.map((c, i) => (
+                  <div className="row" key={c.label}>
+                    <span className="lbl" style={{ '--c': PIE_COLORS[i] }}>{c.label}</span>
+                    <span className="v">{c.pct}% · <span className="naira"></span>{c.value}</span>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
         <div className="adm-card">
@@ -98,7 +89,11 @@ export default function Analytics() {
                 <tr><th>#</th><th>Store</th><th>Orders</th><th>GMV</th></tr>
               </thead>
               <tbody>
-                {topSellers.map((r, i) => (
+                {topSellers.length === 0 ? (
+                  <tr><td colSpan="4">
+                    <div className="adm-empty"><i className="fa-solid fa-store"></i><p>No seller data yet</p></div>
+                  </td></tr>
+                ) : topSellers.map((r, i) => (
                   <tr key={r[0]}>
                     <td className="mono">{String(i + 1).padStart(2, '0')}</td>
                     <td>{r[0]}</td>

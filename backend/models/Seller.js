@@ -38,6 +38,7 @@ const sellerSchema = new mongoose.Schema(
     // ✅ Store Verification
     isVerified: { type: Boolean, default: false },
     verificationRequested: { type: Boolean, default: false },
+    isSuspended: { type: Boolean, default: false },
 
     // ✅ Relationship with products
     products: [{ type: mongoose.Schema.Types.ObjectId, ref: "Product" }],

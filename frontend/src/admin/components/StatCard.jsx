@@ -15,10 +15,11 @@ export function StatCard({ label, value, delta, icon, badge, down }) {
 }
 
 export function MiniStat({ label, value, icon, color }) {
+  const safeColor = color || '#6366f1';
   return (
     <div className="adm-stat" style={{ padding: '14px 16px' }}>
       <div className="lbl">
-        <span className="ico" style={{ background: color + '22', color }}>
+        <span className="ico" style={{ background: safeColor + '22', color: safeColor }}>
           <i className={`fa-solid ${icon}`}></i>
         </span>
         {label}

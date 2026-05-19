@@ -18,6 +18,7 @@ export default function Payouts() {
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState(new Set());
   const [processing, setProcessing] = useState(null);
+  const [batchProcessing, setBatchProcessing] = useState(false);
 
   const fetchPayouts = useCallback(() => {
     setLoading(true);
@@ -39,15 +40,24 @@ export default function Payouts() {
 
   async function approvePayout(payoutId) {
     setProcessing(payoutId);
-    await apiFetch(`/api/admins/payouts/${payoutId}/approve`, { method: 'POST' }).catch(() => null);
-    setProcessing(null);
-    fetchPayouts();
+    try {
+      await apiFetch(`/api/admins/payouts/${payoutId}/approve`, { method: 'POST' });
+    } catch {
+      // error is visible via the refresh — table stays consistent
+    } finally {
+      setProcessing(null);
+      fetchPayouts();
+    }
   }
 
   async function batchApprove() {
-    const ids = [...selected];
+    const ids = selected.size > 0 ? [...selected] : payouts.map(p => p._id);
     if (!ids.length) return;
-    await Promise.all(ids.map(id => apiFetch(`/api/admins/payouts/${id}/approve`, { method: 'POST' }).catch(() => null)));
+    setBatchProcessing(true);
+    for (const id of ids) {
+      await apiFetch(`/api/admins/payouts/${id}/approve`, { method: 'POST' }).catch(() => null);
+    }
+    setBatchProcessing(false);
     setSelected(new Set());
     fetchPayouts();
   }
@@ -64,8 +74,11 @@ export default function Payouts() {
         <div className="right">
           <button className="abtn ghost"><i className="fa-solid fa-download"></i> Export</button>
           {tab === 0 && pendingCount > 0 && (
-            <button className="abtn primary" onClick={batchApprove}>
-              <i className="fa-solid fa-bolt"></i> Batch approve ({selected.size || pendingCount})
+            <button className="abtn primary" disabled={batchProcessing} onClick={batchApprove}>
+              {batchProcessing
+                ? <><i className="fa-solid fa-circle-notch fa-spin"></i> Processing…</>
+                : <><i className="fa-solid fa-bolt"></i> {selected.size > 0 ? `Approve selected (${selected.size})` : `Approve all (${pendingCount})`}</>
+              }
             </button>
           )}
         </div>
