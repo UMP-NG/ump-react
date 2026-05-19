@@ -52,8 +52,9 @@ export const updateUserProfile = async (req, res) => {
       }
     }
 
-    // Save with validation
-    await user.save();
+    // Only validate fields that were actually modified so the email regex
+    // does not reject existing accounts when other fields are updated.
+    await user.save({ validateModifiedOnly: true });
 
     // Return updated user without password
     const updatedUser = user.toObject();

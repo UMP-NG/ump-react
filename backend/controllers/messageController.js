@@ -43,8 +43,13 @@ export const sendMessage = async (req, res) => {
     });
 
     // ✅ Emit via Socket.io
-    getIO()?.to(receiver.toString()).emit("new_message", message);
-    getIO()?.to(req.user._id.toString()).emit("new_message", message);
+    const io = getIO();
+    if (io) {
+      io.to(receiver.toString()).emit("new_message", message);
+      io.to(req.user._id.toString()).emit("new_message", message);
+    } else if (process.env.NODE_ENV !== "production") {
+      console.warn("⚠️  Socket.io unavailable — real-time delivery skipped for message", message._id);
+    }
 
     res.status(201).json({ success: true, message });
   } catch (error) {

@@ -299,6 +299,7 @@ export const updateOrderStatus = async (req, res) => {
     if (status !== "cancelled" && FLOW[status] <= FLOW[order.status])
       return res.status(400).json({ message: `Cannot move from "${order.status}" to "${status}"` });
 
+    const previousStatus = order.status;
     order.status = status;
 
     // ── On COMPLETED: release escrow to seller ───────────────────────────────
@@ -353,7 +354,7 @@ export const updateOrderStatus = async (req, res) => {
       entity: "Order",
       entityId: order._id,
       amount: order.totalAmount,
-      meta: { previousStatus: order.status, newStatus: status },
+      meta: { previousStatus, newStatus: status },
       req,
     });
 

@@ -43,7 +43,6 @@ const uploadToCloudinary = (buffer, filename, folder, isVideo = false) => {
 
 const ALLOWED_IMAGE_MIMES = new Set([
   "image/jpeg",
-  "image/jpg",
   "image/png",
   "image/webp",
   "image/gif",
@@ -51,7 +50,6 @@ const ALLOWED_IMAGE_MIMES = new Set([
 
 const ALLOWED_PROOF_MIMES = new Set([
   "image/jpeg",
-  "image/jpg",
   "image/png",
   "image/webp",
   "application/pdf",

@@ -13,6 +13,8 @@ import {
 import { protect } from "../middleware/authMiddleware.js";
 import { authLimiter, otpLimiter, passwordResetLimiter } from "../middleware/rateLimits.js";
 import User from "../models/User.js";
+import { getFirebaseAuth } from "../config/firebaseAdmin.js";
+import crypto from "crypto";
 
 const router = express.Router();
 
@@ -81,6 +83,79 @@ router.put("/me", protect, async (req, res) => {
     res.json({ message: "Profile updated", user });
   } catch (error) {
     res.status(500).json({ message: "Server error" });
+  }
+});
+
+// ── Google Sign-In via Firebase ────────────────────────────────────────────────
+// Frontend sends the Firebase ID token; backend verifies it with Firebase Admin.
+// Requires FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY in .env
+router.post("/google", authLimiter, async (req, res) => {
+  try {
+    const { idToken } = req.body;
+    if (!idToken) return res.status(400).json({ message: "No ID token provided" });
+
+    const firebaseAuth = getFirebaseAuth();
+    if (!firebaseAuth) {
+      return res.status(503).json({ message: "Google sign-in is not configured on this server yet" });
+    }
+
+    // Verify token with Firebase Admin — throws if invalid/expired
+    const decoded = await firebaseAuth.verifyIdToken(idToken);
+    const { email, name, picture } = decoded;
+
+    if (!email) return res.status(400).json({ message: "Email not returned by Google" });
+
+    // Only allow UNILAG student emails
+    const unilagRegex = /^[1-9]\d{7,}@live\.unilag\.edu\.ng$/i;
+    if (!unilagRegex.test(email)) {
+      return res.status(403).json({
+        message: "Only UNILAG student emails (@live.unilag.edu.ng) are allowed. Sign in with your school Google account.",
+      });
+    }
+
+    let user = await User.findOne({ email });
+
+    if (!user) {
+      // First-time Google sign-in — create verified account with a random unusable password
+      user = new User({
+        name: name || email.split("@")[0],
+        email,
+        password: crypto.randomBytes(32).toString("hex"),
+        isVerified: true,
+        avatar: picture ? { url: picture, publicId: "" } : undefined,
+      });
+      await user.save({ validateBeforeSave: false });
+    }
+
+    const token = generateToken(user._id);
+    res.cookie("token", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+      path: "/",
+    });
+
+    res.json({
+      message: "Google sign-in successful",
+      user: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        avatar: user.avatar,
+        isVerified: user.isVerified,
+        roles: user.roles,
+        role: user.role,
+        bio: user.bio,
+        createdAt: user.createdAt,
+      },
+    });
+  } catch (error) {
+    console.error("Google auth error:", error);
+    const msg = error?.code === "auth/argument-error" || error?.code === "auth/id-token-expired"
+      ? "Google token is invalid or expired — please try again"
+      : "Server error during Google sign-in";
+    res.status(500).json({ message: msg });
   }
 });
 

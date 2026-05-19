@@ -3,6 +3,8 @@ import { useNavigate, useLocation } from "react-router-dom";
 import Logo from "../components/Logo";
 import { apiFetch } from "../utils/api";
 import { useUser } from "../context/UserContext";
+import { auth } from "../config/firebase";
+import { GoogleAuthProvider, signInWithPopup } from "firebase/auth";
 
 const DOMAIN = "@live.unilag.edu.ng";
 
@@ -58,6 +60,7 @@ export default function Login() {
   const [remember, setRemember] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [googleLoading, setGoogleLoading] = useState(false);
 
   const email = matric.trim() ? `${matric.trim()}${DOMAIN}` : "";
 
@@ -96,6 +99,28 @@ export default function Login() {
   }
 
   function switchTab(t) { setTab(t); setError(""); setPassword(""); setConfirm(""); }
+
+  async function handleGoogleClick() {
+    setError("");
+    setGoogleLoading(true);
+    try {
+      const provider = new GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: "select_account" });
+      const result = await signInWithPopup(auth, provider);
+      const idToken = await result.user.getIdToken();
+      const data = await apiFetch("/api/auth/google", { method: "POST", body: { idToken } });
+      setUser(data.user || data);
+      navigate(routeState?.from || "/");
+    } catch (err) {
+      if (err?.code === "auth/popup-closed-by-user") {
+        // user dismissed — no toast needed
+      } else {
+        setError(err?.message || "Google sign-in failed");
+      }
+    } finally {
+      setGoogleLoading(false);
+    }
+  }
 
   const pwOk = {
     len: password.length >= 6,
@@ -291,8 +316,16 @@ export default function Login() {
             <div style={{ flex: 1, height: 1, background: "var(--line)" }} />
           </div>
 
-          <button type="button" className="btn btn-light btn-block" style={{ gap: 10 }}>
-            <i className="fab fa-google" /> Continue with Google
+          <button
+            type="button"
+            className="btn btn-light btn-block"
+            style={{ gap: 10 }}
+            onClick={handleGoogleClick}
+            disabled={googleLoading || loading}
+          >
+            {googleLoading
+              ? <i className="fas fa-spinner fa-spin" />
+              : <><i className="fab fa-google" /> Continue with Google</>}
           </button>
 
           <p style={{ textAlign: "center", marginTop: 20, fontSize: "1.15rem", color: "var(--ink-3)" }}>

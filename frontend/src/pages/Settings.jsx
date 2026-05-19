@@ -73,8 +73,8 @@ function ProfileTab({ user, setUser, showToast }) {
       await apiFetch("/api/users/me", { method: "PUT", body: { avatar } });
       setUser((u) => ({ ...u, avatar }));
       showToast("Profile photo updated", "success");
-    } catch {
-      showToast("Photo upload failed", "error");
+    } catch (err) {
+      showToast(err?.message || "Photo upload failed", "error");
     } finally {
       setUploading(false);
     }
@@ -87,8 +87,8 @@ function ProfileTab({ user, setUser, showToast }) {
       const data = await apiFetch("/api/users/me", { method: "PUT", body: form });
       setUser((u) => ({ ...u, ...data.user }));
       showToast("Profile saved", "success");
-    } catch {
-      showToast("Failed to save profile", "error");
+    } catch (err) {
+      showToast(err?.message || "Failed to save profile", "error");
     } finally {
       setSaving(false);
     }
@@ -168,6 +168,36 @@ function StrengthMeter({ password }) {
   );
 }
 
+// ─── Password field — must live outside SecurityTab so React doesn't treat it
+// as a new component type on every keystroke (which would unmount the input
+// and dismiss the mobile keyboard on each render).
+function PasswordField({ label, value, onChange, visible, onToggle, children }) {
+  return (
+    <>
+      <div className="label">{label}</div>
+      <div style={{ position: "relative" }}>
+        <input
+          className="input"
+          type={visible ? "text" : "password"}
+          value={value}
+          onChange={onChange}
+          style={{ paddingRight: 44 }}
+          required
+        />
+        <button
+          type="button"
+          onClick={onToggle}
+          style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", border: "none", background: "none", cursor: "pointer", color: "var(--ink-3)", fontSize: "1.4rem" }}
+        >
+          <i className={`fas fa-eye${visible ? "-slash" : ""}`} />
+        </button>
+      </div>
+      <div style={{ height: 12 }} />
+      {children}
+    </>
+  );
+}
+
 // ─── Security tab ─────────────────────────────────────────────────────────────
 function SecurityTab({ showToast, onAccountDeleted }) {
   const [form, setForm] = useState({ currentPassword: "", newPassword: "", confirm: "" });
@@ -198,34 +228,6 @@ function SecurityTab({ showToast, onAccountDeleted }) {
     }
   }
 
-  function PasswordField({ id, label, value, onChange, children }) {
-    const visible = show[id];
-    return (
-      <>
-        <div className="label">{label}</div>
-        <div style={{ position: "relative" }}>
-          <input
-            className="input"
-            type={visible ? "text" : "password"}
-            value={value}
-            onChange={onChange}
-            style={{ paddingRight: 44 }}
-            required
-          />
-          <button
-            type="button"
-            onClick={() => setShow((s) => ({ ...s, [id]: !s[id] }))}
-            style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", border: "none", background: "none", cursor: "pointer", color: "var(--ink-3)", fontSize: "1.4rem" }}
-          >
-            <i className={`fas fa-eye${visible ? "-slash" : ""}`} />
-          </button>
-        </div>
-        <div style={{ height: 12 }} />
-        {children}
-      </>
-    );
-  }
-
   const confirmMatch = form.confirm && form.newPassword === form.confirm;
   const confirmMismatch = form.confirm && form.newPassword !== form.confirm;
 
@@ -233,11 +235,11 @@ function SecurityTab({ showToast, onAccountDeleted }) {
     <form onSubmit={handleSubmit}>
       <div className="card" style={{ padding: 16, marginBottom: 16 }}>
         <h3 style={{ margin: "0 0 16px", fontSize: "1.5rem", fontWeight: 700 }}>Change password</h3>
-        <PasswordField id="current" label="Current password" value={form.currentPassword} onChange={(e) => setForm({ ...form, currentPassword: e.target.value })} />
-        <PasswordField id="new" label="New password" value={form.newPassword} onChange={(e) => setForm({ ...form, newPassword: e.target.value })}>
+        <PasswordField label="Current password" value={form.currentPassword} onChange={(e) => setForm({ ...form, currentPassword: e.target.value })} visible={show.current} onToggle={() => setShow((s) => ({ ...s, current: !s.current }))} />
+        <PasswordField label="New password" value={form.newPassword} onChange={(e) => setForm({ ...form, newPassword: e.target.value })} visible={show.new} onToggle={() => setShow((s) => ({ ...s, new: !s.new }))}>
           <StrengthMeter password={form.newPassword} />
         </PasswordField>
-        <PasswordField id="confirm" label="Confirm new password" value={form.confirm} onChange={(e) => setForm({ ...form, confirm: e.target.value })} />
+        <PasswordField label="Confirm new password" value={form.confirm} onChange={(e) => setForm({ ...form, confirm: e.target.value })} visible={show.confirm} onToggle={() => setShow((s) => ({ ...s, confirm: !s.confirm }))} />
         {confirmMismatch && (
           <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "1.2rem", color: "#ef4444", marginTop: -6, marginBottom: 12 }}>
             <i className="fas fa-circle-xmark" /> Passwords don't match

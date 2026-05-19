@@ -6,7 +6,37 @@ import compression from "compression";
 import path from "path";
 import cookieParser from "cookie-parser";
 import { fileURLToPath } from "url";
-import mongoSanitize from "express-mongo-sanitize";
+// express-mongo-sanitize is incompatible with Express 5 (req.query is a read-only getter).
+// Custom sanitizer below mutates query properties in-place instead of reassigning req.query.
+function _sanitizeValue(v) {
+  if (Array.isArray(v)) return v.map(_sanitizeValue);
+  if (v !== null && typeof v === "object") return _sanitizeDoc(v);
+  return v;
+}
+function _sanitizeDoc(doc) {
+  const out = {};
+  for (const k of Object.keys(doc)) {
+    const clean = k.replace(/[$.]/g, "_");
+    if (clean !== k && process.env.NODE_ENV !== "production")
+      console.warn(`⚠️  Sanitized key: ${k}`);
+    out[clean] = _sanitizeValue(doc[k]);
+  }
+  return out;
+}
+function mongoSanitize() {
+  return (req, _res, next) => {
+    if (req.body && typeof req.body === "object") req.body = _sanitizeDoc(req.body);
+    if (req.params && typeof req.params === "object") req.params = _sanitizeDoc(req.params);
+    if (req.query && typeof req.query === "object") {
+      // Express 5: req.query is getter-only — mutate the existing object in-place
+      const q = req.query;
+      const sanitized = _sanitizeDoc(q);
+      for (const k of Object.keys(q)) delete q[k];
+      Object.assign(q, sanitized);
+    }
+    next();
+  };
+}
 import hpp from "hpp";
 import { globalLimiter } from "./middleware/rateLimits.js";
 
@@ -115,10 +145,19 @@ app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 app.use(cookieParser());
 
 // ── NoSQL injection prevention — strip $ and . from keys
-app.use(mongoSanitize({ replaceWith: "_", onSanitize: ({ key }) => { if (process.env.NODE_ENV !== "production") console.warn(`⚠️  Sanitized key: ${key}`); } }));
+app.use(mongoSanitize());
 
 // ── HTTP Parameter Pollution — use last value for duplicated params
 app.use(hpp());
+
+// ── Health check — registered before rate limiter so monitors are never throttled
+app.get("/health", (req, res) => {
+  res.status(200).json({
+    status: "✅ Server is running",
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+  });
+});
 
 // ── Global rate limiter
 app.use(globalLimiter);
@@ -210,17 +249,6 @@ import { existsSync } from "fs";
 const STATIC_DIR = path.join(__dirname, "../frontend/dist");
 const hasFrontendBuild = existsSync(path.join(STATIC_DIR, "index.html"));
 if (hasFrontendBuild) app.use(express.static(STATIC_DIR));
-
-// ----------------------------
-// 🏥 HEALTH CHECK - For debugging
-// ----------------------------
-app.get("/health", (req, res) => {
-  res.status(200).json({
-    status: "✅ Server is running",
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime(),
-  });
-});
 
 // ----------------------------
 // 🚏 ROUTES

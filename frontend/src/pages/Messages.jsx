@@ -5,6 +5,7 @@ import BottomNav from "../components/BottomNav";
 import Ph from "../components/Ph";
 import Skel from "../components/Skel";
 import { apiFetch } from "../utils/api";
+import { useUser } from "../context/UserContext";
 
 function getAvatarUrl(avatar) {
   if (!avatar) return null;
@@ -26,6 +27,7 @@ function Avatar({ avatar, name, size = 44 }) {
 
 export default function Messages() {
   const navigate = useNavigate();
+  const { user } = useUser();
   const [searchParams] = useSearchParams();
   const withId   = searchParams.get("with");
   const withName = searchParams.get("name") || "Seller";
@@ -39,12 +41,13 @@ export default function Messages() {
     withId ? { receiverId: withId, otherUser: { _id: withId, name: decodeURIComponent(withName) } } : null
   );
 
-  useEffect(() => {
+  function loadConvos() {
+    setLoadingList(true);
+    setAuthError(false);
     apiFetch("/api/messages/conversations")
       .then((d) => {
         const list = Array.isArray(d) ? d : (d.conversations || []);
         setConvos(list);
-        // Mark all conversations with unread messages as read
         list.forEach((c) => {
           if ((c.unreadCount || 0) > 0) {
             const otherId = c.conversationWith || c._id;
@@ -54,7 +57,9 @@ export default function Messages() {
       })
       .catch((err) => { if (err?.status === 401) setAuthError(true); })
       .finally(() => setLoadingList(false));
-  }, []);
+  }
+
+  useEffect(() => { loadConvos(); }, []);
 
   function openThread(convo) {
     const receiverId = convo.receiverId || convo.conversationWith || convo._id;
@@ -121,8 +126,21 @@ export default function Messages() {
             ) : authError ? (
               <div style={{ padding: "40px 16px", textAlign: "center" }}>
                 <i className="fas fa-lock" style={{ fontSize: "2.8rem", color: "var(--ink-4)", marginBottom: 12 }} />
-                <p style={{ fontSize: "1.4rem", color: "var(--ink-2)", marginBottom: 16 }}>Sign in to view messages</p>
-                <button className="btn btn-primary btn-sm" onClick={() => navigate("/login")}>Sign in</button>
+                {user ? (
+                  <>
+                    <p style={{ fontSize: "1.4rem", color: "var(--ink-2)", marginBottom: 8 }}>Session expired</p>
+                    <p style={{ fontSize: "1.2rem", color: "var(--ink-3)", marginBottom: 16 }}>Your session timed out. Sign in again to continue.</p>
+                    <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
+                      <button className="btn btn-ghost btn-sm" onClick={loadConvos}>Retry</button>
+                      <button className="btn btn-primary btn-sm" onClick={() => navigate("/login")}>Sign in again</button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <p style={{ fontSize: "1.4rem", color: "var(--ink-2)", marginBottom: 16 }}>Sign in to view messages</p>
+                    <button className="btn btn-primary btn-sm" onClick={() => navigate("/login")}>Sign in</button>
+                  </>
+                )}
               </div>
             ) : filtered.length === 0 ? (
               <div style={{ padding: "40px 16px", textAlign: "center" }}>
@@ -259,8 +277,8 @@ function MsgThread({ convo, onBack }) {
   if (authError) return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16, padding: 24 }}>
       <i className="fas fa-lock" style={{ fontSize: "3rem", color: "var(--ink-4)" }} />
-      <p style={{ fontSize: "1.5rem", color: "var(--ink-2)", textAlign: "center" }}>Please sign in to send messages</p>
-      <button className="btn btn-primary" onClick={() => navigate("/login")}>Sign in</button>
+      <p style={{ fontSize: "1.5rem", color: "var(--ink-2)", textAlign: "center" }}>Session expired — please sign in again</p>
+      <button className="btn btn-primary" onClick={() => navigate("/login")}>Sign in again</button>
       <button className="btn btn-ghost" onClick={onBack}>Go back</button>
     </div>
   );
