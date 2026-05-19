@@ -2,6 +2,8 @@ import http from "http";
 import { Server } from "socket.io";
 import mongoose from "mongoose";
 import dotenv from "dotenv";
+import jwt from "jsonwebtoken";
+import cookie from "cookie";
 import app from "./app.js";
 import Message from "./models/Message.js";
 import { setIO } from "./utils/socket.js";
@@ -85,12 +87,23 @@ const onlineUsers = new Map();
 
 // 💬 Socket.io Events
 io.on("connection", (socket) => {
-  // Register user
+  // Resolve the verified user identity from the JWT cookie at connection time.
+  // This prevents a client from registering as a different user's ID.
+  let verifiedUserId = null;
+  try {
+    const cookies = cookie.parse(socket.handshake.headers.cookie || "");
+    const decoded = jwt.verify(cookies.token || "", process.env.JWT_SECRET);
+    verifiedUserId = decoded.id?.toString();
+  } catch {
+    // Unauthenticated socket — real-time delivery won't work until user signs in
+  }
+
   socket.on("register", (userId) => {
-    if (userId) {
-      onlineUsers.set(userId, socket.id);
-      socket.join(userId); // enables io.to(userId) in controllers
-    }
+    if (!userId) return;
+    // Reject if the client tries to impersonate a different user
+    if (verifiedUserId && userId.toString() !== verifiedUserId) return;
+    onlineUsers.set(userId, socket.id);
+    socket.join(userId); // enables io.to(userId) in controllers
   });
 
   // Handle sending messages

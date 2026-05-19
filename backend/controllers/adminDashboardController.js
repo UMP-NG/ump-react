@@ -206,10 +206,13 @@ export const getAdminUsers = async (req, res) => {
 
     const filter = {};
     if (role) filter.roles = role;
-    if (q)    filter.$or = [
-      { name:  { $regex: q, $options: "i" } },
-      { email: { $regex: q, $options: "i" } },
-    ];
+    if (q) {
+      const safeQ = q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      filter.$or = [
+        { name:  { $regex: safeQ, $options: "i" } },
+        { email: { $regex: safeQ, $options: "i" } },
+      ];
+    }
 
     const [users, total] = await Promise.all([
       User.find(filter)
@@ -502,14 +505,15 @@ export const getPayoutsSummary = async (req, res) => {
 
 export const approvePayout = async (req, res) => {
   try {
-    const payout = await Payout.findById(req.params.payoutId);
-    if (!payout) return res.status(404).json({ message: "Payout not found" });
-    if (payout.status !== "pending") return res.status(400).json({ message: "Payout is not pending" });
+    // Atomic check-and-update: only transitions from "pending" → "processing" once,
+    // preventing double-deduction if two requests arrive simultaneously.
+    const payout = await Payout.findOneAndUpdate(
+      { _id: req.params.payoutId, status: "pending" },
+      { $set: { status: "processing" } },
+      { new: true }
+    );
+    if (!payout) return res.status(400).json({ message: "Payout not found or already processed" });
 
-    payout.status = "processing";
-    await payout.save();
-
-    // Deduct from seller's pendingPayout balance
     if (payout.seller) {
       await Seller.findOneAndUpdate(
         { user: payout.seller },
@@ -554,7 +558,7 @@ export const getAnalytics = async (req, res) => {
             as: "prod",
           },
         },
-        { $unwind: { path: "$prod", preserveNullAndEmpty: true } },
+        { $unwind: { path: "$prod", preserveNullAndEmptyArrays: true } },
         {
           $group: {
             _id:   { $ifNull: ["$prod.category", "Other"] },
@@ -585,7 +589,7 @@ export const getAnalytics = async (req, res) => {
             as: "sellerDoc",
           },
         },
-        { $unwind: { path: "$sellerDoc", preserveNullAndEmpty: true } },
+        { $unwind: { path: "$sellerDoc", preserveNullAndEmptyArrays: true } },
       ]),
 
       // Repeat buyer rate
