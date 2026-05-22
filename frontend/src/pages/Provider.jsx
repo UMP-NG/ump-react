@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Navigate } from "react-router-dom";
 import Logo from "../components/Logo";
 import { apiFetch } from "../utils/api";
 import { useUser } from "../context/UserContext";
@@ -28,10 +28,11 @@ export default function Provider() {
   const [tab, setTab]       = useState("seller");
   const [loading, setLoading] = useState(false);
   const [error, setError]   = useState("");
+  const [termsAgreed, setTermsAgreed] = useState(false);
 
   const [seller, setSeller] = useState({
     storeName: "", businessName: "", bio: "",
-    category: "", description: "", location: "",
+    category: [], description: "", location: "",
   });
 
   const [service, setService] = useState({
@@ -41,6 +42,12 @@ export default function Provider() {
     duration: "", certifications: "", portfolio: "",
     policies: "", timeSlots: "", isAvailable: false, tags: "",
   });
+
+  const isLimited = user?.isLimitedAccount;
+
+  if (isLimited) {
+    return <Navigate to="/settings?tab=verify" replace />;
+  }
 
   async function uploadFile(file) {
     const fd = new FormData();
@@ -62,6 +69,16 @@ export default function Provider() {
         }
         if (!seller.logoFile) {
           setError("Store logo is required — please upload a logo.");
+          setLoading(false);
+          return;
+        }
+        if (!seller.category || seller.category.length === 0) {
+          setError("Please select at least one product category.");
+          setLoading(false);
+          return;
+        }
+        if (!termsAgreed) {
+          setError("Please read and agree to the Terms of Service and Seller Policy before applying.");
           setLoading(false);
           return;
         }
@@ -218,13 +235,41 @@ export default function Provider() {
                   : <ProviderForm service={service} setService={setService} />
                 }
 
+                {/* Terms agreement */}
+                <div style={{ marginTop: 24, padding: "14px 16px", background: "rgba(249,115,22,.05)", border: "1px solid rgba(249,115,22,.2)", borderRadius: "var(--r-md)", display: "flex", gap: 12, alignItems: "flex-start" }}>
+                  <input
+                    type="checkbox"
+                    id="terms-agree"
+                    checked={termsAgreed}
+                    onChange={(e) => setTermsAgreed(e.target.checked)}
+                    style={{ marginTop: 3, width: 18, height: 18, accentColor: "var(--accent)", flexShrink: 0, cursor: "pointer" }}
+                  />
+                  <label htmlFor="terms-agree" style={{ fontSize: "1.25rem", color: "var(--ink-2)", lineHeight: 1.6, cursor: "pointer" }}>
+                    I have read and agree to UMP's{" "}
+                    <span
+                      style={{ color: "var(--accent)", fontWeight: 700, cursor: "pointer" }}
+                      onClick={(e) => { e.preventDefault(); navigate("/terms"); }}
+                    >
+                      Terms of Service
+                    </span>
+                    {" "}and{" "}
+                    <span
+                      style={{ color: "var(--accent)", fontWeight: 700, cursor: "pointer" }}
+                      onClick={(e) => { e.preventDefault(); navigate("/terms#seller-terms"); }}
+                    >
+                      Seller & Service Provider Policy
+                    </span>
+                    . I understand that my application is subject to review and approval.
+                  </label>
+                </div>
+
                 {error && (
                   <div style={{ marginTop: 16, padding: "12px 16px", background: "#fef2f2", color: "#dc2626", borderRadius: "var(--r-md)", fontSize: "1.3rem", display: "flex", alignItems: "center", gap: 10 }}>
                     <i className="fas fa-circle-exclamation" /> {error}
                   </div>
                 )}
 
-                <button className="btn btn-primary btn-block btn-lg" type="submit" disabled={loading} style={{ marginTop: 24, borderRadius: "var(--r-pill)" }}>
+                <button className="btn btn-primary btn-block btn-lg" type="submit" disabled={loading || !termsAgreed} style={{ marginTop: 16, borderRadius: "var(--r-pill)" }}>
                   {loading
                     ? <i className="fas fa-spinner fa-spin" />
                     : <><i className="fas fa-paper-plane" /> {tab === "seller" ? "Submit Seller Application" : "Submit Provider Application"} <i className="fas fa-arrow-right" /></>}
@@ -373,11 +418,36 @@ function SellerForm({ seller, setSeller }) {
       </FormSection>
 
       <FormSection title="Details">
-        <Field label="Product Category" required>
-          <select className="select" value={s.category} onChange={set("category")} required>
-            <option value="">Select a category</option>
-            {SELLER_CATS.map((c) => <option key={c}>{c}</option>)}
-          </select>
+        <Field label="Product Categories" required hint="Select all that apply">
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 4 }}>
+            {SELLER_CATS.map((c) => {
+              const selected = Array.isArray(s.category) && s.category.includes(c);
+              return (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => setSeller((prev) => ({
+                    ...prev,
+                    category: selected
+                      ? prev.category.filter((x) => x !== c)
+                      : [...(prev.category || []), c],
+                  }))}
+                  style={{
+                    padding: "7px 15px", borderRadius: "var(--r-pill)", cursor: "pointer",
+                    border: `1.5px solid ${selected ? "var(--accent)" : "var(--line)"}`,
+                    background: selected ? "rgba(249,115,22,.1)" : "var(--surface)",
+                    color: selected ? "var(--accent)" : "var(--ink-2)",
+                    fontWeight: selected ? 700 : 500,
+                    fontSize: "1.25rem", transition: "all .15s",
+                    display: "flex", alignItems: "center", gap: 6,
+                  }}
+                >
+                  {selected && <i className="fas fa-check" style={{ fontSize: "1rem" }} />}
+                  {c}
+                </button>
+              );
+            })}
+          </div>
         </Field>
         <Field label="Store Description">
           <textarea className="textarea" style={{ minHeight: 90 }} placeholder="Tell buyers what makes your store special — products, pricing, turnaround…" value={s.description} onChange={set("description")} />

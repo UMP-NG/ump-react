@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import Logo from "../components/Logo";
-import { apiFetch } from "../utils/api";
+import { apiFetch, setToken } from "../utils/api";
 import { useUser } from "../context/UserContext";
 import { auth } from "../config/firebase";
 import { GoogleAuthProvider, signInWithPopup } from "firebase/auth";
@@ -58,6 +58,7 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [remember, setRemember] = useState(true);
+  const [termsAgreed, setTermsAgreed] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [googleLoading, setGoogleLoading] = useState(false);
@@ -81,6 +82,7 @@ export default function Login() {
     if (tab === "signup") {
       const pwErr = validatePassword();
       if (pwErr) { setError(pwErr); return; }
+      if (!termsAgreed) { setError("Please read and agree to our Terms of Service and Privacy Policy before creating an account."); return; }
     }
 
     setLoading(true);
@@ -89,6 +91,7 @@ export default function Login() {
       const body = tab === "signin" ? { email, password } : { name, email, password };
       const data = await apiFetch(endpoint, { method: "POST", body });
       if (tab === "signup") { navigate("/auth", { state: { email } }); return; }
+      if (data.token) setToken(data.token);
       setUser(data.user || data);
       navigate("/");
     } catch (err) {
@@ -98,7 +101,7 @@ export default function Login() {
     }
   }
 
-  function switchTab(t) { setTab(t); setError(""); setPassword(""); setConfirm(""); }
+  function switchTab(t) { setTab(t); setError(""); setPassword(""); setConfirm(""); setTermsAgreed(false); }
 
   async function handleGoogleClick() {
     setError("");
@@ -109,7 +112,13 @@ export default function Login() {
       const result = await signInWithPopup(auth, provider);
       const idToken = await result.user.getIdToken();
       const data = await apiFetch("/api/auth/google", { method: "POST", body: { idToken } });
+      if (data.token) setToken(data.token);
       setUser(data.user || data);
+      if (data.user?.isLimitedAccount || data.isLimitedAccount) {
+        setError("__limited__");
+        // Don't navigate yet — show the warning inline so the user sees it
+        return;
+      }
       navigate(routeState?.from || "/");
     } catch (err) {
       if (err?.code === "auth/popup-closed-by-user") {
@@ -292,16 +301,74 @@ export default function Login() {
               </div>
             )}
 
-            {/* Error */}
-            {error && (
+            {/* Error / limited-account warning */}
+            {error === "__limited__" ? (
+              <div style={{ marginBottom: 16, padding: "14px 16px", background: "#fff7ed", border: "1px solid #fed7aa", borderRadius: "var(--r-md)", fontSize: "1.3rem" }}>
+                <div style={{ display: "flex", gap: 8, alignItems: "flex-start", marginBottom: 10 }}>
+                  <i className="fa-solid fa-triangle-exclamation" style={{ color: "#f97316", marginTop: 2, flexShrink: 0 }} />
+                  <div>
+                    <div style={{ fontWeight: 700, color: "#9a3412", marginBottom: 4 }}>Limited account</div>
+                    <div style={{ color: "#c2410c", lineHeight: 1.5 }}>
+                      You're signed in, but this is not a UNILAG student email. You can <strong>browse and buy</strong> products, but you <strong>cannot sell, list, or offer services</strong> until you link your school email.
+                    </div>
+                  </div>
+                </div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button
+                    type="button"
+                    className="btn btn-sm"
+                    style={{ flex: 1, background: "#f97316", color: "#fff", border: "none", borderRadius: 8, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", fontSize: "1.25rem", padding: "8px 0" }}
+                    onClick={() => navigate("/settings?tab=verify")}
+                  >
+                    Link school email
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-ghost"
+                    style={{ flex: 1, borderRadius: 8, fontSize: "1.25rem", padding: "8px 0" }}
+                    onClick={() => navigate(routeState?.from || "/")}
+                  >
+                    Continue anyway
+                  </button>
+                </div>
+              </div>
+            ) : error ? (
               <div style={{ marginBottom: 16, padding: "10px 14px", background: "#fef2f2", color: "#dc2626", borderRadius: "var(--r-md)", fontSize: "1.3rem", display: "flex", alignItems: "center", gap: 8 }}>
                 <i className="fas fa-circle-exclamation" />
                 {error}
               </div>
+            ) : null}
+
+            {/* T&C checkbox — signup only */}
+            {tab === "signup" && (
+              <label style={{ display: "flex", alignItems: "flex-start", gap: 10, marginBottom: 16, cursor: "pointer", padding: "12px 14px", background: "var(--surface)", borderRadius: "var(--r-md)", border: `1.5px solid ${termsAgreed ? "var(--accent)" : "var(--line)"}`, transition: "border-color .2s" }}>
+                <input
+                  type="checkbox"
+                  checked={termsAgreed}
+                  onChange={(e) => setTermsAgreed(e.target.checked)}
+                  style={{ width: 17, height: 17, marginTop: 2, accentColor: "var(--accent)", cursor: "pointer", flexShrink: 0 }}
+                />
+                <span style={{ fontSize: "1.2rem", color: "var(--ink-2)", lineHeight: 1.6 }}>
+                  I have read and agree to UMP's{" "}
+                  <span
+                    style={{ color: "var(--accent)", fontWeight: 600, cursor: "pointer" }}
+                    onClick={(e) => { e.preventDefault(); navigate("/terms"); }}
+                  >
+                    Terms of Service
+                  </span>
+                  {" "}and{" "}
+                  <span
+                    style={{ color: "var(--accent)", fontWeight: 600, cursor: "pointer" }}
+                    onClick={(e) => { e.preventDefault(); navigate("/privacy"); }}
+                  >
+                    Privacy Policy
+                  </span>
+                </span>
+              </label>
             )}
 
             {/* Submit */}
-            <button className="btn btn-primary btn-block btn-lg" type="submit" disabled={loading} style={{ borderRadius: "var(--r-pill)" }}>
+            <button className="btn btn-primary btn-block btn-lg" type="submit" disabled={loading || (tab === "signup" && !termsAgreed)} style={{ borderRadius: "var(--r-pill)" }}>
               {loading
                 ? <i className="fas fa-spinner fa-spin" />
                 : <>{tab === "signin" ? "Sign in" : "Create account"} <i className="fas fa-arrow-right" /></>
@@ -328,11 +395,13 @@ export default function Login() {
               : <><i className="fab fa-google" /> Continue with Google</>}
           </button>
 
-          <p style={{ textAlign: "center", marginTop: 20, fontSize: "1.15rem", color: "var(--ink-3)" }}>
-            By continuing you agree to our{" "}
-            <span style={{ color: "var(--ink-1)", fontWeight: 600, cursor: "pointer" }}>Terms</span> &amp;{" "}
-            <span style={{ color: "var(--ink-1)", fontWeight: 600, cursor: "pointer" }}>Privacy Policy</span>.
-          </p>
+          {tab === "signin" && (
+            <p style={{ textAlign: "center", marginTop: 20, fontSize: "1.15rem", color: "var(--ink-3)" }}>
+              By signing in you agree to our{" "}
+              <span style={{ color: "var(--accent)", fontWeight: 600, cursor: "pointer" }} onClick={() => navigate("/terms")}>Terms</span> &amp;{" "}
+              <span style={{ color: "var(--accent)", fontWeight: 600, cursor: "pointer" }} onClick={() => navigate("/privacy")}>Privacy Policy</span>.
+            </p>
+          )}
         </div>
       </div>
     </div>

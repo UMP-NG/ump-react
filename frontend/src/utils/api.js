@@ -7,6 +7,16 @@ export const API_BASE =
     : "https://ump-html-1.onrender.com");
 
 // -------------------------------
+// JWT storage (Authorization header fallback)
+// Supplements the httpOnly cookie for environments where cross-origin
+// cookies are blocked (third-party cookie restrictions, some mobile browsers).
+// -------------------------------
+const TOKEN_KEY = "ump_tk";
+export const setToken   = (t) => { try { if (t) localStorage.setItem(TOKEN_KEY, t); } catch {} };
+export const getToken   = ()    => { try { return localStorage.getItem(TOKEN_KEY); } catch { return null; } };
+export const clearToken = ()    => { try { localStorage.removeItem(TOKEN_KEY); } catch {} };
+
+// -------------------------------
 // Cookie helpers
 // -------------------------------
 export function cookieSet(name, value, days = 1) {
@@ -33,16 +43,22 @@ export function cookieRemove(name) {
 // API fetch helper
 // -------------------------------
 export async function apiFetch(path, options = {}) {
-  const headers = options.headers || {};
+  const headers = { ...(options.headers || {}) };
   if (!headers["Content-Type"] && !(options.body instanceof FormData)) {
     headers["Content-Type"] = "application/json";
+  }
+
+  // Attach stored JWT as Authorization header fallback (complements httpOnly cookie)
+  const stored = getToken();
+  if (stored && !headers["Authorization"]) {
+    headers["Authorization"] = `Bearer ${stored}`;
   }
 
   try {
     const res = await fetch(`${API_BASE}${path}`, {
       ...options,
       headers,
-      credentials: "include", // include cookies automatically
+      credentials: "include",
       body:
         options.body && !(options.body instanceof FormData)
           ? JSON.stringify(options.body)
@@ -58,9 +74,14 @@ export async function apiFetch(path, options = {}) {
     }
 
     if (!res.ok) {
-      const err = new Error(
-        data?.message || res.statusText || "Request failed"
-      );
+      if (res.status === 401) {
+        clearToken();
+        const err = new Error("Session expired. Please log in again.");
+        err.status = 401;
+        err.body = data;
+        throw err;
+      }
+      const err = new Error(data?.message || res.statusText || "Request failed");
       err.status = res.status;
       err.body = data;
       throw err;

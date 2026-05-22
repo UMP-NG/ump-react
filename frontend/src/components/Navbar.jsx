@@ -44,6 +44,7 @@ export default function Navbar({ frosted = false, dark = false }) {
     ? (user.name || user.email || "U").split(" ").map((p) => p[0]).join("").slice(0, 2).toUpperCase()
     : "?";
   const avatarUrl = user?.avatar?.url || (typeof user?.avatar === "string" ? user.avatar : null);
+  const [avatarBroken, setAvatarBroken] = useState(false);
 
   function handleSearch(e) {
     e.preventDefault();
@@ -168,9 +169,9 @@ export default function Navbar({ frosted = false, dark = false }) {
                     <i className="fas fa-bag-shopping" />
                     {cartCount > 0 && <span className="badge-dot" />}
                   </button>
-                  <div className="avatar" onClick={() => setShowProfile(true)} style={{ overflow: "hidden", padding: avatarUrl ? 0 : undefined }}>
-                    {avatarUrl
-                      ? <img src={avatarUrl} alt={user.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                  <div className="avatar" onClick={() => setShowProfile(true)} style={{ overflow: "hidden", padding: avatarUrl && !avatarBroken ? 0 : undefined }}>
+                    {avatarUrl && !avatarBroken
+                      ? <img src={avatarUrl} alt={user.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={() => setAvatarBroken(true)} />
                       : initials}
                   </div>
                 </>

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { apiFetch } from '../../utils/api';
 
 const DEFAULT_FLAGS = [
@@ -10,6 +10,8 @@ const DEFAULT_FLAGS = [
   { key: 'maintenanceMode',      label: 'Maintenance mode',        sub: 'Block all non-admin traffic',   on: false },
 ];
 
+const DEFAULT_LOGO = '/images/ump-icon.svg';
+
 export default function Config() {
   const [fees, setFees] = useState({ platformFee: '3.2', serviceFee: '5.0', minPayout: '2000', payoutCadence: 'Daily' });
   const [flags, setFlags] = useState(DEFAULT_FLAGS);
@@ -18,6 +20,9 @@ export default function Config() {
     { title: 'Hostel hub now live',  url: '/hostel',                 on: true },
     { title: 'Eat — ₦500 off first order', url: '/food',             on: true },
   ]);
+  const [logo, setLogo] = useState({ url: '', publicId: '' });
+  const [logoUploading, setLogoUploading] = useState(false);
+  const logoInputRef = useRef();
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState('');
@@ -27,6 +32,7 @@ export default function Config() {
       if (d?.fees) setFees(f => ({ ...f, ...d.fees }));
       if (d?.flags) setFlags(prev => prev.map(f => ({ ...f, on: d.flags[f.key] ?? f.on })));
       if (d?.slides) setSlides(d.slides);
+      if (d?.logo?.url) setLogo(d.logo);
     }).catch(() => {});
   }, []);
 
@@ -52,7 +58,7 @@ export default function Config() {
     try {
       await apiFetch('/api/admins/config', {
         method: 'PUT',
-        body: { fees: { ...fees, platformFee, serviceFee, minPayout }, flags: flagsObj, slides },
+        body: { fees: { ...fees, platformFee, serviceFee, minPayout }, flags: flagsObj, slides, logo },
       });
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
@@ -65,6 +71,22 @@ export default function Config() {
 
   function toggleFlag(key) {
     setFlags(prev => prev.map(f => f.key === key ? { ...f, on: !f.on } : f));
+  }
+
+  async function handleLogoUpload(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    setLogoUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const data = await apiFetch('/api/upload', { method: 'POST', body: fd });
+      setLogo({ url: data.url, publicId: data.publicId || '' });
+    } catch (err) {
+      setSaveError(err?.message || 'Logo upload failed');
+    } finally {
+      setLogoUploading(false);
+    }
   }
 
   return (
@@ -85,6 +107,41 @@ export default function Config() {
       </div>
 
       <div className="adm-2col">
+        {/* Branding */}
+        <div className="adm-card">
+          <div className="adm-card-head"><h3>Branding</h3></div>
+          <div className="adm-card-body">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 16 }}>
+              <div style={{ width: 72, height: 72, borderRadius: 16, overflow: 'hidden', background: '#f1f5f9', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid #e2e8f0' }}>
+                {logoUploading
+                  ? <i className="fa-solid fa-circle-notch fa-spin" style={{ fontSize: '1.8rem', color: '#94a3b8' }} />
+                  : <img src={logo.url || DEFAULT_LOGO} alt="App logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                }
+              </div>
+              <div>
+                <div style={{ fontWeight: 600, marginBottom: 4 }}>App logo</div>
+                <div className="muted" style={{ fontSize: '1.2rem', marginBottom: 8 }}>Shown in navbar, footer and install prompt.</div>
+                <button
+                  className="abtn ghost sm"
+                  onClick={() => logoInputRef.current?.click()}
+                  disabled={logoUploading}
+                >
+                  <i className="fa-solid fa-upload"></i> {logoUploading ? 'Uploading…' : 'Upload new logo'}
+                </button>
+                <input ref={logoInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleLogoUpload} />
+              </div>
+            </div>
+            {logo.url && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div className="mono muted" style={{ fontSize: '1.15rem', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{logo.url}</div>
+                <button className="abtn ghost sm" onClick={() => setLogo({ url: '', publicId: '' })}>
+                  <i className="fa-solid fa-trash"></i>
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+
         <div className="adm-card">
           <div className="adm-card-head"><h3>Fees &amp; commission</h3></div>
           <div className="adm-card-body">

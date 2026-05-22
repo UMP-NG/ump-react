@@ -80,18 +80,18 @@ const CONTACT = [
   {
     icon: "brands fa-instagram",
     label: "Instagram",
-    sub: "@ump.ng — DMs open",
+    sub: "@shop.myump — DMs open",
     color: "#e1306c",
     bg: "rgba(225,48,108,.1)",
-    action: () => window.open("https://instagram.com/ump.ng", "_blank"),
+    action: () => window.open("https://www.instagram.com/shop.myump?igsh=MjdyNHd0MTdlcDJs&utm_source=qr", "_blank", "noopener,noreferrer"),
   },
   {
     icon: "brands fa-x-twitter",
     label: "X (Twitter)",
-    sub: "@ump_ng",
+    sub: "@shopmyump",
     color: "#000",
     bg: "rgba(0,0,0,.07)",
-    action: () => window.open("https://twitter.com/ump_ng", "_blank"),
+    action: () => window.open("https://x.com/shopmyump?s=21", "_blank", "noopener,noreferrer"),
   },
 ];
 

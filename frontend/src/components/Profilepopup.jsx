@@ -1,6 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { useUser } from "../context/UserContext";
-import { apiFetch } from "../utils/api";
+import { apiFetch, clearToken } from "../utils/api";
 
 export default function ProfilePopup({ onClose }) {
   const navigate = useNavigate();
@@ -10,15 +10,17 @@ export default function ProfilePopup({ onClose }) {
   const isSeller   = roles.includes("seller");
   const isProvider = roles.includes("service_provider");
   const isAdmin    = Array.isArray(user?.roles) ? user.roles.includes("admin") : user?.role === "admin";
+  const isLimited  = user?.isLimitedAccount;
 
   const MENU = [
     ...(isAdmin ? [{ icon: "user-shield", label: "Admin panel", path: "/admin", admin: true }] : []),
     { icon: "box-archive",        label: "My orders",           path: "/orders" },
     { icon: "heart",              label: "Wishlist",            path: "/wishlist" },
-    ...(isSeller   ? [{ icon: "store",             label: "Seller dashboard",   path: "/seller-dashboard" }] : []),
-    ...(isProvider ? [{ icon: "hand-holding-heart", label: "Provider analytics", path: "/provider-analytics" }] : []),
-    ...(!isSeller && !isProvider ? [{ icon: "circle-plus", label: "Become a seller / provider", path: "/partner", accent: true }] : []),
-    ...(isSeller !== isProvider  ? [{ icon: "circle-plus", label: "Add another role", path: "/partner", accent: true }] : []),
+    ...(!isLimited && isSeller   ? [{ icon: "store",              label: "Seller dashboard",         path: "/seller-dashboard" }] : []),
+    ...(!isLimited && isProvider ? [{ icon: "hand-holding-heart", label: "Provider analytics",       path: "/provider-analytics" }] : []),
+    ...(!isLimited && !isSeller && !isProvider ? [{ icon: "circle-plus", label: "Become a seller / provider", path: "/partner", accent: true }] : []),
+    ...(!isLimited && isSeller !== isProvider  ? [{ icon: "circle-plus", label: "Add another role",           path: "/partner", accent: true }] : []),
+    ...(isLimited ? [{ icon: "link", label: "Link school email", path: "/settings?tab=verify", accent: true }] : []),
     { icon: "gear",               label: "Settings",            path: "/settings" },
     { icon: "circle-question",    label: "Help & support",      path: "/help" },
   ];
@@ -30,6 +32,7 @@ export default function ProfilePopup({ onClose }) {
 
   async function handleLogout() {
     try { await apiFetch("/api/auth/logout", { method: "POST" }); } catch {}
+    clearToken();
     setUser(null);
     onClose();
     navigate("/login");
@@ -47,7 +50,7 @@ export default function ProfilePopup({ onClose }) {
         <div style={{ padding: 16, display: "flex", alignItems: "center", gap: 12, background: "linear-gradient(135deg, var(--navy-800), #1e1b4b)", color: "#fff" }}>
           <div className="avatar" style={{ width: 44, height: 44, overflow: "hidden", padding: avatarUrl ? 0 : undefined }}>
               {avatarUrl
-                ? <img src={avatarUrl} alt={user?.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                ? <img src={avatarUrl} alt={user?.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={(e) => { e.currentTarget.style.display = "none"; }} />
                 : initials}
             </div>
           <div style={{ minWidth: 0 }}>

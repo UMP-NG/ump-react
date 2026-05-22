@@ -120,11 +120,18 @@ export default function Hostel() {
             ? [1, 2, 3].map((i) => <Skel.HostelCard key={i} />)
             : visible.length === 0
             ? (
-                <div className="empty-state">
-                  <i className="fas fa-bed" />
-                  <h3>No rooms found</h3>
-                  <p>{filter !== "All" ? `No "${filter}" listings yet` : "No listings near UNILAG yet — be the first to post"}</p>
-                  <button className="btn btn-primary btn-sm" style={{ marginTop: 12 }} onClick={() => navigate("/partner")}>Post a listing</button>
+                <div style={{ gridColumn: "1 / -1", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "64px 24px", textAlign: "center" }}>
+                  <div style={{ width: 72, height: 72, borderRadius: "50%", background: "var(--surface)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 20 }}>
+                    <i className="fas fa-bed" style={{ fontSize: "2.8rem", color: "var(--ink-3)" }} />
+                  </div>
+                  <h3 style={{ margin: "0 0 8px", fontSize: "1.8rem", fontWeight: 700 }}>
+                    {filter !== "All" ? `No "${filter}" listings` : "No listings yet"}
+                  </h3>
+                  <p style={{ margin: 0, color: "var(--ink-3)", fontSize: "1.3rem", maxWidth: 300, lineHeight: 1.5 }}>
+                    {filter !== "All"
+                      ? "Try a different room type or clear your filters."
+                      : "No off-campus stays around UNILAG have been listed yet. Check back soon."}
+                  </p>
                 </div>
               )
             : visible.map((h, i) => (

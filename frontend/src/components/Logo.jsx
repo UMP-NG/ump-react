@@ -1,7 +1,9 @@
 import { useNavigate } from "react-router-dom";
+import { useAppConfig } from "../context/AppConfigContext";
 
 export default function Logo() {
   const navigate = useNavigate();
+  const { logoUrl } = useAppConfig();
   function handleKey(e) {
     if (e.key === "Enter" || e.key === " ") { e.preventDefault(); navigate("/"); }
   }
@@ -15,7 +17,7 @@ export default function Logo() {
       style={{ cursor: "pointer" }}
       aria-label="UMP – go to home"
     >
-      <img src="/images/ump-icon.svg" alt="" style={{ height: 36, width: 36, borderRadius: 8, display: "block" }} />
+      <img src={logoUrl} alt="" style={{ height: 36, width: 36, borderRadius: 8, display: "block" }} />
     </div>
   );
 }

@@ -4,7 +4,7 @@ import Logo from "./Logo";
 const COLS = [
   { h: "Explore", links: [["Home", "/"], ["Marketplace", "/market"], ["Services", "/services"], ["Hostel Hub", "/hostel"], ["Store", "/store"]] },
   { h: "Account", links: [["Sign In", "/login"], ["Create Account", "/login"], ["My Cart", "/cart"], ["Messages", "/messages"]] },
-  { h: "Support", links: [["Help Centre", "#"], ["FAQs", "#"], ["Report Issue", "#"], ["Privacy Policy", "#"]] },
+  { h: "Support", links: [["Help Centre", "#"], ["FAQs", "#"], ["Report Issue", "#"], ["Privacy Policy", "/privacy"], ["Terms of Service", "/terms"]] },
   { h: "Company", links: [["About UMP", "#"], ["Blog", "#"], ["Careers", "#"], ["Contact", "#"]] },
 ];
 
@@ -36,9 +36,18 @@ export default function Footer() {
         ))}
       </div>
       <div style={{ display: "flex", gap: 12, marginBottom: 20 }}>
-        {["facebook-f", "twitter", "instagram", "linkedin-in"].map((ic) => (
-          <div key={ic} style={{ width: 36, height: 36, borderRadius: "50%", background: "rgba(255,255,255,.08)", display: "inline-flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}>
-            <i className={`fab fa-${ic}`} style={{ fontSize: "1.3rem" }} />
+        {[
+          { icon: "facebook-f",  href: "#" },
+          { icon: "x-twitter",   href: "https://x.com/shopmyump?s=21" },
+          { icon: "instagram",   href: "https://www.instagram.com/shop.myump?igsh=MjdyNHd0MTdlcDJs&utm_source=qr" },
+          { icon: "linkedin-in", href: "#" },
+        ].map(({ icon, href }) => (
+          <div
+            key={icon}
+            onClick={() => href !== "#" && window.open(href, "_blank", "noopener,noreferrer")}
+            style={{ width: 36, height: 36, borderRadius: "50%", background: "rgba(255,255,255,.08)", display: "inline-flex", alignItems: "center", justifyContent: "center", cursor: href !== "#" ? "pointer" : "default" }}
+          >
+            <i className={`fab fa-${icon}`} style={{ fontSize: "1.3rem" }} />
           </div>
         ))}
       </div>

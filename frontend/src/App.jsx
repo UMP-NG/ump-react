@@ -2,7 +2,9 @@ import { Routes, Route } from "react-router-dom";
 import FloatingChat from "./components/FloatingChat";
 import PrivateRoute from "./components/PrivateRoute";
 import InstallPrompt from "./components/InstallPrompt";
+import LimitedAccountBanner from "./components/LimitedAccountBanner";
 import AdminRoutes from "./admin/index";
+import { AppConfigProvider } from "./context/AppConfigContext";
 
 import Home from "./pages/Home";
 import Market from "./pages/Market";
@@ -35,10 +37,13 @@ import ProviderAnalytics from "./pages/ProviderAnalytics";
 import Category from "./pages/Category";
 import Search from "./pages/Search";
 import NotFound from "./pages/NotFound";
+import Terms from "./pages/Terms";
+import Privacy from "./pages/Privacy";
 
 export default function App() {
   return (
-    <>
+    <AppConfigProvider>
+    <LimitedAccountBanner />
     <FloatingChat />
     <InstallPrompt />
     <Routes>
@@ -75,7 +80,7 @@ export default function App() {
       {/* Sellers / Store */}
       <Route path="/store" element={<Store />} />
       <Route path="/store/:id" element={<StoreDetail />} />
-      <Route path="/partner" element={<Provider />} />
+      <Route path="/partner" element={<PrivateRoute><Provider /></PrivateRoute>} />
 
       {/* User account — protected */}
       <Route path="/orders" element={<PrivateRoute><Orders /></PrivateRoute>} />
@@ -89,9 +94,13 @@ export default function App() {
       {/* Admin panel */}
       <Route path="/admin/*" element={<AdminRoutes />} />
 
+      {/* Legal */}
+      <Route path="/terms"   element={<Terms />} />
+      <Route path="/privacy" element={<Privacy />} />
+
       {/* 404 catch-all */}
       <Route path="*" element={<NotFound />} />
     </Routes>
-    </>
+    </AppConfigProvider>
   );
 }

@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useAppConfig } from "../context/AppConfigContext";
 
 // iPadOS 13+ reports itself as MacIntel but has multiple touch points
 function isIosDevice() {
@@ -18,6 +19,7 @@ function isAlreadyInstalled() {
 }
 
 export default function InstallPrompt() {
+  const { logoUrl } = useAppConfig();
   const [prompt, setPrompt] = useState(null);
   const [show, setShow] = useState(false);
   const [iosMode, setIosMode] = useState(false);
@@ -28,14 +30,11 @@ export default function InstallPrompt() {
     if (sessionStorage.getItem("pwa-dismissed")) return;
 
     if (isIosDevice()) {
-      // iOS/Safari never fires beforeinstallprompt — show manual instructions
-      // after a short delay so it doesn't appear before the page has loaded
       setIosMode(true);
       const t = setTimeout(() => setShow(true), 2500);
       return () => clearTimeout(t);
     }
 
-    // Android / desktop: use the native browser install prompt
     const handler = (e) => {
       e.preventDefault();
       setPrompt(e);
@@ -83,6 +82,18 @@ export default function InstallPrompt() {
     borderRadius: 18,
     boxShadow: "0 8px 40px rgba(0,0,0,.45)",
     animation: "slideUp .3s ease",
+    padding: "14px 16px",
+  };
+
+  const closeBtn = {
+    background: "transparent",
+    border: "none",
+    color: "rgba(255,255,255,.5)",
+    cursor: "pointer",
+    fontSize: "1.4rem",
+    padding: "4px 8px",
+    fontFamily: "var(--font-sans)",
+    flexShrink: 0,
   };
 
   // ── iOS: step-by-step manual install guide ────────────────────────────────
@@ -92,7 +103,7 @@ export default function InstallPrompt() {
         role="dialog"
         aria-modal="true"
         aria-labelledby="install-dialog-title"
-        style={{ ...bannerBase, padding: "14px 16px" }}
+        style={bannerBase}
       >
         <style>{`@keyframes slideUp{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}`}</style>
 
@@ -100,7 +111,7 @@ export default function InstallPrompt() {
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <img
-              src="/images/ump-icon.svg"
+              src={logoUrl}
               alt=""
               style={{ width: 36, height: 36, borderRadius: 8, flexShrink: 0 }}
             />
@@ -108,16 +119,7 @@ export default function InstallPrompt() {
               Install UMP
             </div>
           </div>
-          <button
-            onClick={dismiss}
-            aria-label="Dismiss"
-            style={{
-              background: "transparent", border: "none",
-              color: "rgba(255,255,255,.5)", cursor: "pointer",
-              fontSize: "1.4rem", padding: "4px 8px",
-              fontFamily: "var(--font-sans)",
-            }}
-          >
+          <button onClick={dismiss} aria-label="Dismiss" style={closeBtn}>
             <i className="fas fa-xmark" aria-hidden="true" />
           </button>
         </div>
@@ -171,61 +173,57 @@ export default function InstallPrompt() {
       role="dialog"
       aria-modal="true"
       aria-labelledby="install-dialog-title"
-      style={{ ...bannerBase, padding: "14px 16px", display: "flex", alignItems: "center", gap: 12 }}
+      style={bannerBase}
     >
       <style>{`@keyframes slideUp{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}`}</style>
 
-      <img
-        src="/images/ump-icon.svg"
-        alt=""
-        style={{ width: 44, height: 44, borderRadius: 12, objectFit: "cover", flexShrink: 0 }}
-      />
-
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div id="install-dialog-title" style={{ fontWeight: 700, fontSize: "1.35rem", lineHeight: 1.3 }}>
-          Install UMP
+      {/* Header row */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <img
+            src={logoUrl}
+            alt=""
+            style={{ width: 36, height: 36, borderRadius: 8, objectFit: "cover", flexShrink: 0 }}
+          />
+          <div id="install-dialog-title" style={{ fontWeight: 700, fontSize: "1.35rem" }}>
+            Install UMP
+          </div>
         </div>
-        <div style={{ fontSize: "1.1rem", color: "rgba(255,255,255,.65)", marginTop: 2 }}>
-          Add to home screen for faster access
-        </div>
-      </div>
-
-      <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
-        <button
-          onClick={dismiss}
-          style={{
-            background: "transparent",
-            border: "1px solid rgba(255,255,255,.2)",
-            color: "rgba(255,255,255,.7)",
-            borderRadius: 8,
-            padding: "6px 10px",
-            cursor: "pointer",
-            fontSize: "1.15rem",
-            fontFamily: "var(--font-sans)",
-          }}
-        >
-          Not now
-        </button>
-        <button
-          onClick={handleInstall}
-          disabled={installing}
-          aria-busy={installing}
-          aria-label={installing ? "Installing…" : "Install UMP"}
-          style={{
-            background: "#f97316",
-            color: "#fff",
-            border: "none",
-            borderRadius: 8,
-            padding: "6px 14px",
-            fontWeight: 700,
-            fontSize: "1.25rem",
-            cursor: "pointer",
-            fontFamily: "var(--font-sans)",
-          }}
-        >
-          {installing ? <i className="fas fa-spinner fa-spin" aria-hidden="true" /> : "Install"}
+        <button onClick={dismiss} aria-label="Dismiss" style={closeBtn}>
+          <i className="fas fa-xmark" aria-hidden="true" />
         </button>
       </div>
+
+      <div style={{ fontSize: "1.2rem", color: "rgba(255,255,255,.65)", marginBottom: 14 }}>
+        Add to home screen for faster access
+      </div>
+
+      <button
+        onClick={handleInstall}
+        disabled={installing}
+        aria-busy={installing}
+        aria-label={installing ? "Installing…" : "Install UMP"}
+        style={{
+          width: "100%",
+          background: "#f97316",
+          color: "#fff",
+          border: "none",
+          borderRadius: 10,
+          padding: "10px 0",
+          fontWeight: 700,
+          fontSize: "1.3rem",
+          cursor: "pointer",
+          fontFamily: "var(--font-sans)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: 8,
+        }}
+      >
+        {installing
+          ? <i className="fas fa-spinner fa-spin" aria-hidden="true" />
+          : <><i className="fas fa-download" aria-hidden="true" /> Install</>}
+      </button>
     </div>
   );
 }

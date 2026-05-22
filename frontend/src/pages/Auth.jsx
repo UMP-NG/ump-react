@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { apiFetch } from "../utils/api";
+import { apiFetch, setToken } from "../utils/api";
 import { useUser } from "../context/UserContext";
 
 export default function Auth() {
@@ -38,7 +38,8 @@ export default function Auth() {
     setLoading(true);
     setError("");
     try {
-      await apiFetch("/api/auth/verify-otp", { method: "POST", body: { email, otp: code } });
+      const data = await apiFetch("/api/auth/verify-otp", { method: "POST", body: { email, otp: code } });
+      if (data.token) setToken(data.token);
       navigate("/login", { state: { verified: true, email } });
     } catch (err) {
       setError(err.message || "Invalid code, try again");
