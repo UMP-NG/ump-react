@@ -1,10 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import Logo from "../components/Logo";
 import { apiFetch, setToken } from "../utils/api";
 import { useUser } from "../context/UserContext";
 import { auth } from "../config/firebase";
-import { GoogleAuthProvider, signInWithPopup } from "firebase/auth";
+import { GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult } from "firebase/auth";
 
 const DOMAIN = "@live.unilag.edu.ng";
 
@@ -103,31 +103,62 @@ export default function Login() {
 
   function switchTab(t) { setTab(t); setError(""); setPassword(""); setConfirm(""); setTermsAgreed(false); }
 
+  async function finishGoogleAuth(result) {
+    const idToken = await result.user.getIdToken();
+    const data = await apiFetch("/api/auth/google", { method: "POST", body: { idToken } });
+    if (data.token) setToken(data.token);
+    setUser(data.user || data);
+    if (data.user?.isLimitedAccount || data.isLimitedAccount) {
+      setError("__limited__");
+      setGoogleLoading(false);
+      return;
+    }
+    navigate(routeState?.from || "/");
+  }
+
+  // Handle result when browser falls back to redirect sign-in
+  useEffect(() => {
+    let active = true;
+    getRedirectResult(auth)
+      .then(async (result) => {
+        if (!result || !active) return;
+        setGoogleLoading(true);
+        await finishGoogleAuth(result);
+      })
+      .catch((err) => {
+        if (!active) return;
+        if (err?.code !== "auth/popup-closed-by-user") {
+          setError(err?.message || "Google sign-in failed");
+        }
+        setGoogleLoading(false);
+      });
+    return () => { active = false; };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   async function handleGoogleClick() {
     setError("");
     setGoogleLoading(true);
+    const provider = new GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: "select_account" });
     try {
-      const provider = new GoogleAuthProvider();
-      provider.setCustomParameters({ prompt: "select_account" });
       const result = await signInWithPopup(auth, provider);
-      const idToken = await result.user.getIdToken();
-      const data = await apiFetch("/api/auth/google", { method: "POST", body: { idToken } });
-      if (data.token) setToken(data.token);
-      setUser(data.user || data);
-      if (data.user?.isLimitedAccount || data.isLimitedAccount) {
-        setError("__limited__");
-        // Don't navigate yet — show the warning inline so the user sees it
-        return;
-      }
-      navigate(routeState?.from || "/");
+      await finishGoogleAuth(result);
     } catch (err) {
       if (err?.code === "auth/popup-closed-by-user") {
-        // user dismissed — no toast needed
+        setGoogleLoading(false);
+      } else if (err?.code === "auth/popup-blocked") {
+        // Browser blocked the popup — silently fall back to redirect
+        try {
+          await signInWithRedirect(auth, provider);
+          // Page will reload after redirect; loading stays true intentionally
+        } catch (redirectErr) {
+          setError(redirectErr?.message || "Google sign-in failed. Please try again.");
+          setGoogleLoading(false);
+        }
       } else {
         setError(err?.message || "Google sign-in failed");
+        setGoogleLoading(false);
       }
-    } finally {
-      setGoogleLoading(false);
     }
   }
 
