@@ -4,6 +4,11 @@ import Seller from "../models/Seller.js";
 import Order from "../models/Order.js";
 import Payout from "../models/Payout.js";
 import Product from "../models/Product.js";
+import Service from "../models/Service.js";
+import AuditLog from "../models/AuditLog.js";
+import Broadcast from "../models/Broadcast.js";
+import Config from "../models/Config.js";
+import Admin from "../models/Admin.js";
 
 // ─── helpers ────────────────────────────────────────────────────────────────
 const fmt = (n) => {
@@ -646,6 +651,321 @@ export const getAnalytics = async (req, res) => {
     });
   } catch (err) {
     console.error("getAnalytics:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+// ─── ADMIN TEAM ───────────────────────────────────────────────────────────────
+export const getAdminTeam = async (req, res) => {
+  try {
+    const admins = await Admin.find({ isActive: true })
+      .select("name email avatar adminRole twoFAEnabled lastActive createdAt")
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const shaped = admins.map((a) => ({
+      ...a,
+      avatar: a.avatar?.url || "/images/admin-default.png",
+      lastActiveLabel: a.lastActive
+        ? new Date(a.lastActive).toLocaleDateString("en-GB", { day: "numeric", month: "short" })
+        : "Never",
+    }));
+
+    res.json({ admins: shaped });
+  } catch (err) {
+    console.error("getAdminTeam:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+// ─── ADMIN ACTIVITY LOG ───────────────────────────────────────────────────────
+export const getAdminActivity = async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit) || 10, 50);
+
+    const logs = await AuditLog.find()
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .populate("actor", "name")
+      .lean();
+
+    const activity = logs.map((l) => ({
+      _id:       l._id,
+      adminName: l.actor?.name || "System",
+      action:    l.action,
+      target:    l.entity
+        ? `${l.entity}${l.entityId ? ` #${l.entityId.toString().slice(-4)}` : ""}`.trim()
+        : "",
+      createdAt: l.createdAt,
+      timeLabel: new Date(l.createdAt).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" }),
+    }));
+
+    res.json({ activity });
+  } catch (err) {
+    console.error("getAdminActivity:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+// ─── SERVICE PROVIDERS ────────────────────────────────────────────────────────
+export const getAdminProviders = async (req, res) => {
+  try {
+    const { status } = req.query;
+    const page  = Math.max(1, parseInt(req.query.page)  || 1);
+    const limit = Math.min(50,  parseInt(req.query.limit) || 20);
+    const skip  = (page - 1) * limit;
+
+    const baseQuery = { roles: "service_provider" };
+    if (status === "suspended") baseQuery.status = "banned";
+
+    const [users, total] = await Promise.all([
+      User.find(baseQuery)
+        .select("name email phone createdAt status")
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      User.countDocuments(baseQuery),
+    ]);
+
+    const userIds  = users.map((u) => u._id);
+    const services = userIds.length
+      ? await Service.find({ provider: { $in: userIds } })
+          .select("provider name major rating verified verificationRequested")
+          .lean()
+      : [];
+
+    const svcMap = {};
+    for (const s of services) {
+      const key = s.provider.toString();
+      if (!svcMap[key]) svcMap[key] = s;
+    }
+
+    const shaped = users.map((u) => {
+      const svc = svcMap[u._id.toString()];
+      const isSuspended = u.status === "banned";
+      const verSt       = isSuspended ? "suspended"
+        : svc?.verified              ? "verified"
+        : svc?.verificationRequested ? "pending"
+        : "pending";
+      return {
+        _id:                u._id,
+        businessName:       svc?.name || u.name,
+        email:              u.email,
+        phone:              u.phone || "",
+        category:           svc?.major || "",
+        bookingCount:       0,
+        averageRating:      svc?.rating || 0,
+        verificationStatus: verSt,
+        createdAt:          u.createdAt,
+        _status:            verSt,
+      };
+    }).filter((p) => !status || p._status === status);
+
+    res.json({ providers: shaped, total });
+  } catch (err) {
+    console.error("getAdminProviders:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+// ─── PRODUCTS (admin view) ────────────────────────────────────────────────────
+export const getAdminProducts = async (req, res) => {
+  try {
+    const page   = Math.max(1, parseInt(req.query.page)  || 1);
+    const limit  = Math.min(50,  parseInt(req.query.limit) || 20);
+    const skip   = (page - 1) * limit;
+    const { status } = req.query;
+
+    const filter = {};
+    if (status === "flagged")       filter.isFlagged = true;
+    else if (status === "removed")  filter.isRemoved = true;
+    else if (status === "active")   { filter.isFlagged = { $ne: true }; filter.isRemoved = { $ne: true }; }
+
+    const [products, total] = await Promise.all([
+      Product.find(filter)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .populate("seller",   "name")
+        .populate("category", "name")
+        .lean(),
+      Product.countDocuments(filter),
+    ]);
+
+    const sellerUserIds = [...new Set(products.map((p) => p.seller?._id).filter(Boolean))];
+    const sellerDocs    = sellerUserIds.length
+      ? await Seller.find({ user: { $in: sellerUserIds } }).select("user storeName").lean()
+      : [];
+    const storeMap = Object.fromEntries(sellerDocs.map((s) => [s.user.toString(), s.storeName]));
+
+    const shaped = products.map((p) => ({
+      ...p,
+      seller:   p.seller ? { ...p.seller, storeName: storeMap[p.seller._id?.toString()] || p.seller.name } : null,
+      category: p.category?.name || p.category || "—",
+      status:   p.isRemoved ? "removed" : p.isFlagged ? "flagged" : "active",
+    }));
+
+    res.json({ products: shaped, total, page, pages: Math.ceil(total / limit) });
+  } catch (err) {
+    console.error("getAdminProducts:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+export const bulkProductAction = async (req, res) => {
+  try {
+    const { action, ids } = req.body;
+    if (!Array.isArray(ids) || !ids.length) return res.status(400).json({ message: "No IDs provided" });
+
+    const validIds = ids.filter((id) => mongoose.Types.ObjectId.isValid(id));
+    if (!validIds.length) return res.status(400).json({ message: "Invalid IDs" });
+
+    const update =
+      action === "flag"    ? { isFlagged: true } :
+      action === "feature" ? { isAdvertised: true } :
+      action === "remove"  ? { isRemoved: true, isAvailable: false } :
+      null;
+
+    if (!update) return res.status(400).json({ message: "Invalid action" });
+
+    await Product.updateMany({ _id: { $in: validIds } }, update);
+    res.json({ success: true });
+  } catch (err) {
+    console.error("bulkProductAction:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+// ─── DISPUTES ─────────────────────────────────────────────────────────────────
+export const getAdminDisputes = async (req, res) => {
+  try {
+    const { status = "open" } = req.query;
+    const statusFilter = status === "open" ? "disputed" : status;
+
+    const orders = await Order.find({ status: statusFilter })
+      .sort({ updatedAt: 1 })
+      .populate("buyer",  "name email")
+      .populate("seller", "name")
+      .lean();
+
+    const now = Date.now();
+    const SLA_HOURS = 48;
+
+    const disputes = orders.map((o) => {
+      const ageHours = (now - new Date(o.updatedAt).getTime()) / 3_600_000;
+      const slaHours = Math.max(0, SLA_HOURS - ageHours);
+      const firstItem = o.items?.[0];
+      return {
+        _id:         o._id,
+        caseRef:     `D-${o._id.toString().slice(-4).toUpperCase()}`,
+        order:       { orderRef: o.orderRef || o._id.toString().slice(-6).toUpperCase() },
+        reason:      o.disputeReason || "Buyer filed a dispute",
+        filedBy:     o.buyer,
+        productName: firstItem?.name || "Order item",
+        amount:      o.totalAmount,
+        slaHours:    Math.round(slaHours),
+        slaLabel:    slaHours < 1 ? "Overdue" : `${Math.round(slaHours)}h left`,
+        messages:    o.disputeMessages || [],
+        createdAt:   o.updatedAt,
+      };
+    });
+
+    res.json({ disputes });
+  } catch (err) {
+    console.error("getAdminDisputes:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+export const resolveDispute = async (req, res) => {
+  try {
+    const { outcome, note } = req.body;
+    const order = await Order.findById(req.params.disputeId);
+    if (!order) return res.status(404).json({ message: "Dispute not found" });
+    if (order.status !== "disputed") return res.status(400).json({ message: "Order is not disputed" });
+
+    order.status            = outcome === "refunded" ? "refunded" : outcome === "cancelled" ? "cancelled" : "completed";
+    order.disputeOutcome    = outcome;
+    order.disputeNote       = note;
+    order.disputeResolvedAt = new Date();
+    order.disputeResolvedBy = req.user._id;
+    await order.save({ validateModifiedOnly: true });
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error("resolveDispute:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+// ─── BROADCASTS ───────────────────────────────────────────────────────────────
+export const getBroadcasts = async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit) || 10, 50);
+    const broadcasts = await Broadcast.find()
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .lean();
+    res.json({ broadcasts });
+  } catch (err) {
+    console.error("getBroadcasts:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+export const createBroadcast = async (req, res) => {
+  try {
+    const { title, body, audience, channels, ctaLabel, ctaLink, sendAt, expires } = req.body;
+    if (!title?.trim() || !body?.trim()) {
+      return res.status(400).json({ message: "Title and body are required" });
+    }
+    const isScheduled = sendAt && new Date(sendAt) > new Date();
+    const broadcast = await Broadcast.create({
+      title:    title.trim(),
+      body:     body.trim(),
+      audience: audience || "all",
+      channels: channels || { inapp: true, push: true, email: false },
+      ctaLabel, ctaLink,
+      sendAt:   sendAt || null,
+      expires:  expires || null,
+      status:   isScheduled ? "scheduled" : "sent",
+      sentAt:   isScheduled ? null : new Date(),
+      sentBy:   req.user._id,
+    });
+    res.status(201).json({ success: true, broadcast });
+  } catch (err) {
+    console.error("createBroadcast:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+// ─── SITE CONFIG ──────────────────────────────────────────────────────────────
+export const getConfig = async (req, res) => {
+  try {
+    const config = await Config.findOne().lean();
+    if (!config) return res.json({ fees: {}, flags: {}, slides: [], logo: {} });
+    const { fees, flags, slides, logo } = config;
+    res.json({ fees, flags, slides, logo });
+  } catch (err) {
+    console.error("getConfig:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+export const saveConfig = async (req, res) => {
+  try {
+    const { fees, flags, slides, logo } = req.body;
+    const update = { fees, flags, slides, updatedBy: req.user._id };
+    if (logo !== undefined) update.logo = logo;
+    await Config.findOneAndUpdate(
+      {},
+      { $set: update },
+      { upsert: true, new: true, runValidators: true }
+    );
+    res.json({ success: true });
+  } catch (err) {
+    console.error("saveConfig:", err);
     res.status(500).json({ message: "Server error" });
   }
 };

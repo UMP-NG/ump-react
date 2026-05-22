@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useUser } from "../context/UserContext";
 import { apiFetch, clearToken } from "../utils/api";
@@ -9,7 +10,7 @@ export default function ProfilePopup({ onClose }) {
   const roles = user?.roles || [];
   const isSeller   = roles.includes("seller");
   const isProvider = roles.includes("service_provider");
-  const isAdmin    = Array.isArray(user?.roles) ? user.roles.includes("admin") : user?.role === "admin";
+  const isAdmin    = Array.isArray(user?.roles) && user.roles.includes("admin");
   const isLimited  = user?.isLimitedAccount;
 
   const MENU = [
@@ -29,6 +30,7 @@ export default function ProfilePopup({ onClose }) {
     ? (user.name || user.email || "U").split(" ").map((p) => p[0]).join("").slice(0, 2).toUpperCase()
     : "?";
   const avatarUrl = user?.avatar?.url || (typeof user?.avatar === "string" ? user.avatar : null);
+  const [avatarBroken, setAvatarBroken] = useState(false);
 
   async function handleLogout() {
     try { await apiFetch("/api/auth/logout", { method: "POST" }); } catch {}
@@ -48,9 +50,9 @@ export default function ProfilePopup({ onClose }) {
       <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.4)", zIndex: 70 }} />
       <div style={{ position: "fixed", top: 70, right: 12, width: 280, background: "#fff", borderRadius: "var(--r-xl)", boxShadow: "var(--shadow-deep)", overflow: "hidden", zIndex: 80, animation: "fadeUp .25s" }}>
         <div style={{ padding: 16, display: "flex", alignItems: "center", gap: 12, background: "linear-gradient(135deg, var(--navy-800), #1e1b4b)", color: "#fff" }}>
-          <div className="avatar" style={{ width: 44, height: 44, overflow: "hidden", padding: avatarUrl ? 0 : undefined }}>
-              {avatarUrl
-                ? <img src={avatarUrl} alt={user?.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={(e) => { e.currentTarget.style.display = "none"; }} />
+          <div className="avatar" style={{ width: 44, height: 44, overflow: "hidden", padding: avatarUrl && !avatarBroken ? 0 : undefined }}>
+              {avatarUrl && !avatarBroken
+                ? <img src={avatarUrl} alt={user?.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={() => setAvatarBroken(true)} />
                 : initials}
             </div>
           <div style={{ minWidth: 0 }}>

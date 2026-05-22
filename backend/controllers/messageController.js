@@ -19,11 +19,11 @@ export const sendMessage = async (req, res) => {
     if (!receiverUser)
       return res.status(404).json({ message: "Receiver not found" });
 
-    const senderRole = req.user.role;
-    const receiverRole = receiverUser.role;
+    const senderRoles = req.user.roles || [];
+    const receiverRoles = receiverUser.roles || [];
 
     // Example: basic messaging rule
-    if (senderRole === "user" && !["seller", "admin"].includes(receiverRole)) {
+    if (!senderRoles.some((r) => ["seller", "service_provider", "walker", "admin"].includes(r)) && !receiverRoles.some((r) => ["seller", "service_provider", "admin"].includes(r))) {
       return res.status(403).json({
         message: "Users can only message sellers or admins",
       });
@@ -178,7 +178,7 @@ export const getUserConversations = async (req, res) => {
           conversationWith: "$user._id",
           name: "$user.name",
           avatar: "$user.avatar",
-          role: "$user.role",
+          roles: "$user.roles",
           latestMessage: 1,
           latestCreatedAt: 1,
           unreadCount: 1,
@@ -302,14 +302,14 @@ export const getMessageById = async (req, res) => {
   try {
     const message = await Message.findById(req.params.messageId)
       .populate("sender", "name avatar role")
-      .populate("receiver", "name avatar role");
+      .populate("receiver", "name avatar roles");
 
     if (!message) return res.status(404).json({ message: "Message not found" });
 
     if (
       message.sender._id.toString() !== req.user._id.toString() &&
       message.receiver._id.toString() !== req.user._id.toString() &&
-      req.user.role !== "admin"
+      !req.user.roles?.includes("admin")
     ) {
       return res.status(403).json({ message: "Unauthorized" });
     }

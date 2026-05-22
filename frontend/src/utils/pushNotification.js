@@ -23,7 +23,11 @@ export async function requestPushPermission() {
   if (permission === "denied") throw new Error("Notification permission denied. Enable it in your browser settings and try again.");
   if (permission !== "granted") throw new Error("Notification permission was not granted.");
 
-  await navigator.serviceWorker.register("/firebase-messaging-sw.js");
+  try {
+    await navigator.serviceWorker.register("/firebase-messaging-sw.js");
+  } catch (swErr) {
+    throw new Error(`Service worker registration failed: ${swErr.message}`);
+  }
   const messaging = getFirebaseMessaging();
   const token = await getToken(messaging, { vapidKey: VAPID_KEY });
   if (!token) throw new Error("Failed to get push token. Ensure the app is served over HTTPS.");

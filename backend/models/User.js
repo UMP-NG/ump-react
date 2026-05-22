@@ -11,10 +11,7 @@ const userSchema = new mongoose.Schema(
       required: true,
       unique: true,
       lowercase: true,
-      match: [
-        /^[1-9]\d{1}\d{5,}@live\.unilag\.edu\.ng$/,
-        "Please use your valid school email (matric ≥ 19xxxxxxx)",
-      ],
+      match: [/^[^\s@]+@[^\s@]+\.[^\s@]+$/, "Please provide a valid email address"],
     },
     password: {
       type: String,
@@ -101,6 +98,17 @@ const userSchema = new mongoose.Schema(
     orders: [{ type: mongoose.Schema.Types.ObjectId, ref: "Order" }],
 
     // ===============================
+    // GOOGLE ACCOUNT LINKING
+    // ===============================
+    // true when the account was created via Google sign-in with a non-UNILAG email.
+    // These accounts are "limited" until the user links and verifies their school email.
+    googleAccount: { type: Boolean, default: false },
+    schoolEmail:         { type: String, lowercase: true },
+    schoolEmailVerified: { type: Boolean, default: false },
+    schoolEmailOtp:      String,
+    schoolEmailOtpExpire: Date,
+
+    // ===============================
     // SECURITY & VERIFICATION
     // ===============================
     isVerified: { type: Boolean, default: false },
@@ -119,11 +127,16 @@ const userSchema = new mongoose.Schema(
     // NOTIFICATIONS & STATUS
     // ===============================
     notificationPreferences: {
-      order: { type: Boolean, default: true },
-      message: { type: Boolean, default: true },
-      payout: { type: Boolean, default: true },
-      inventory: { type: Boolean, default: true },
+      order:      { type: Boolean, default: true  },
+      message:    { type: Boolean, default: true  },
+      payout:     { type: Boolean, default: true  },
+      inventory:  { type: Boolean, default: true  },
+      account:    { type: Boolean, default: true  },
+      platform:   { type: Boolean, default: true  },
+      promotions: { type: Boolean, default: false },
     },
+
+    fcmToken: { type: String, default: null },
 
     status: {
       type: String,

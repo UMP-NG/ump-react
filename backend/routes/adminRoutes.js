@@ -20,6 +20,17 @@ import {
   getPayoutsSummary,
   approvePayout,
   getAnalytics,
+  getAdminTeam,
+  getAdminActivity,
+  getAdminProviders,
+  getAdminProducts,
+  bulkProductAction,
+  getAdminDisputes,
+  resolveDispute,
+  getBroadcasts,
+  createBroadcast,
+  getConfig,
+  saveConfig,
 } from "../controllers/adminDashboardController.js";
 
 const router = express.Router();
@@ -55,6 +66,10 @@ router.get("/recent-orders",          ...adm, getRecentOrders);
 router.get("/pending-verifications",  ...adm, getPendingVerifications);
 router.get("/analytics",              ...adm, getAnalytics);
 
+// ── Team & Activity ────────────────────────────────────────────────────────
+router.get("/team",     ...adm, getAdminTeam);
+router.get("/activity", ...adm, getAdminActivity);
+
 // ── Users ──────────────────────────────────────────────────────────────────
 router.get   ("/users",                  ...adm, getAdminUsers);
 router.put   ("/users/:userId/role",     ...adm, updateUserRole);
@@ -79,9 +94,26 @@ router.get ("/payouts/summary",            ...adm, getPayoutsSummary);
 router.get ("/payouts",                    ...adm, getAdminPayouts);
 router.post("/payouts/:payoutId/approve",  ...adm, approvePayout);
 
+// ── Providers ─────────────────────────────────────────────────────────────
+router.get("/providers", ...adm, getAdminProviders);
+
 // ── Products ───────────────────────────────────────────────────────────────
+router.get   ("/products",             ...adm, getAdminProducts);
+router.post  ("/products/bulk",        ...adm, bulkProductAction);
 router.put   ("/products/:productId",  ...adm, updateProduct);
 router.delete("/products/:productId",  ...adm, deleteProduct);
+
+// ── Disputes ───────────────────────────────────────────────────────────────
+router.get ("/disputes",                      ...adm, getAdminDisputes);
+router.post("/disputes/:disputeId/resolve",   ...adm, resolveDispute);
+
+// ── Broadcasts ─────────────────────────────────────────────────────────────
+router.get ("/broadcasts", ...adm, getBroadcasts);
+router.post("/broadcasts", ...adm, createBroadcast);
+
+// ── Config ─────────────────────────────────────────────────────────────────
+router.get("/config", getConfig);          // public — needed for logo on frontend
+router.put("/config", ...adm, saveConfig);
 
 // ── Listings ───────────────────────────────────────────────────────────────
 router.put   ("/listings/:listingId",  ...adm, updateListing);

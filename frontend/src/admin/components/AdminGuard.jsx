@@ -14,7 +14,7 @@ export default function AdminGuard() {
     );
   }
 
-  const isAdmin = Array.isArray(user?.roles) ? user.roles.includes('admin') : user?.role === 'admin';
+  const isAdmin = Array.isArray(user?.roles) && user.roles.includes('admin');
   if (!user || !isAdmin) {
     return <Navigate to="/login" replace />;
   }

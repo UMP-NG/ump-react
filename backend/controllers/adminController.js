@@ -85,15 +85,18 @@ export const updateUserRole = async (req, res) => {
     const user = await User.findById(req.params.userId);
     if (!user) return res.status(404).json({ message: "User not found" });
 
-    if (role) user.role = role;
     if (Array.isArray(roles)) {
       // Preserve any existing privileged roles (e.g. "admin") already in the DB — only update the safe ones
       const privileged = (user.roles || []).filter((r) => !ASSIGNABLE_ROLES.includes(r));
       user.roles = [...new Set([...privileged, ...roles])];
+    } else if (role) {
+      // Single role provided — merge it in, preserving privileged roles
+      const privileged = (user.roles || []).filter((r) => !ASSIGNABLE_ROLES.includes(r));
+      user.roles = [...new Set([...privileged, role])];
     }
 
     await user.save();
-    res.json({ success: true, user: { _id: user._id, role: user.role, roles: user.roles } });
+    res.json({ success: true, user: { _id: user._id, roles: user.roles } });
   } catch (error) {
     res.status(500).json({ message: "Server error" });
   }

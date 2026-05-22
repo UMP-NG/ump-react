@@ -38,6 +38,7 @@ function mongoSanitize() {
   };
 }
 import hpp from "hpp";
+import mongoose from "mongoose";
 import { globalLimiter } from "./middleware/rateLimits.js";
 
 // 🧩 ROUTES
@@ -152,8 +153,10 @@ app.use(hpp());
 
 // ── Health check — registered before rate limiter so monitors are never throttled
 app.get("/health", (req, res) => {
+  const dbState = ["disconnected", "connected", "connecting", "disconnecting"][mongoose.connection.readyState] ?? "unknown";
   res.status(200).json({
     status: "✅ Server is running",
+    db: dbState,
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
   });
@@ -173,6 +176,9 @@ app.use(
     noSniff: true,
     // Strict-Transport-Security — force HTTPS for 1 year
     hsts: { maxAge: 31536000, includeSubDomains: true, preload: true },
+    // "same-origin-allow-popups" lets Firebase Auth's signInWithPopup communicate
+    // back to the opener window without being blocked by the browser.
+    crossOriginOpenerPolicy: { policy: "same-origin-allow-popups" },
     contentSecurityPolicy: {
       useDefaults: false,
       directives: {
@@ -205,6 +211,12 @@ app.use(
           "https://cdn-icons.flaticon.com",
           "https://maps.gstatic.com",
           "https://cdn.jsdelivr.net",
+          // Google profile pictures (Firebase / Google Sign-In avatars)
+          "https://lh3.googleusercontent.com",
+          "https://lh4.googleusercontent.com",
+          "https://lh5.googleusercontent.com",
+          "https://lh6.googleusercontent.com",
+          "https://googleusercontent.com",
         ],
         styleSrc: [
           "'self'",
@@ -253,6 +265,17 @@ if (hasFrontendBuild) app.use(express.static(STATIC_DIR));
 // ----------------------------
 // 🚏 ROUTES
 // ----------------------------
+// Guard: only block requests when Mongoose is fully disconnected (state=0).
+// state=2 (reconnecting) is fine — Mongoose buffers the query until the connection is back.
+app.use("/api", (req, res, next) => {
+  const state = mongoose.connection.readyState; // 0=disconnected 1=connected 2=connecting
+  if (state === 0) {
+    console.warn(`⚠️  [DB guard] DB disconnected on ${req.method} ${req.path}`);
+    return res.status(503).json({ message: "Service temporarily unavailable, please retry in a moment" });
+  }
+  next();
+});
+
 // ⚠️ CRITICAL: Routes with specific paths MUST come before dynamic routes
 // Otherwise "seller-dashboard" will be caught by "/:id" pattern
 app.use("/api/auth", authRoutes);

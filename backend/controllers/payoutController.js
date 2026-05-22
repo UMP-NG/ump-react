@@ -64,7 +64,7 @@ export const requestPayout = async (req, res) => {
       return res.status(400).json({ message: "No payout data received" });
 
     const userId = req.user._id;
-    const roles = req.user.roles || (req.user.role ? [req.user.role] : []);
+    const roles = req.user.roles || [];
     const { amount, method, accountDetails } = req.body;
     if (!amount || amount <= 0)
       return res.status(400).json({ message: "Invalid amount" });
@@ -184,7 +184,7 @@ export const getPayoutsForSeller = async (req, res) => {
 export const getPayoutSummary = async (req, res) => {
   try {
     const userId = req.user?._id;
-    const role = req.user.roles?.[0] || req.user.role;
+    const role = req.user.roles?.[0];
 
     const roleKey =
       role === "walker"

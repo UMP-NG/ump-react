@@ -10,9 +10,18 @@ import { audit } from "../utils/auditLog.js";
 // ===============================
 // SIGNUP WITH OTP
 // ===============================
+const UNILAG_EMAIL = /^[1-9]\d{7,}@live\.unilag\.edu\.ng$/i;
+
 export const signup = async (req, res) => {
   try {
     const { email, password, name } = req.body;
+
+    // Enforce UNILAG email at application level (regular signup only)
+    if (!UNILAG_EMAIL.test(email)) {
+      return res.status(400).json({
+        message: "Only UNILAG student emails (@live.unilag.edu.ng) are allowed. Use Google sign-in for other accounts.",
+      });
+    }
 
     const maskedEmail = email?.replace(/(?<=.{2}).(?=[^@]*@)/g, "*");
     console.log("🔐 [SIGNUP] Request received:", { email: maskedEmail, name, passwordLength: password?.length });
@@ -202,13 +211,13 @@ export const verifyOTP = async (req, res) => {
 
     res.status(200).json({
       message: "Email verified successfully",
+      token,
       user: {
         _id: user._id,
         name: user.name,
         email: user.email,
         avatar: user.avatar,
         isVerified: true,
-        role: user.role,
         roles: user.roles,
         bio: user.bio,
         createdAt: user.createdAt,
@@ -295,13 +304,13 @@ export const login = async (req, res) => {
 
     res.status(200).json({
       message: "Login successful",
+      token,
       user: {
         _id: existingUser._id,
         name: existingUser.name,
         email: existingUser.email,
         avatar: existingUser.avatar,
         isVerified: existingUser.isVerified,
-        role: existingUser.role,
         roles: existingUser.roles,
         bio: existingUser.bio,
         createdAt: existingUser.createdAt,
@@ -346,14 +355,20 @@ export const protect = (req, res, next) => {
 export const getMe = async (req, res) => {
   try {
     const user = await User.findById(req.user._id)
-      .select("-password -otp -otpExpire -resetPasswordToken -resetPasswordExpire")
+      .select("-password -otp -otpExpire -resetPasswordToken -resetPasswordExpire -schoolEmailOtp -schoolEmailOtpExpire")
       .lean();
 
     if (!user) {
       return res.status(404).json({ message: "User not found" });
     }
 
-    res.status(200).json({ message: "User fetched successfully", user });
+    res.status(200).json({
+      message: "User fetched successfully",
+      user: {
+        ...user,
+        isLimitedAccount: user.googleAccount && !user.isVerified,
+      },
+    });
   } catch (error) {
     res.status(500).json({ message: "Server error" });
   }

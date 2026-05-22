@@ -25,6 +25,7 @@ const iSty = { width: "100%", padding: "10px 12px", borderRadius: "var(--r-md)",
 function Sidebar({ tab, setTab, navigate, user, service }) {
   const avatarUrl = user?.avatar?.url || (typeof user?.avatar === "string" ? user.avatar : null);
   const initials = (user?.name || "P").split(" ").map((p) => p[0]).join("").slice(0, 2).toUpperCase();
+  const [avatarBroken, setAvatarBroken] = useState(false);
 
   return (
     <aside className="seller-sidebar">
@@ -36,8 +37,8 @@ function Sidebar({ tab, setTab, navigate, user, service }) {
       </div>
 
       <div style={{ padding: "20px 20px 16px", display: "flex", alignItems: "center", gap: 12, borderBottom: "1px solid rgba(255,255,255,.08)" }}>
-        <div className="avatar" style={{ width: 44, height: 44, fontSize: "1.6rem", flexShrink: 0, overflow: "hidden", padding: avatarUrl ? 0 : undefined }}>
-          {avatarUrl ? <img src={avatarUrl} alt={user?.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={(e) => { e.currentTarget.style.display = "none"; }} /> : initials}
+        <div className="avatar" style={{ width: 44, height: 44, fontSize: "1.6rem", flexShrink: 0, overflow: "hidden", padding: avatarUrl && !avatarBroken ? 0 : undefined }}>
+          {avatarUrl && !avatarBroken ? <img src={avatarUrl} alt={user?.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={() => setAvatarBroken(true)} /> : initials}
         </div>
         <div style={{ minWidth: 0 }}>
           <div style={{ fontWeight: 700, fontSize: "1.4rem", color: "#fff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{user?.name || "Provider"}</div>

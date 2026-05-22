@@ -1,4 +1,5 @@
 import jwt from "jsonwebtoken";
+import mongoose from "mongoose";
 import User from "../models/User.js";
 import cookie from "cookie";
 
@@ -34,6 +35,11 @@ export const protect = async (req, res, next) => {
     }
 
     // ===== 5️⃣ Attach user to request =====
+    // Only block if fully disconnected (state=0). state=2 means reconnecting — Mongoose buffers the query.
+    if (mongoose.connection.readyState === 0) {
+      console.warn(`⚠️  [protect] DB disconnected on ${req.method} ${req.path}`);
+      return res.status(503).json({ message: "Service temporarily unavailable, please retry" });
+    }
     try {
       const user = await User.findById(decoded.id)
         .select("-password -wishlist -cart -orders -services -following")
@@ -45,7 +51,11 @@ export const protect = async (req, res, next) => {
 
       req.user = user;
     } catch (dbError) {
-      return res.status(500).json({ message: "Database error" });
+      const state = mongoose.connection.readyState; // 0=disconnected 1=connected 2=connecting
+      console.error(`🔴 [protect] User lookup failed (DB state=${state}):`, dbError.name, "-", dbError.message);
+      return res.status(state === 0 ? 503 : 500).json({
+        message: state === 0 ? "Service temporarily unavailable, please retry" : "Database error",
+      });
     }
 
     next();

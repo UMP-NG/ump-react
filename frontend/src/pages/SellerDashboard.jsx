@@ -6,6 +6,7 @@ import { useUser } from "../context/UserContext";
 import { useToast } from "../context/ToastContext";
 import FloatingChat from "../components/FloatingChat";
 import Skel from "../components/Skel";
+import ImageCropModal from "../components/ImageCropModal";
 
 // ─── Sidebar nav items ────────────────────────────────────────────────────────
 const NAV = [
@@ -22,6 +23,7 @@ const NAV = [
 function Sidebar({ tab, setTab, navigate, profile, user, unreadMessages }) {
   const avatarUrl = user?.avatar?.url || (typeof user?.avatar === "string" ? user.avatar : null);
   const initials = (user?.name || "S").split(" ").map((p) => p[0]).join("").slice(0, 2).toUpperCase();
+  const [avatarBroken, setAvatarBroken] = useState(false);
 
   return (
     <aside className="seller-sidebar">
@@ -33,8 +35,8 @@ function Sidebar({ tab, setTab, navigate, profile, user, unreadMessages }) {
       </div>
 
       <div style={{ padding: "20px 20px 16px", display: "flex", alignItems: "center", gap: 12, borderBottom: "1px solid rgba(255,255,255,.08)" }}>
-        <div className="avatar" style={{ width: 44, height: 44, fontSize: "1.6rem", flexShrink: 0, overflow: "hidden", padding: avatarUrl ? 0 : undefined }}>
-          {avatarUrl ? <img src={avatarUrl} alt={user?.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={(e) => { e.currentTarget.style.display = "none"; }} /> : initials}
+        <div className="avatar" style={{ width: 44, height: 44, fontSize: "1.6rem", flexShrink: 0, overflow: "hidden", padding: avatarUrl && !avatarBroken ? 0 : undefined }}>
+          {avatarUrl && !avatarBroken ? <img src={avatarUrl} alt={user?.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={() => setAvatarBroken(true)} /> : initials}
         </div>
         <div style={{ minWidth: 0 }}>
           <div style={{ fontWeight: 700, fontSize: "1.4rem", color: "#fff", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
@@ -365,6 +367,8 @@ function ListingModal({ listing, onClose, onSave, showToast }) {
   const [videoPreview, setVideoPreview] = useState(null);
   const [customAmenity, setCustomAmenity] = useState("");
   const [saving, setSaving] = useState(false);
+  const [listCropQueue, setListCropQueue] = useState([]);
+  const [listCropSrc, setListCropSrc] = useState(null);
 
   const set = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.type === "checkbox" ? e.target.checked : e.target.value }));
   const toggleAmenity = (a) => setForm((f) => ({
@@ -374,9 +378,29 @@ function ListingModal({ listing, onClose, onSave, showToast }) {
 
   function handleImagePick(e) {
     const files = Array.from(e.target.files).slice(0, 4 - imagePreviews.length);
-    const newFiles = [...imageFiles, ...files].slice(0, 4);
-    setImageFiles(newFiles);
-    setImagePreviews([...imagePreviews, ...files.map((f) => URL.createObjectURL(f))].slice(0, 4));
+    if (!files.length) return;
+    const readers = files.map((file) => new Promise((res) => {
+      const r = new FileReader();
+      r.onload = () => res(r.result);
+      r.readAsDataURL(file);
+    }));
+    Promise.all(readers).then((srcs) => {
+      setListCropQueue(srcs.slice(1));
+      setListCropSrc(srcs[0]);
+    });
+    e.target.value = "";
+  }
+
+  function handleListCropConfirm(blob) {
+    const file = new File([blob], `listing-${imageFiles.length + 1}.jpg`, { type: "image/jpeg" });
+    setImageFiles((prev) => [...prev, file]);
+    setImagePreviews((prev) => [...prev, URL.createObjectURL(blob)]);
+    if (listCropQueue.length > 0) {
+      setListCropSrc(listCropQueue[0]);
+      setListCropQueue((q) => q.slice(1));
+    } else {
+      setListCropSrc(null);
+    }
   }
 
   function removeImage(i) {
@@ -431,6 +455,16 @@ function ListingModal({ listing, onClose, onSave, showToast }) {
   const lSty = { fontSize: "1.15rem", color: "var(--ink-3)", fontWeight: 600, marginBottom: 4, display: "block" };
 
   return (
+    <>
+    {listCropSrc && (
+      <ImageCropModal
+        src={listCropSrc}
+        aspect={4 / 3}
+        title={`Crop listing photo ${imagePreviews.length + 1}`}
+        onConfirm={handleListCropConfirm}
+        onCancel={() => { setListCropSrc(null); setListCropQueue([]); }}
+      />
+    )}
     <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.55)", zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }} onClick={onClose}>
       <div className="card" style={{ maxWidth: 560, width: "100%", maxHeight: "92vh", overflowY: "auto", padding: 0 }} onClick={(e) => e.stopPropagation()}>
         <div style={{ padding: "18px 20px", borderBottom: "1px solid var(--line)", display: "flex", justifyContent: "space-between", alignItems: "center", position: "sticky", top: 0, background: "var(--card)", zIndex: 1 }}>
@@ -624,6 +658,7 @@ function ListingModal({ listing, onClose, onSave, showToast }) {
         </div>
       </div>
     </div>
+    </>
   );
 }
 
@@ -636,6 +671,8 @@ function AddProductModal({ onClose, onSave, showToast }) {
   const [saving, setSaving] = useState(false);
   const [colorInput, setColorInput] = useState({ name: "", code: "#e0e0e0" });
   const [specInput, setSpecInput] = useState({ k: "", v: "" });
+  const [cropQueue, setCropQueue] = useState([]);
+  const [cropSrc, setCropSrc] = useState(null);
 
   useEffect(() => {
     apiFetch("/api/categories")
@@ -646,15 +683,36 @@ function AddProductModal({ onClose, onSave, showToast }) {
   const set = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.value }));
 
   function handleImages(e) {
-    const files = Array.from(e.target.files).slice(0, 4);
-    setImageFiles(files);
-    setImagePreviews(files.map((f) => URL.createObjectURL(f)));
+    const files = Array.from(e.target.files).slice(0, 4 - imageFiles.length);
+    if (!files.length) return;
+    const readers = files.map((file) => new Promise((res) => {
+      const r = new FileReader();
+      r.onload = () => res(r.result);
+      r.readAsDataURL(file);
+    }));
+    Promise.all(readers).then((srcs) => {
+      setCropQueue(srcs.slice(1));
+      setCropSrc(srcs[0]);
+    });
+    e.target.value = "";
+  }
+
+  function handleProductCropConfirm(blob) {
+    const file = new File([blob], `product-${imageFiles.length + 1}.jpg`, { type: "image/jpeg" });
+    const url = URL.createObjectURL(blob);
+    setImageFiles((prev) => [...prev, file]);
+    setImagePreviews((prev) => [...prev, url]);
+    if (cropQueue.length > 0) {
+      setCropSrc(cropQueue[0]);
+      setCropQueue((q) => q.slice(1));
+    } else {
+      setCropSrc(null);
+    }
   }
 
   function removePreview(i) {
-    const newFiles = imageFiles.filter((_, idx) => idx !== i);
-    setImageFiles(newFiles);
-    setImagePreviews(newFiles.map((f) => URL.createObjectURL(f)));
+    setImageFiles((prev) => prev.filter((_, idx) => idx !== i));
+    setImagePreviews((prev) => prev.filter((_, idx) => idx !== i));
   }
 
   const addColor = () => { if (!colorInput.name.trim()) return; setForm((f) => ({ ...f, colors: [...f.colors, { ...colorInput }] })); setColorInput({ name: "", code: "#e0e0e0" }); };
@@ -695,6 +753,16 @@ function AddProductModal({ onClose, onSave, showToast }) {
   const lSty = { fontSize: "1.15rem", color: "var(--ink-3)", fontWeight: 600, marginBottom: 4, display: "block" };
 
   return (
+    <>
+    {cropSrc && (
+      <ImageCropModal
+        src={cropSrc}
+        aspect={1}
+        title={`Crop product image ${imageFiles.length + 1} of ${imageFiles.length + 1 + cropQueue.length}`}
+        onConfirm={handleProductCropConfirm}
+        onCancel={() => { setCropSrc(null); setCropQueue([]); }}
+      />
+    )}
     <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.55)", zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }} onClick={onClose}>
       <div className="card" style={{ maxWidth: 580, width: "100%", maxHeight: "92vh", overflowY: "auto", padding: 0 }} onClick={(e) => e.stopPropagation()}>
         <div style={{ padding: "18px 20px", borderBottom: "1px solid var(--line)", display: "flex", justifyContent: "space-between", alignItems: "center", position: "sticky", top: 0, background: "var(--card)", zIndex: 1 }}>
@@ -828,6 +896,7 @@ function AddProductModal({ onClose, onSave, showToast }) {
         </div>
       </div>
     </div>
+    </>
   );
 }
 
@@ -910,6 +979,8 @@ export default function SellerDashboard() {
   const [storeSaving, setStoreSaving] = useState(false);
   const [storeAvatarUploading, setStoreAvatarUploading] = useState(false);
   const [storeBannerUploading, setStoreBannerUploading] = useState(false);
+  const [storeCropSrc, setStoreCropSrc] = useState(null);
+  const [storeCropTarget, setStoreCropTarget] = useState(null);
   const [dashNotifs, setDashNotifs] = useState({ orderUpdate: true, newMessage: true, lowStock: true, payoutReady: true });
   const [notifSaving, setNotifSaving] = useState(false);
   const [dashPolicy, setDashPolicy] = useState({ returnPolicy: "", fulfillmentTime: "" });
@@ -1090,6 +1161,27 @@ export default function SellerDashboard() {
     fd.append("file", file);
     const data = await apiFetch("/api/upload", { method: "POST", body: fd });
     setDashStore((s) => ({ ...s, [`${field}Url`]: data.url, [`${field}PublicId`]: data.publicId || "" }));
+  }
+
+  function openStoreCrop(file, target) {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => { setStoreCropSrc(reader.result); setStoreCropTarget(target); };
+    reader.readAsDataURL(file);
+  }
+
+  async function handleStoreCropConfirm(blob) {
+    const field = storeCropTarget;
+    const setter = field === "avatar" ? setStoreAvatarUploading : setStoreBannerUploading;
+    setStoreCropSrc(null); setStoreCropTarget(null);
+    setter(true);
+    try {
+      await uploadStoreImage(new File([blob], `${field}.jpg`, { type: "image/jpeg" }), field);
+    } catch {
+      showToast("Upload failed", "error");
+    } finally {
+      setter(false);
+    }
   }
 
   async function saveStoreProfile() {
@@ -1918,13 +2010,7 @@ export default function SellerDashboard() {
               <div>
                 <label className="btn btn-sm btn-ghost" style={{ cursor: "pointer" }}>
                   <i className="fas fa-camera" /> {dashStore.avatarUrl ? "Change" : "Upload"} logo
-                  <input type="file" accept="image/*" style={{ display: "none" }} disabled={storeAvatarUploading} onChange={async (e) => {
-                    const file = e.target.files[0];
-                    if (!file) return;
-                    setStoreAvatarUploading(true);
-                    try { await uploadStoreImage(file, "avatar"); } catch { showToast("Upload failed", "error"); } finally { setStoreAvatarUploading(false); }
-                    e.target.value = "";
-                  }} />
+                  <input type="file" accept="image/*" style={{ display: "none" }} disabled={storeAvatarUploading} onChange={(e) => { openStoreCrop(e.target.files[0], "avatar"); e.target.value = ""; }} />
                 </label>
                 <div style={{ fontSize: "1.1rem", color: "var(--ink-3)", marginTop: 4 }}>JPG or PNG, max 5 MB</div>
               </div>
@@ -1942,13 +2028,7 @@ export default function SellerDashboard() {
               </div>
               <label className="btn btn-sm btn-ghost" style={{ cursor: "pointer" }}>
                 <i className="fas fa-upload" /> {dashStore.bannerUrl ? "Change" : "Upload"} banner
-                <input type="file" accept="image/*" style={{ display: "none" }} disabled={storeBannerUploading} onChange={async (e) => {
-                  const file = e.target.files[0];
-                  if (!file) return;
-                  setStoreBannerUploading(true);
-                  try { await uploadStoreImage(file, "banner"); } catch { showToast("Upload failed", "error"); } finally { setStoreBannerUploading(false); }
-                  e.target.value = "";
-                }} />
+                <input type="file" accept="image/*" style={{ display: "none" }} disabled={storeBannerUploading} onChange={(e) => { openStoreCrop(e.target.files[0], "banner"); e.target.value = ""; }} />
               </label>
               <div style={{ fontSize: "1.1rem", color: "var(--ink-3)", marginTop: 4 }}>Recommended: 1200 × 300 px</div>
             </div>
@@ -2031,6 +2111,15 @@ export default function SellerDashboard() {
 
   return (
     <>
+      {storeCropSrc && (
+        <ImageCropModal
+          src={storeCropSrc}
+          aspect={storeCropTarget === "banner" ? 4 / 1 : 1}
+          title={storeCropTarget === "banner" ? "Crop store banner" : "Crop store logo"}
+          onConfirm={handleStoreCropConfirm}
+          onCancel={() => { setStoreCropSrc(null); setStoreCropTarget(null); }}
+        />
+      )}
       <FloatingChat />
       <div className="seller-dash">
         <Sidebar tab={tab} setTab={setTab} navigate={navigate} profile={profile} user={user} unreadMessages={unreadMessages} />

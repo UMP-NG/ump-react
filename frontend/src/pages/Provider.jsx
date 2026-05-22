@@ -3,6 +3,7 @@ import { useNavigate, Navigate } from "react-router-dom";
 import Logo from "../components/Logo";
 import { apiFetch } from "../utils/api";
 import { useUser } from "../context/UserContext";
+import ImageCropModal from "../components/ImageCropModal";
 
 const SELLER_CATS  = ["Electronics", "Books", "Fashion", "Food", "Beauty", "Accessories", "Handmade", "Other"];
 const SERVICE_CATS = ["Design", "Writing", "Tech / Coding", "Tutoring", "Photography", "Fitness", "Music", "Other"];
@@ -321,23 +322,38 @@ function SellerForm({ seller, setSeller }) {
   const logoRef   = useRef(null);
   const [bannerPreview, setBannerPreview] = useState(null);
   const [logoPreview,   setLogoPreview]   = useState(null);
+  const [cropSrc,    setCropSrc]    = useState(null);
+  const [cropTarget, setCropTarget] = useState(null);
 
-  function pickBanner(e) {
-    const file = e.target.files[0];
+  function openCrop(file, target) {
     if (!file) return;
-    setBannerPreview(URL.createObjectURL(file));
-    setSeller((prev) => ({ ...prev, bannerFile: file }));
+    const reader = new FileReader();
+    reader.onload = () => { setCropSrc(reader.result); setCropTarget(target); };
+    reader.readAsDataURL(file);
   }
 
-  function pickLogo(e) {
-    const file = e.target.files[0];
-    if (!file) return;
-    setLogoPreview(URL.createObjectURL(file));
-    setSeller((prev) => ({ ...prev, logoFile: file }));
+  function pickBanner(e) { openCrop(e.target.files[0], "banner"); e.target.value = ""; }
+  function pickLogo(e)   { openCrop(e.target.files[0], "logo");   e.target.value = ""; }
+
+  function handleCropConfirm(blob) {
+    const url = URL.createObjectURL(blob);
+    const file = new File([blob], `${cropTarget}.jpg`, { type: "image/jpeg" });
+    if (cropTarget === "banner") { setBannerPreview(url); setSeller((p) => ({ ...p, bannerFile: file })); }
+    else                         { setLogoPreview(url);   setSeller((p) => ({ ...p, logoFile:   file })); }
+    setCropSrc(null); setCropTarget(null);
   }
 
   return (
     <>
+      {cropSrc && (
+        <ImageCropModal
+          src={cropSrc}
+          aspect={cropTarget === "banner" ? 3 / 1 : 1}
+          title={cropTarget === "banner" ? "Crop store banner" : "Crop store logo"}
+          onConfirm={handleCropConfirm}
+          onCancel={() => { setCropSrc(null); setCropTarget(null); }}
+        />
+      )}
       <input ref={bannerRef} type="file" accept="image/*" style={{ display: "none" }} onChange={pickBanner} />
       <input ref={logoRef}   type="file" accept="image/*" style={{ display: "none" }} onChange={pickLogo} />
 
@@ -466,16 +482,35 @@ function ProviderForm({ service, setService }) {
 
   const imageRef = useRef(null);
   const [imagePreview, setImagePreview] = useState(null);
+  const [cropSrc, setCropSrc] = useState(null);
 
   function pickImage(e) {
     const file = e.target.files[0];
     if (!file) return;
-    setImagePreview(URL.createObjectURL(file));
-    setService((prev) => ({ ...prev, serviceImageFile: file }));
+    const reader = new FileReader();
+    reader.onload = () => setCropSrc(reader.result);
+    reader.readAsDataURL(file);
+    e.target.value = "";
+  }
+
+  function handleCropConfirm(blob) {
+    const url = URL.createObjectURL(blob);
+    setImagePreview(url);
+    setService((prev) => ({ ...prev, serviceImageFile: new File([blob], "service.jpg", { type: "image/jpeg" }) }));
+    setCropSrc(null);
   }
 
   return (
     <>
+      {cropSrc && (
+        <ImageCropModal
+          src={cropSrc}
+          aspect={1}
+          title="Crop service image"
+          onConfirm={handleCropConfirm}
+          onCancel={() => setCropSrc(null)}
+        />
+      )}
       <input ref={imageRef} type="file" accept="image/*" style={{ display: "none" }} onChange={pickImage} />
 
       <FormSection title="About You">

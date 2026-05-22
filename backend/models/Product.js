@@ -46,6 +46,8 @@ const productSchema = new mongoose.Schema(
     },
 
     isAdvertised: { type: Boolean, default: false },
+    isFlagged:    { type: Boolean, default: false },
+    isRemoved:    { type: Boolean, default: false },
 
     condition: {
       type: String,

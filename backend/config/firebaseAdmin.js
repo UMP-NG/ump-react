@@ -1,5 +1,6 @@
 import { initializeApp, getApps, cert } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
+import { getMessaging } from "firebase-admin/messaging";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Fill these in your backend .env file (copy values from Firebase Console →
@@ -32,4 +33,18 @@ export function getFirebaseAuth() {
 
   _auth = getAuth();
   return _auth;
+}
+
+export async function sendPushNotification(fcmToken, { title, body, data = {} }) {
+  if (!fcmToken) return;
+  const messaging = getFirebaseAuth() ? getMessaging() : null;
+  if (!messaging) return;
+  try {
+    const stringData = Object.fromEntries(Object.entries(data).map(([k, v]) => [k, String(v)]));
+    await messaging.send({ token: fcmToken, notification: { title, body }, data: stringData });
+  } catch (err) {
+    if (err?.code !== "messaging/registration-token-not-registered") {
+      console.error("FCM send error:", err.message);
+    }
+  }
 }

@@ -397,6 +397,7 @@ export default function ProductDetail() {
 
       {/* cart bar inline on desktop */}
       {isDesktop && (
+        <>
         <div style={{ marginTop: 20, display: "flex", alignItems: "center", gap: 10 }}>
           {!outOfStock && (
             <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "8px 10px", border: "1px solid var(--line)", borderRadius: "var(--r-pill)", background: "var(--surface)" }}>
@@ -413,6 +414,13 @@ export default function ProductDetail() {
             {cartLoading ? <i className="fas fa-spinner fa-spin" /> : outOfStock ? "Out of Stock" : <><i className="fas fa-bag-shopping" /> Add to cart — {naira(product.price * qty)}</>}
           </button>
         </div>
+        <div style={{ marginTop: 14, padding: "10px 12px", background: "rgba(245,158,11,.06)", border: "1px solid rgba(245,158,11,.22)", borderRadius: "var(--r-md)", display: "flex", gap: 10, alignItems: "flex-start" }}>
+          <i className="fas fa-shield-halved" style={{ color: "#f59e0b", marginTop: 2, flexShrink: 0, fontSize: "1.2rem" }} />
+          <p style={{ margin: 0, fontSize: "1.15rem", color: "var(--ink-2)", lineHeight: 1.55 }}>
+            <strong>Pay only through UMP checkout</strong> — never send money directly to a seller's account. Off-campus pickups are at the buyer's own risk.
+          </p>
+        </div>
+        </>
       )}
     </div>
   );

@@ -6,6 +6,7 @@ import { useUser } from "../context/UserContext";
 import { useToast } from "../context/ToastContext";
 import { apiFetch } from "../utils/api";
 import { isPushSupported, requestPushPermission, disablePushNotifications } from "../utils/pushNotification";
+import ImageCropModal from "../components/ImageCropModal";
 
 const DOMAIN = "@live.unilag.edu.ng";
 const BASE_TABS = ["Profile", "Security", "Notifications"];
@@ -13,11 +14,13 @@ const BASE_TABS = ["Profile", "Security", "Notifications"];
 // ─── Avatar ──────────────────────────────────────────────────────────────────
 function AvatarPicker({ avatarUrl, initials, onPick, uploading }) {
   const ref = useRef();
+  const [avatarBroken, setAvatarBroken] = useState(false);
+  useEffect(() => { setAvatarBroken(false); }, [avatarUrl]);
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 16, marginBottom: 24 }}>
       <div
         className="avatar"
-        style={{ width: 72, height: 72, fontSize: "2.4rem", overflow: "hidden", padding: avatarUrl ? 0 : undefined, flexShrink: 0, cursor: "pointer", position: "relative" }}
+        style={{ width: 72, height: 72, fontSize: "2.4rem", overflow: "hidden", padding: avatarUrl && !avatarBroken ? 0 : undefined, flexShrink: 0, cursor: "pointer", position: "relative" }}
         onClick={() => ref.current.click()}
       >
         {uploading && (
@@ -25,8 +28,8 @@ function AvatarPicker({ avatarUrl, initials, onPick, uploading }) {
             <i className="fas fa-spinner fa-spin" style={{ color: "#fff", fontSize: "1.8rem" }} />
           </div>
         )}
-        {avatarUrl
-          ? <img src={avatarUrl} alt="avatar" style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={(e) => { e.currentTarget.style.display = "none"; }} />
+        {avatarUrl && !avatarBroken
+          ? <img src={avatarUrl} alt="avatar" style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={() => setAvatarBroken(true)} />
           : initials}
       </div>
       <div>
@@ -69,17 +72,26 @@ function ProfileTab({ user, setUser, showToast }) {
   });
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [cropSrc, setCropSrc] = useState(null);
   const avatarUrl = user?.avatar?.url || (typeof user?.avatar === "string" ? user.avatar : null);
   const initials = (user?.name || user?.email || "U").split(" ").map((p) => p[0]).join("").slice(0, 2).toUpperCase();
   const isGoogleEmail = user?.googleAccount && !user?.schoolEmail;
 
-  async function handleAvatarPick(e) {
+  function handleAvatarPick(e) {
     const file = e.target.files[0];
     if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => setCropSrc(reader.result);
+    reader.readAsDataURL(file);
+    e.target.value = "";
+  }
+
+  async function handleCropConfirm(blob) {
+    setCropSrc(null);
     setUploading(true);
     try {
       const fd = new FormData();
-      fd.append("file", file);
+      fd.append("file", new File([blob], "avatar.jpg", { type: "image/jpeg" }));
       const data = await apiFetch("/api/upload", { method: "POST", body: fd });
       const avatar = { url: data.url, publicId: data.publicId || "" };
       await apiFetch("/api/users/me", { method: "PUT", body: { avatar } });
@@ -107,6 +119,16 @@ function ProfileTab({ user, setUser, showToast }) {
   }
 
   return (
+    <>
+    {cropSrc && (
+      <ImageCropModal
+        src={cropSrc}
+        aspect={1}
+        title="Crop profile photo"
+        onConfirm={handleCropConfirm}
+        onCancel={() => setCropSrc(null)}
+      />
+    )}
     <form onSubmit={handleSave}>
       <SectionLabel title="Profile photo" />
       <AvatarPicker avatarUrl={avatarUrl} initials={initials} onPick={handleAvatarPick} uploading={uploading} />
@@ -150,6 +172,7 @@ function ProfileTab({ user, setUser, showToast }) {
         </button>
       </div>
     </form>
+    </>
   );
 }
 

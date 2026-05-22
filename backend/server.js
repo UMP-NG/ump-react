@@ -33,23 +33,7 @@ console.log(`✅ MONGO_URI configured`);
 
 console.log(`✅ Environment validation passed\n`);
 
-// 🧩 Connect to MongoDB
-let mongoConnected = false;
-mongoose
-  .connect(MONGO_URI, {
-    serverSelectionTimeoutMS: 5000,
-    connectTimeoutMS: 5000,
-  })
-  .then(() => {
-    console.log("✅ MongoDB connected");
-    mongoConnected = true;
-  })
-  .catch((err) => {
-    console.error("❌ MongoDB connection error:", err.message);
-    console.warn("⚠️  Server will start anyway, but database queries will fail");
-  });
-
-// 🧩 Create HTTP server with extended timeout
+// 🧩 Create HTTP server first (Socket.io needs the server object before DB connects)
 const server = http.createServer(app);
 
 // Set timeout for file uploads (2 minutes)
@@ -147,38 +131,62 @@ io.on("connection", (socket) => {
   });
 });
 
-// 🚀 Start server
-server.listen(PORT, () => {
-  console.log(`✅ Server running on port ${PORT}`);
+// Log Atlas connection state changes so drops are immediately visible in the terminal
+// Mongoose 8 handles reconnection automatically — no manual reconnect needed here.
+mongoose.connection.on("disconnected", () =>
+  console.warn("⚠️  [MongoDB] Disconnected — Mongoose will reconnect automatically when network is available")
+);
+mongoose.connection.on("reconnected", () =>
+  console.log("✅ [MongoDB] Reconnected")
+);
+mongoose.connection.on("error", (err) =>
+  console.error("❌ [MongoDB] Connection error:", err.message)
+);
 
-  // Keep-alive ping for Render free tier (spins down after 15min inactivity)
-  // Fires at a random interval between 4–10 minutes
-  const SELF_URL = process.env.RENDER_EXTERNAL_URL;
-  if (SELF_URL) {
-    let pingTimer = null;
-    const scheduleNextPing = () => {
-      const delay = Math.floor(Math.random() * (10 - 4 + 1) + 4) * 60 * 1000;
-      pingTimer = setTimeout(async () => {
-        try {
-          const { default: https } = await import("https");
-          https.get(`${SELF_URL}/health`, (res) => {
-            console.log(`🏓 Keep-alive ping — ${res.statusCode}`);
-          }).on("error", (err) => {
-            console.warn(`⚠️  Keep-alive ping failed: ${err.message}`);
-          });
-        } catch (err) {
-          console.warn(`⚠️  Keep-alive ping error: ${err.message}`);
-        }
+// 🚀 Connect to MongoDB, then start accepting HTTP connections
+// Starting the server before MongoDB is ready causes 500 "Database error" on
+// the first few requests (race condition during Mongoose connection handshake).
+mongoose
+  .connect(MONGO_URI, {
+    serverSelectionTimeoutMS: 30000, // 30 s — more time for Atlas to elect a primary
+    connectTimeoutMS: 30000,
+    socketTimeoutMS: 45000,          // 45 s — wait for slow Atlas responses
+  })
+  .then(() => {
+    console.log("✅ MongoDB connected");
+
+    server.listen(PORT, () => {
+      console.log(`✅ Server running on port ${PORT}`);
+
+      // Keep-alive ping for Render free tier (spins down after 15min inactivity)
+      const SELF_URL = process.env.RENDER_EXTERNAL_URL;
+      if (SELF_URL) {
+        let pingTimer = null;
+        const scheduleNextPing = () => {
+          const delay = Math.floor(Math.random() * (10 - 4 + 1) + 4) * 60 * 1000;
+          pingTimer = setTimeout(async () => {
+            try {
+              const { default: https } = await import("https");
+              https.get(`${SELF_URL}/health`, (res) => {
+                console.log(`🏓 Keep-alive ping — ${res.statusCode}`);
+              }).on("error", (err) => {
+                console.warn(`⚠️  Keep-alive ping failed: ${err.message}`);
+              });
+            } catch (err) {
+              console.warn(`⚠️  Keep-alive ping error: ${err.message}`);
+            }
+            scheduleNextPing();
+          }, delay);
+        };
         scheduleNextPing();
-      }, delay);
-    };
-    scheduleNextPing();
-    console.log("✅ Keep-alive ping scheduled (4–10 min random interval)");
-
-    // Clean up on server close to prevent memory leaks
-    server.on("close", () => {
-      if (pingTimer) clearTimeout(pingTimer);
+        console.log("✅ Keep-alive ping scheduled (4–10 min random interval)");
+        server.on("close", () => { if (pingTimer) clearTimeout(pingTimer); });
+      }
     });
-  }
-});
+  })
+  .catch((err) => {
+    console.error("❌ MongoDB connection failed:", err.message);
+    console.error("   Server will NOT start — fix MONGO_URI or check network access.");
+    process.exit(1);
+  });
 

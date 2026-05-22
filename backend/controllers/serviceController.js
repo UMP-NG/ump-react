@@ -180,9 +180,9 @@ export const createService = async (req, res) => {
     } catch (linkErr) {
       console.warn("⚠️ Could not link service to user.services:", linkErr);
     }
-    // Update user role to service provider if not already
-    if (user.role !== "service_provider") {
-      user.role = "service_provider";
+    // Update user roles to include service_provider if not already
+    if (!user.roles?.includes("service_provider")) {
+      user.roles = [...new Set([...(user.roles || []), "service_provider"])];
       await user.save();
     }
 
@@ -278,7 +278,7 @@ export const updateService = async (req, res) => {
 
     if (
       service.provider.toString() !== req.user._id.toString() &&
-      req.user.role !== "admin"
+      !req.user.roles?.includes("admin")
     ) {
       return res
         .status(403)
@@ -322,7 +322,7 @@ export const deleteService = async (req, res) => {
 
     if (
       service.provider.toString() !== req.user._id.toString() &&
-      req.user.role !== "admin"
+      !req.user.roles?.includes("admin")
     ) {
       return res
         .status(403)

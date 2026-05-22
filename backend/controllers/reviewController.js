@@ -81,7 +81,7 @@ export const deleteReview = async (req, res) => {
 
     if (
       review.author.toString() !== req.user._id.toString() &&
-      req.user.role !== "admin"
+      !req.user.roles?.includes("admin")
     )
       return res.status(403).json({ success: false, message: "Unauthorized" });
 

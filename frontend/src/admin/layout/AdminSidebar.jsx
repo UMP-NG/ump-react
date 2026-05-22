@@ -94,7 +94,7 @@ export default function AdminSidebar({ collapsed, onToggle }) {
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div className="name">{user?.name || 'Admin'}</div>
-          <div className="role">{user?.role || 'admin'}</div>
+          <div className="role">{user?.roles?.includes('admin') ? 'admin' : (user?.roles?.[0] || 'admin')}</div>
         </div>
         <i className="fa-solid fa-ellipsis-vertical" style={{ color: '#6b7891' }}></i>
       </div>
