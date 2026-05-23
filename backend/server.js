@@ -151,6 +151,7 @@ mongoose
     serverSelectionTimeoutMS: 30000, // 30 s — more time for Atlas to elect a primary
     connectTimeoutMS: 30000,
     socketTimeoutMS: 45000,          // 45 s — wait for slow Atlas responses
+    bufferTimeoutMS: 10000,          // fail buffered ops after 10 s instead of hanging forever
   })
   .then(() => {
     console.log("✅ MongoDB connected");

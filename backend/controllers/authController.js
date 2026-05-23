@@ -352,26 +352,16 @@ export const protect = (req, res, next) => {
 // ===============================
 // GET LOGGED-IN USER
 // ===============================
-export const getMe = async (req, res) => {
-  try {
-    const user = await User.findById(req.user._id)
-      .select("-password -otp -otpExpire -resetPasswordToken -resetPasswordExpire -schoolEmailOtp -schoolEmailOtpExpire")
-      .lean();
-
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
-    }
-
-    res.status(200).json({
-      message: "User fetched successfully",
-      user: {
-        ...user,
-        isLimitedAccount: user.googleAccount && !user.isVerified,
-      },
-    });
-  } catch (error) {
-    res.status(500).json({ message: "Server error" });
-  }
+export const getMe = (req, res) => {
+  // req.user is already populated by the protect middleware — no second DB query needed
+  const user = req.user;
+  res.status(200).json({
+    message: "User fetched successfully",
+    user: {
+      ...user,
+      isLimitedAccount: user.googleAccount && !user.isVerified,
+    },
+  });
 };
 
 // ===============================

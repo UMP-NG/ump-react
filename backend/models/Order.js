@@ -89,9 +89,22 @@ const orderSchema = new mongoose.Schema(
     deliveryCodeUsed: { type: Boolean, default: false },
     escrowReleasedAt: Date,
     isReviewed: { type: Boolean, default: false },
+
+    // Dispute fields — stored directly on the order (no separate collection)
+    disputeReason:      { type: String },
+    disputeDescription: { type: String },
+    disputeOutcome:     { type: String },
+    disputeNote:        { type: String },
+    disputeResolvedAt:  { type: Date },
+    disputeResolvedBy:  { type: mongoose.Schema.Types.ObjectId, ref: "User" },
   },
   { timestamps: true }
 );
+
+orderSchema.index({ status: 1, createdAt: -1 });   // status filter + recent-first sort
+orderSchema.index({ buyer: 1, createdAt: -1 });    // buyer order history
+orderSchema.index({ seller: 1, createdAt: -1 });   // seller order history + revenue agg
+orderSchema.index({ createdAt: -1 });              // dashboard recent orders + chart agg
 
 export default mongoose.model("Order", orderSchema);
 

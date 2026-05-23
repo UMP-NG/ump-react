@@ -15,6 +15,7 @@ const adminSchema = new mongoose.Schema(
       publicId: { type: String, default: "" },
     },
     role: { type: String, default: "admin" },
+    supportRole: { type: String, enum: ["technical", "administrative"], default: null },
     isActive: { type: Boolean, default: true },
     permissions: {
       canManageUsers: { type: Boolean, default: true },

@@ -1,4 +1,8 @@
 import Review from "../models/Review.js";
+import Product from "../models/Product.js";
+import Listing from "../models/Listing.js";
+import Service from "../models/Service.js";
+import { notify } from "../utils/notify.js";
 
 // ✅ Create Review
 export const addReview = async (req, res) => {
@@ -18,6 +22,25 @@ export const addReview = async (req, res) => {
       rating,
       text,
     });
+
+    // Notify item owner of new review (best-effort, non-blocking)
+    try {
+      const MODEL_MAP = { Product, Listing, Service };
+      const Model = MODEL_MAP[refModel];
+      if (Model) {
+        const item = await Model.findById(refId).select("seller provider name title").lean();
+        const ownerId = item?.seller || item?.provider;
+        const itemName = item?.name || item?.title || refModel.toLowerCase();
+        if (ownerId) {
+          notify(ownerId, {
+            type: "review",
+            title: `New ${rating}-star review`,
+            message: `Someone left a ${rating}-star review on your ${itemName}.`,
+            link: "/seller/dashboard",
+          });
+        }
+      }
+    } catch {}
 
     res.status(201).json({ success: true, review });
   } catch (error) {

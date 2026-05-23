@@ -23,14 +23,30 @@ import {
   getAdminTeam,
   getAdminActivity,
   getAdminProviders,
+  approveProvider,
+  getAdminServices,
   getAdminProducts,
   bulkProductAction,
+  getAdminBookings,
+  getAdminListings,
+  getAdminCategories,
+  createCategory,
+  deleteCategory,
+  getSupportAdmins,
+  setSupportRole,
+  getSupportTeam,
+  getAdminReviews,
+  deleteReview,
+  getAdminReports,
+  resolveReport,
   getAdminDisputes,
   resolveDispute,
   getBroadcasts,
   createBroadcast,
+  deleteBroadcast,
   getConfig,
   saveConfig,
+  inviteAdmin,
 } from "../controllers/adminDashboardController.js";
 
 const router = express.Router();
@@ -72,6 +88,7 @@ router.get("/activity", ...adm, getAdminActivity);
 
 // ── Users ──────────────────────────────────────────────────────────────────
 router.get   ("/users",                  ...adm, getAdminUsers);
+router.post  ("/invite",                 ...adm, inviteAdmin);
 router.put   ("/users/:userId/role",     ...adm, updateUserRole);
 router.post  ("/users/:userId/ban",      ...adm, banUser);
 router.post  ("/users/:userId/unban",    ...adm, unbanUser);
@@ -89,13 +106,17 @@ router.get   ("/orders",            ...adm, getAdminOrders);
 router.put   ("/orders/:orderId",   ...adm, updateOrder);
 router.delete("/orders/:orderId",   ...adm, deleteOrder);
 
+// ── Bookings ───────────────────────────────────────────────────────────────
+router.get("/bookings", ...adm, getAdminBookings);
+
 // ── Payouts ────────────────────────────────────────────────────────────────
 router.get ("/payouts/summary",            ...adm, getPayoutsSummary);
 router.get ("/payouts",                    ...adm, getAdminPayouts);
 router.post("/payouts/:payoutId/approve",  ...adm, approvePayout);
 
 // ── Providers ─────────────────────────────────────────────────────────────
-router.get("/providers", ...adm, getAdminProviders);
+router.get ("/providers",                      ...adm, getAdminProviders);
+router.post("/providers/:userId/approve",      ...adm, approveProvider);
 
 // ── Products ───────────────────────────────────────────────────────────────
 router.get   ("/products",             ...adm, getAdminProducts);
@@ -103,23 +124,44 @@ router.post  ("/products/bulk",        ...adm, bulkProductAction);
 router.put   ("/products/:productId",  ...adm, updateProduct);
 router.delete("/products/:productId",  ...adm, deleteProduct);
 
+// ── Reviews ────────────────────────────────────────────────────────────────
+router.get   ("/reviews",            ...adm, getAdminReviews);
+router.delete("/reviews/:reviewId",  ...adm, deleteReview);
+
+// ── Reported content ───────────────────────────────────────────────────────
+router.get ("/reports",                      ...adm, getAdminReports);
+router.post("/reports/:reportId/resolve",    ...adm, resolveReport);
+
 // ── Disputes ───────────────────────────────────────────────────────────────
 router.get ("/disputes",                      ...adm, getAdminDisputes);
 router.post("/disputes/:disputeId/resolve",   ...adm, resolveDispute);
 
 // ── Broadcasts ─────────────────────────────────────────────────────────────
-router.get ("/broadcasts", ...adm, getBroadcasts);
-router.post("/broadcasts", ...adm, createBroadcast);
+router.get   ("/broadcasts",                  ...adm, getBroadcasts);
+router.post  ("/broadcasts",                  ...adm, createBroadcast);
+router.delete("/broadcasts/:broadcastId",     ...adm, deleteBroadcast);
 
 // ── Config ─────────────────────────────────────────────────────────────────
 router.get("/config", getConfig);          // public — needed for logo on frontend
 router.put("/config", ...adm, saveConfig);
 
 // ── Listings ───────────────────────────────────────────────────────────────
-router.put   ("/listings/:listingId",  ...adm, updateListing);
-router.delete("/listings/:listingId",  ...adm, deleteListing);
+router.get   ("/listings",                ...adm, getAdminListings);
+router.put   ("/listings/:listingId",     ...adm, updateListing);
+router.delete("/listings/:listingId",     ...adm, deleteListing);
+
+// ── Categories ─────────────────────────────────────────────────────────────
+router.get   ("/categories",              ...adm, getAdminCategories);
+router.post  ("/categories",              ...adm, createCategory);
+router.delete("/categories/:categoryId",  ...adm, deleteCategory);
+
+// ── Support roles ──────────────────────────────────────────────────────────
+router.get ("/support/team",                    getSupportTeam);   // public
+router.get ("/support/admins",                  ...adm, getSupportAdmins);
+router.put ("/support/admins/:userId/role",     ...adm, setSupportRole);
 
 // ── Services ───────────────────────────────────────────────────────────────
+router.get   ("/services",             ...adm, getAdminServices);
 router.put   ("/services/:serviceId",  ...adm, updateService);
 router.delete("/services/:serviceId",  ...adm, deleteService);
 

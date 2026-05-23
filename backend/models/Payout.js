@@ -17,5 +17,7 @@ const payoutSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+payoutSchema.index({ status: 1, createdAt: -1 }); // pending payouts filter + agg
+
 export default mongoose.model("Payout", payoutSchema);
 

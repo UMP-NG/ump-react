@@ -138,6 +138,13 @@ const userSchema = new mongoose.Schema(
 
     fcmToken: { type: String, default: null },
 
+    // Support role for admin users (null = not a support contact)
+    supportRole: {
+      type: String,
+      enum: ["technical", "administrative"],
+      default: null,
+    },
+
     status: {
       type: String,
       enum: ["active", "inactive", "banned"],
@@ -203,8 +210,10 @@ userSchema.methods.createResetToken = function () {
 // ===============================
 // INDEXES FOR PERFORMANCE
 // ===============================
-// Note: email already has unique index via "unique: true" property
-// Note: _id already has default index from MongoDB
+// email and _id already indexed via schema options / MongoDB default
+userSchema.index({ roles: 1, createdAt: -1 });   // admin user list filtered by role
+userSchema.index({ status: 1, createdAt: -1 });   // ban/status filtering
+userSchema.index({ createdAt: -1 });              // default sort, new-users-today count
 
 export default mongoose.model("User", userSchema);
 

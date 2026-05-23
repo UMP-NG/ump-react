@@ -131,5 +131,8 @@ productSchema.pre("save", function (next) {
   next();
 });
 
+productSchema.index({ seller: 1, createdAt: -1 });           // seller product list + count agg
+productSchema.index({ isFlagged: 1, isRemoved: 1, createdAt: -1 }); // admin product filter
+
 export default mongoose.model("Product", productSchema);
 

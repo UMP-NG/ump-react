@@ -1,0 +1,19 @@
+import mongoose from "mongoose";
+
+// One document per browser subscription.
+// A single user can have multiple subscriptions (phone + laptop etc.).
+const pushSubSchema = new mongoose.Schema(
+  {
+    user:         { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+    endpoint:     { type: String, required: true, unique: true },
+    keys:         { p256dh: String, auth: String },
+    // Mirror of User.roles so we can filter by audience without joining
+    roles:        [{ type: String }],
+  },
+  { timestamps: true }
+);
+
+pushSubSchema.index({ user: 1 });
+pushSubSchema.index({ roles: 1 });
+
+export default mongoose.model("PushSub", pushSubSchema);

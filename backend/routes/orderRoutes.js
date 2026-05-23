@@ -15,6 +15,7 @@ import {
   confirmTransfer,
   getEscrowDetails,
   getCurrentOrder,
+  raiseDispute,
 } from "../controllers/orderController.js";
 import { uploadPaymentProof } from "../middleware/upload.js";
 import { protect, requireRole } from "../middleware/authMiddleware.js";
@@ -121,6 +122,13 @@ router.delete(
   protect,
   requireRole("user", "admin"),
   cancelOrder
+);
+
+router.post(
+  "/:orderId/dispute",
+  protect,
+  requireRole("user", "seller", "admin"),
+  raiseDispute
 );
 
 export default router;

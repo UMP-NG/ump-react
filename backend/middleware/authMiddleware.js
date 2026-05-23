@@ -42,7 +42,8 @@ export const protect = async (req, res, next) => {
     }
     try {
       const user = await User.findById(decoded.id)
-        .select("-password -wishlist -cart -orders -services -following")
+        .select("-password -wishlist -cart -orders -services -following -otp -otpExpire -resetPasswordToken -resetPasswordExpire -schoolEmailOtp -schoolEmailOtpExpire")
+        .maxTimeMS(8000)
         .lean();
       
       if (!user) {

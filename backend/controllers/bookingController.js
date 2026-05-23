@@ -4,6 +4,7 @@ import Service from "../models/Service.js";
 import Listing from "../models/Listing.js";
 import Message from "../models/Message.js";
 import User from "../models/User.js";
+import { notify } from "../utils/notify.js";
 
 // ===============================
 // CREATE BOOKING
@@ -59,6 +60,23 @@ export const createBooking = async (req, res) => {
       console.error("⚠️ Error sending booking confirmation message:", msgErr);
       // Don't fail the booking if message fails
     }
+
+    // Notify provider of new booking
+    if (provider) {
+      notify(provider, {
+        type: "booking",
+        title: "New booking request",
+        message: `You have a new booking request for ${item.name || item.title || "your listing"} on ${date} at ${timeSlot}.`,
+        link: "/messages",
+      });
+    }
+    // Notify user their booking was submitted
+    notify(req.user._id, {
+      type: "booking",
+      title: "Booking request sent",
+      message: `Your booking for ${item.name || item.title || "the service"} on ${date} at ${timeSlot} has been submitted.`,
+      link: "/bookings",
+    });
 
     res.status(201).json({
       success: true,

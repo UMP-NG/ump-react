@@ -16,6 +16,7 @@ const messageSchema = new mongoose.Schema(
     attachments: [{ type: String }],
     isRead: { type: Boolean, default: false },
     readBy: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+    isAdminMessage: { type: Boolean, default: false },
   },
   { timestamps: true }
 );

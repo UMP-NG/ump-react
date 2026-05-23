@@ -58,13 +58,27 @@ export const getNotifications = async (req, res) => {
   }
 };
 
-// ✅ Mark notification as read
+// ✅ Mark single notification as read
 export const markNotificationRead = async (req, res) => {
   try {
     const userId = req.user._id;
     const { id } = req.params;
     await Notification.updateOne(
       { _id: id, user: userId },
+      { $set: { read: true } }
+    );
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: err.message });
+  }
+};
+
+// ✅ Mark all notifications as read
+export const markAllNotificationsRead = async (req, res) => {
+  try {
+    await Notification.updateMany(
+      { user: req.user._id, read: false },
       { $set: { read: true } }
     );
     res.json({ success: true });

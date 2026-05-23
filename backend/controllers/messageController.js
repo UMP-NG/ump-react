@@ -40,6 +40,7 @@ export const sendMessage = async (req, res) => {
       receiver,
       text: text || "",
       attachments,
+      isAdminMessage: req.user.roles?.includes("admin") ?? false,
     });
 
     // ✅ Emit via Socket.io
@@ -72,8 +73,8 @@ export const getUserMessages = async (req, res) => {
     };
 
     const messages = await Message.find(filter)
-      .populate("sender", "name avatar role")
-      .populate("receiver", "name avatar role")
+      .populate("sender", "name avatar roles")
+      .populate("receiver", "name avatar roles")
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit));
@@ -139,6 +140,7 @@ export const getUserConversations = async (req, res) => {
           },
           latestMessage: { $first: "$text" },
           latestCreatedAt: { $first: "$createdAt" },
+          isAdminLastMessage: { $first: "$isAdminMessage" },
           unreadCount: {
             $sum: {
               $cond: [
@@ -165,7 +167,7 @@ export const getUserConversations = async (req, res) => {
                 _id: 1,
                 name: 1,
                 avatar: 1,
-                role: 1,
+                roles: 1,
               },
             },
           ],
@@ -181,6 +183,7 @@ export const getUserConversations = async (req, res) => {
           roles: "$user.roles",
           latestMessage: 1,
           latestCreatedAt: 1,
+          isAdminLastMessage: 1,
           unreadCount: 1,
         },
       },

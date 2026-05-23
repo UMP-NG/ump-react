@@ -19,7 +19,14 @@ const configSchema = new mongoose.Schema(
       maintenanceMode:      { type: Boolean, default: false },
     },
     slides: [
-      { title: String, url: String, on: { type: Boolean, default: true } },
+      {
+        title:    String,
+        subtitle: String,
+        ctaLabel: String,
+        url:      String,
+        image:    { url: { type: String, default: '' }, publicId: { type: String, default: '' } },
+        on:       { type: Boolean, default: true },
+      },
     ],
     logo: {
       url:       { type: String, default: "" },

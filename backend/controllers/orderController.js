@@ -8,6 +8,7 @@ import PDFDocument from "pdfkit";
 import cloudinary from "../config/cloudinary.js";
 import paystack from "../utils/paystack.js";
 import { audit } from "../utils/auditLog.js";
+import { notify } from "../utils/notify.js";
 
 function generateDeliveryCode() {
   return Math.random().toString(36).substring(2, 8).toUpperCase();
@@ -157,6 +158,22 @@ export const checkoutCart = async (req, res) => {
 
     cart.items = [];
     await cart.save();
+
+    // Notify buyer and seller
+    notify(userId, {
+      type: "order",
+      title: "Order placed",
+      message: `Your order #${order._id.toString().slice(-6).toUpperCase()} has been placed and is awaiting confirmation.`,
+      link: "/orders",
+    });
+    if (sellerId) {
+      notify(sellerId, {
+        type: "order",
+        title: "New order received",
+        message: `You have a new order worth ₦${order.totalAmount.toLocaleString()}. Confirm it to get started.`,
+        link: "/seller/orders",
+      });
+    }
 
     return res.status(201).json({ success: true, order });
   } catch (err) {
@@ -349,6 +366,22 @@ export const updateOrderStatus = async (req, res) => {
 
     await order.save();
 
+    // Notify buyer of status change
+    const STATUS_MSG = {
+      confirmed:  "Your order has been confirmed by the seller.",
+      shipped:    "Your order is on its way!",
+      completed:  "Your order has been marked as completed.",
+      cancelled:  "Your order has been cancelled.",
+    };
+    if (order.buyer) {
+      notify(order.buyer, {
+        type: "order",
+        title: `Order ${status}`,
+        message: STATUS_MSG[status] || `Your order status changed to ${status}.`,
+        link: "/orders",
+      });
+    }
+
     audit(`ORDER_${status.toUpperCase()}`, {
       actor: req.user._id,
       entity: "Order",
@@ -393,6 +426,46 @@ export const updateOrder = async (req, res) => {
     res.json({ success: true, order });
   } catch (error) {
     console.error("Error updating order:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+// ===============================
+// Raise a dispute (buyer only)
+// ===============================
+export const raiseDispute = async (req, res) => {
+  try {
+    const { reason, description } = req.body;
+    if (!reason?.trim()) return res.status(400).json({ message: "Dispute reason is required" });
+
+    const order = await Order.findById(req.params.orderId);
+    if (!order) return res.status(404).json({ message: "Order not found" });
+    if (order.buyer.toString() !== req.user._id.toString())
+      return res.status(403).json({ message: "You can only dispute your own orders" });
+    if (order.status === "disputed")
+      return res.status(400).json({ message: "A dispute is already open for this order" });
+    if (["cancelled", "completed"].includes(order.status))
+      return res.status(400).json({ message: "Cannot dispute a completed or cancelled order" });
+
+    order.status             = "disputed";
+    order.disputeReason      = reason.trim();
+    order.disputeDescription = (description || "").trim();
+    await order.save({ validateModifiedOnly: true });
+
+    // Notify seller of dispute
+    const sellerUserId = order.seller;
+    if (sellerUserId) {
+      notify(sellerUserId, {
+        type: "dispute",
+        title: "Dispute raised",
+        message: `A buyer has raised a dispute on order #${order._id.toString().slice(-6).toUpperCase()}. Check your orders for details.`,
+        link: "/seller/orders",
+      });
+    }
+
+    res.json({ success: true, orderId: order._id });
+  } catch (err) {
+    console.error("raiseDispute:", err);
     res.status(500).json({ message: "Server error" });
   }
 };
