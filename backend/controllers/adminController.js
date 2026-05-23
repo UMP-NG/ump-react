@@ -4,6 +4,7 @@ import Product from "../models/Product.js";
 import Listing from "../models/Listing.js";
 import Service from "../models/Service.js";
 import Order from "../models/Order.js";
+import PushSub from "../models/PushSub.js";
 import fs from "fs";
 import csv from "csv-parser";
 import bcrypt from "bcryptjs";
@@ -96,6 +97,8 @@ export const updateUserRole = async (req, res) => {
     }
 
     await user.save();
+    // Keep PushSub.roles in sync so audience filters in broadcasts stay accurate
+    await PushSub.updateMany({ user: user._id }, { $set: { roles: user.roles } });
     res.json({ success: true, user: { _id: user._id, roles: user.roles } });
   } catch (error) {
     res.status(500).json({ message: "Server error" });

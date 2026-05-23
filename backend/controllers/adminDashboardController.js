@@ -37,7 +37,7 @@ const fmt = (n) => {
   if (!n || isNaN(n)) return "₦0";
   if (n >= 1_000_000) return `₦${(n / 1_000_000).toFixed(2)}M`;
   if (n >= 1_000)     return `₦${(n / 1_000).toFixed(1)}K`;
-  return `₦${Math.round(n).toLocaleString()}`;
+  return `₦${Math.round(n).toLocaleString("en-NG")}`;
 };
 
 const startOf = (daysAgo) => {
@@ -613,7 +613,6 @@ export const approvePayout = async (req, res) => {
         { $inc: { pendingPayout: -payout.amount } }
       );
       // Notify seller their payout is being processed
-      const fmt = (n) => n >= 1_000_000 ? `₦${(n/1_000_000).toFixed(2)}M` : n >= 1_000 ? `₦${(n/1_000).toFixed(1)}K` : `₦${Math.round(n).toLocaleString()}`;
       notify(payout.seller, {
         type: "payout",
         title: "Payout processing",
@@ -1499,9 +1498,9 @@ export const createBroadcast = async (req, res) => {
 
     // ── Build audience user filter ───────────────────────────────────────────
     const roleFilter =
-      audience === "sellers"   ? { roles: "seller" } :
-      audience === "buyers"    ? { roles: "user" }   :
-      audience === "providers" ? { roles: "provider" } :
+      audience === "sellers"   ? { roles: "seller" }           :
+      audience === "buyers"    ? { roles: "user" }             :
+      audience === "providers" ? { roles: "service_provider" } :
       {};                        // "all" — no filter
 
     let reach = 0;
@@ -1535,9 +1534,9 @@ export const createBroadcast = async (req, res) => {
       const subFilter = audience === "all" ? {} : roleFilter;
       // PushSub.roles mirrors User.roles — query directly without joining
       const audienceRole =
-        audience === "sellers"   ? "seller"   :
-        audience === "buyers"    ? "user"     :
-        audience === "providers" ? "provider" :
+        audience === "sellers"   ? "seller"           :
+        audience === "buyers"    ? "user"             :
+        audience === "providers" ? "service_provider" :
         null;
       const pushFilter = audienceRole ? { roles: audienceRole } : {};
 

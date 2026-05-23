@@ -354,12 +354,25 @@ export const protect = (req, res, next) => {
 // ===============================
 export const getMe = (req, res) => {
   // req.user is already populated by the protect middleware — no second DB query needed
-  const user = req.user;
+  // Explicitly pick fields to avoid leaking internal ones (fcmToken, __v, etc.)
+  const u = req.user;
   res.status(200).json({
     message: "User fetched successfully",
     user: {
-      ...user,
-      isLimitedAccount: user.googleAccount && !user.isVerified,
+      _id:             u._id,
+      name:            u.name,
+      email:           u.email,
+      roles:           u.roles,
+      avatar:          u.avatar,
+      phone:           u.phone,
+      address:         u.address,
+      isVerified:      u.isVerified,
+      googleAccount:   u.googleAccount,
+      schoolEmail:     u.schoolEmail,
+      schoolEmailVerified: u.schoolEmailVerified,
+      status:          u.status,
+      createdAt:       u.createdAt,
+      isLimitedAccount: !!(u.googleAccount && !u.isVerified),
     },
   });
 };

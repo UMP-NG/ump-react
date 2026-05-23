@@ -2,15 +2,18 @@ import webpush from "web-push";
 import PushSub from "../models/PushSub.js";
 import User from "../models/User.js";
 
-function configureWebPush() {
+// Configure VAPID once at module load, not on every send
+let _pushReady = false;
+try {
   const pub  = process.env.VAPID_PUBLIC_KEY;
   const priv = process.env.VAPID_PRIVATE_KEY;
   const mail = process.env.VAPID_EMAIL || "mailto:admin@myump.com.ng";
   if (pub && priv) {
     webpush.setVapidDetails(mail, pub, priv);
-    return true;
+    _pushReady = true;
   }
-  return false;
+} catch (err) {
+  console.error("VAPID config error:", err.message);
 }
 
 // GET /api/push/vapid-key  — public key the browser needs to subscribe
@@ -23,8 +26,11 @@ export const getVapidKey = (req, res) => {
 export const subscribe = async (req, res) => {
   try {
     const { endpoint, keys } = req.body;
-    if (!endpoint || !keys?.p256dh || !keys?.auth)
-      return res.status(400).json({ message: "Invalid subscription object" });
+    if (
+      !endpoint ||
+      typeof keys?.p256dh !== "string" || !keys.p256dh.trim() ||
+      typeof keys?.auth   !== "string" || !keys.auth.trim()
+    ) return res.status(400).json({ message: "Invalid subscription object" });
 
     const user = await User.findById(req.user._id).select("roles").lean();
     const roles = user?.roles || ["user"];
@@ -63,7 +69,7 @@ export const unsubscribe = async (req, res) => {
  * @param {object} payload   — { title, body, url, icon }
  */
 export async function sendPushToSubs(subs, payload) {
-  if (!configureWebPush() || subs.length === 0) return 0;
+  if (!_pushReady || subs.length === 0) return 0;
 
   const json = JSON.stringify(payload);
   let delivered = 0;

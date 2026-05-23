@@ -76,7 +76,10 @@ export const optionalAuth = async (req, res, next) => {
     if (!token) return next();
     let decoded;
     try { decoded = jwt.verify(token, process.env.JWT_SECRET); } catch { return next(); }
-    const user = await User.findById(decoded.id).select("-password -wishlist -cart -orders -services -following").lean();
+    const user = await User.findById(decoded.id)
+      .select("-password -wishlist -cart -orders -services -following -otp -otpExpire -resetPasswordToken -resetPasswordExpire -schoolEmailOtp -schoolEmailOtpExpire -fcmToken")
+      .maxTimeMS(5000)
+      .lean();
     if (user) req.user = user;
   } catch { /* ignore */ }
   next();

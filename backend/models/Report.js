@@ -45,8 +45,11 @@ const reportSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// Prevent duplicate open reports from the same user on the same item
-reportSchema.index({ refModel: 1, refId: 1, reporter: 1, status: 1 });
+// Enforce deduplication at DB level — only one open report per user per item
+reportSchema.index(
+  { refModel: 1, refId: 1, reporter: 1 },
+  { unique: true, partialFilterExpression: { status: "open" } }
+);
 reportSchema.index({ status: 1, createdAt: -1 });
 
 export default mongoose.model("Report", reportSchema);
