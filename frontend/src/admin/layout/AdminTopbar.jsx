@@ -29,6 +29,14 @@ export default function AdminTopbar({ onMenuOpen }) {
   const navigate     = useNavigate();
   const [query, setQuery]           = useState('');
   const { user }                    = useUser();
+  const [isMobile, setIsMobile]     = useState(() => window.matchMedia('(max-width: 768px)').matches);
+
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 768px)');
+    const handler = e => setIsMobile(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
   const [avatarBroken, setAvatarBroken] = useState(false);
   const [notifOpen, setNotifOpen]   = useState(false);
   const [helpOpen, setHelpOpen]     = useState(false);
@@ -69,9 +77,11 @@ export default function AdminTopbar({ onMenuOpen }) {
 
   return (
     <header className="adm-top">
-      <button className="icon-btn adm-mob-menu-btn" onClick={onMenuOpen} title="Open menu">
-        <i className="fa-solid fa-bars"></i>
-      </button>
+      {isMobile && (
+        <button className="icon-btn" onClick={onMenuOpen} title="Open menu">
+          <i className="fa-solid fa-bars"></i>
+        </button>
+      )}
       <div className="crumbs">
         {crumbs.map((c, i) => (
           <span key={i}>
@@ -178,7 +188,7 @@ export default function AdminTopbar({ onMenuOpen }) {
         title={user?.name || 'Admin'}
         style={{
           width: 34, height: 34, borderRadius: '50%',
-          background: 'linear-gradient(135deg,#f97316,#ea580c)',
+          background: 'linear-gradient(135deg,var(--accent),var(--accent-deep))',
           display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
           color: '#fff', fontWeight: 700, fontSize: '1.2rem', flexShrink: 0,
           overflow: 'hidden', padding: 0,

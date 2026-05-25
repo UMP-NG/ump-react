@@ -83,6 +83,7 @@ export default function Config() {
       setSaveError('Logo must be a JPEG, PNG, SVG, or WebP image.');
       return;
     }
+    setSaveError('');
     setLogoUploading(true);
     try {
       const fd = new FormData();
@@ -104,6 +105,7 @@ export default function Config() {
       setSaveError(`Slide ${idx + 1}: image must be JPEG, PNG, or WebP.`);
       return;
     }
+    setSaveError('');
     setSlideUploading(prev => new Set([...prev, idx]));
     try {
       const fd = new FormData();

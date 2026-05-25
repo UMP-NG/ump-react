@@ -93,6 +93,7 @@ const STATUS_STEPS = ["pending", "confirmed", "shipped", "completed"];
 function OrderTimeline({ status }) {
   if (status === "cancelled") return null;
   const idx = STATUS_STEPS.indexOf(status);
+  if (idx < 0) return null;
   const labels = ["Placed", "Confirmed", "Shipped", "Delivered"];
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 0, margin: "12px 0 4px" }}>

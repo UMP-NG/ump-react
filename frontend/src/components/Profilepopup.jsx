@@ -7,7 +7,7 @@ export default function ProfilePopup({ onClose }) {
   const navigate = useNavigate();
   const { user, setUser } = useUser();
 
-  const roles = user?.roles || [];
+  const roles = Array.isArray(user?.roles) ? user.roles : [];
   const isSeller   = roles.includes("seller");
   const isProvider = roles.includes("service_provider");
   const isAdmin    = Array.isArray(user?.roles) && user.roles.includes("admin");

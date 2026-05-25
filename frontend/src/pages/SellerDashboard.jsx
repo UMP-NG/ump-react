@@ -1073,8 +1073,9 @@ export default function SellerDashboard() {
     try {
       await apiFetch("/api/sellers/request-verification", { method: "POST" });
       setProfile((p) => ({ ...p, verificationRequested: true }));
-    } catch { /* ignore */ }
-    finally { setVerifyLoading(false); }
+    } catch (err) {
+      showToast(err?.message || "Verification request failed. Please try again.", "error");
+    } finally { setVerifyLoading(false); }
   }
 
   // ── Order status update ───────────────────────────────────────────────────────

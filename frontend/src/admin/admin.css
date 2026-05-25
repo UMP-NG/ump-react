@@ -955,7 +955,6 @@
 /* ── Mobile-only elements (hidden on desktop) ──────── */
 .adm-mob-close    { display: none; }
 .adm-mob-backdrop { display: none; }
-.adm-mob-menu-btn { display: none !important; }
 
 /* ── Responsive: Tablet / Mobile (≤ 768px) ─────────── */
 @media (max-width: 768px) {
@@ -999,7 +998,6 @@
   /* Toggle button visibility swap */
   .adm-desktop-toggle { display: none !important; }
   .adm-mob-close      { display: inline-flex !important; }
-  .adm-mob-menu-btn   { display: inline-flex !important; }
 
   /* Topbar */
   .adm-top   { padding: 0 16px; gap: 10px; }

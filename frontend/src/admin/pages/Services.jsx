@@ -172,7 +172,11 @@ export default function Services() {
           onApprove={() => approveService(drawer.provider?._id)}
           onSuspend={() => suspendProvider(drawer.provider?._id)}
           onReinstate={() => reinstateProvider(drawer.provider?._id)}
-          onMessage={() => navigate(`/messages?with=${drawer.provider?._id}&name=${encodeURIComponent(drawer.provider?.name || drawer.name)}`)}
+          onMessage={() => {
+            const pid = drawer.provider?._id;
+            if (!pid) return;
+            navigate(`/messages?with=${encodeURIComponent(pid)}&name=${encodeURIComponent(drawer.provider?.name || drawer.name)}`);
+          }}
         />
       )}
     </>

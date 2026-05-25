@@ -274,7 +274,7 @@ export default function Messages() {
                 const unread   = c.unreadCount || 0;
                 const key      = c.conversationWith?.toString() || c._id?.toString();
                 const isActive = activeThread?.receiverId?.toString() === (c.conversationWith?.toString() || c._id?.toString());
-                const isAdmin  = c.roles?.includes("admin");
+                const isAdmin  = Array.isArray(c.roles) && c.roles.includes("admin");
 
                 return (
                   <button

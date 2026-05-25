@@ -217,7 +217,7 @@ export default function Provider() {
                 ))}
               </div>
 
-              {tab === "seller" && user?.roles?.includes("seller") && (
+              {tab === "seller" && Array.isArray(user?.roles) && user.roles.includes("seller") && (
                 <div style={{ padding: "24px 20px", background: "#fefce8", border: "1px solid #fde68a", borderRadius: "var(--r-lg)", marginBottom: 24, textAlign: "center" }}>
                   <i className="fas fa-store" style={{ fontSize: "2.8rem", color: "#d97706", marginBottom: 12, display: "block" }} />
                   <div style={{ fontWeight: 800, fontSize: "1.8rem", color: "var(--ink-1)", marginBottom: 6 }}>You already have a store</div>
@@ -230,7 +230,7 @@ export default function Provider() {
                 </div>
               )}
 
-              <form onSubmit={handleSubmit} style={{ display: tab === "seller" && user?.roles?.includes("seller") ? "none" : undefined }}>
+              <form onSubmit={handleSubmit} style={{ display: tab === "seller" && Array.isArray(user?.roles) && user.roles.includes("seller") ? "none" : undefined }}>
                 {tab === "seller"
                   ? <SellerForm seller={seller} setSeller={setSeller} />
                   : <ProviderForm service={service} setService={setService} />
