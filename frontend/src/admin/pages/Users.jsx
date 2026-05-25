@@ -23,8 +23,13 @@ function roleDisplay(r) {
   return ROLE_MAP[r] || { label: r, cls: r.replace(/_/g, '-') };
 }
 
+function sanitizeCsvCell(v) {
+  const s = String(v ?? '');
+  return /^[=+\-@]/.test(s) ? `\t${s}` : s;
+}
+
 function downloadCSV(rows, filename) {
-  const csv = rows.map(r => r.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
+  const csv = rows.map(r => r.map(v => `"${sanitizeCsvCell(v).replace(/"/g, '""')}"`).join(',')).join('\n');
   const a = Object.assign(document.createElement('a'), {
     href: URL.createObjectURL(new Blob([csv], { type: 'text/csv' })),
     download: filename,
@@ -114,7 +119,7 @@ export default function Users() {
             </div>
             <div className="adm-drawer-body">
               <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 24 }}>
-                <div className={`adm-av-standalone av-b`}>{initials(viewUser.name)}</div>
+                <div className={`adm-av-standalone ${avColor(users.indexOf(viewUser))}`}>{initials(viewUser.name)}</div>
                 <div>
                   <div style={{ fontWeight: 700, fontSize: '1.6rem', lineHeight: 1.2 }}>{viewUser.name || '—'}</div>
                   <div className="role-pills" style={{ marginTop: 6 }}>
@@ -267,13 +272,6 @@ export default function Users() {
                     <td className="amount">{u.orderCount ?? 0}</td>
                     <td><span className={`pill dot ${COLORS[status] || 'gray'}`}>{status}</span></td>
                     <td style={{ textAlign: 'right' }} onClick={e => e.stopPropagation()}>
-                      <button
-                        className="icon-action"
-                        title="View user"
-                        onClick={() => setViewUser(u)}
-                      >
-                        <i className="fa-solid fa-eye"></i>
-                      </button>
                       <button
                         className="icon-action"
                         title={status === 'Banned' ? 'Unban' : 'Ban'}

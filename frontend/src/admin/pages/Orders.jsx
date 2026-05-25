@@ -53,9 +53,43 @@ export default function Orders() {
     : orders;
 
   async function updateStatus(orderId, status) {
-    await apiFetch(`/api/admins/orders/${orderId}`, { method: 'PUT', body: { status } }).catch(() => null);
-    setDrawer(d => d?._id === orderId ? { ...d, status } : d);
-    fetchOrders();
+    try {
+      await apiFetch(`/api/admins/orders/${orderId}`, { method: 'PUT', body: { status } });
+      setDrawer(d => d?._id === orderId ? { ...d, status } : d);
+      fetchOrders();
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  function sanitizeCsvCell(v) {
+    const s = String(v ?? '');
+    return /^[=+\-@]/.test(s) ? `\t${s}` : s;
+  }
+
+  function exportCSV() {
+    if (!orders.length) return;
+    const header = ['Order Ref', 'Buyer', 'Seller', 'Items', 'Total (₦)', 'Payment', 'Status', 'Placed'];
+    const rows = orders.map(o => [
+      o.orderRef || ('#' + o._id?.slice(-6).toUpperCase()),
+      o.buyer?.name || '—',
+      o.seller?.storeName || o.seller?.name || '—',
+      o.items?.length ?? 0,
+      o.totalAmount || 0,
+      o.paymentMethod || 'Paystack',
+      o.status || 'pending',
+      o.createdAt ? new Date(o.createdAt).toLocaleDateString('en-GB') : '—',
+    ]);
+    const csv = [header, ...rows].map(r => r.map(v => `"${sanitizeCsvCell(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const a = Object.assign(document.createElement('a'), {
+      href: URL.createObjectURL(new Blob([csv], { type: 'text/csv' })),
+      download: `ump-orders-${new Date().toISOString().slice(0, 10)}.csv`,
+    });
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(a.href);
   }
 
   return (
@@ -66,7 +100,9 @@ export default function Orders() {
           <p>{total.toLocaleString()} total orders</p>
         </div>
         <div className="right">
-          <button className="abtn ghost"><i className="fa-solid fa-download"></i> Export</button>
+          <button className="abtn ghost" onClick={exportCSV} disabled={!orders.length}>
+            <i className="fa-solid fa-download"></i> Export
+          </button>
         </div>
       </div>
 
@@ -175,11 +211,17 @@ function OrderDrawer({ order, onClose, onUpdateStatus }) {
   const [updating, setUpdating] = useState(false);
   const [currentStatus, setCurrentStatus] = useState(order.status);
 
+  useEffect(() => {
+    const handler = (e) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [onClose]);
+
   async function changeStatus(status) {
     if (status === currentStatus) return;
     setUpdating(true);
-    await onUpdateStatus(order._id, status);
-    setCurrentStatus(status);
+    const ok = await onUpdateStatus(order._id, status);
+    if (ok) setCurrentStatus(status);
     setUpdating(false);
   }
 

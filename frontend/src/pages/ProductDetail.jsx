@@ -117,7 +117,7 @@ export default function ProductDetail() {
     const url = window.location.href;
     const title = product?.name || "Check this out on UMP";
     if (navigator.share) {
-      try { await navigator.share({ title, url }); } catch {}
+      try { await navigator.share({ title, url }); } catch { /* ignore */ }
     } else {
       try {
         await navigator.clipboard.writeText(url);

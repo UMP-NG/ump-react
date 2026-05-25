@@ -25,6 +25,8 @@ export const getVapidKey = (req, res) => {
 // POST /api/push/subscribe
 export const subscribe = async (req, res) => {
   try {
+    if (!req.user?._id) return res.status(401).json({ message: "Not authenticated" });
+
     const { endpoint, keys } = req.body;
     if (
       !endpoint ||

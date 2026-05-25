@@ -33,7 +33,7 @@ export default function ProfilePopup({ onClose }) {
   const [avatarBroken, setAvatarBroken] = useState(false);
 
   async function handleLogout() {
-    try { await apiFetch("/api/auth/logout", { method: "POST" }); } catch {}
+    try { await apiFetch("/api/auth/logout", { method: "POST" }); } catch { /* ignore */ }
     clearToken();
     setUser(null);
     onClose();

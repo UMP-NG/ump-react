@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { apiFetch } from "../../utils/api";
 
 const TABS = [
@@ -29,6 +29,12 @@ function ReportDrawer({ report, onClose, onResolved }) {
   const [submitting, setSub]    = useState(false);
   const [error, setError]       = useState("");
 
+  const handleKey = useCallback((e) => { if (e.key === "Escape") onClose(); }, [onClose]);
+  useEffect(() => {
+    document.addEventListener("keydown", handleKey);
+    return () => document.removeEventListener("keydown", handleKey);
+  }, [handleKey]);
+
   async function resolve() {
     setSub(true); setError("");
     try {
@@ -45,7 +51,7 @@ function ReportDrawer({ report, onClose, onResolved }) {
     }
   }
 
-  const ts = TYPE_STYLES(report.refModel);
+  const ts = TYPE_COLORS[report.refModel] || { bg: "rgba(99,102,241,.1)", color: "#6366f1" };
   const ss = STATUS_STYLES[report.status] || STATUS_STYLES.open;
   const reporter = report.reporter;
   const reporterName = reporter?.name || "Unknown";
@@ -152,6 +158,7 @@ function ReportDrawer({ report, onClose, onResolved }) {
               <textarea
                 className="input"
                 rows={3}
+                maxLength={500}
                 placeholder="Note for internal reference…"
                 value={resolution}
                 onChange={(e) => setRes(e.target.value)}
@@ -178,10 +185,6 @@ function ReportDrawer({ report, onClose, onResolved }) {
       </div>
     </div>
   );
-}
-
-function TYPE_STYLES(model) {
-  return TYPE_COLORS[model] || { bg: "rgba(99,102,241,.1)", color: "#6366f1" };
 }
 
 export default function Reports() {
@@ -319,16 +322,15 @@ export default function Reports() {
             </thead>
             <tbody>
               {displayed.map((r, i) => {
-                const ts = TYPE_STYLES(r.refModel);
+                const ts = TYPE_COLORS[r.refModel] || { bg: "rgba(99,102,241,.1)", color: "#6366f1" };
                 const ss = STATUS_STYLES[r.status] || STATUS_STYLES.open;
                 const refName = r.refName || "—";
                 return (
                   <tr
                     key={r._id}
-                    style={{ borderTop: i > 0 ? "1px solid var(--line)" : "none", cursor: "pointer", transition: "background .1s" }}
+                    className="rpt-row"
+                    style={{ borderTop: i > 0 ? "1px solid var(--line)" : "none", cursor: "pointer" }}
                     onClick={() => setDrawer(r)}
-                    onMouseEnter={(e) => e.currentTarget.style.background = "var(--surface)"}
-                    onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}
                   >
                     <td style={{ padding: "12px 16px" }}>
                       <span style={{ padding: "3px 10px", borderRadius: 20, fontSize: "1.2rem", fontWeight: 600, background: ts.bg, color: ts.color }}>

@@ -274,7 +274,7 @@ export default function Messages() {
                 const unread   = c.unreadCount || 0;
                 const key      = c.conversationWith?.toString() || c._id?.toString();
                 const isActive = activeThread?.receiverId?.toString() === (c.conversationWith?.toString() || c._id?.toString());
-                const isAdmin  = Array.isArray(c.roles) && c.roles.includes("admin");
+                const isAdmin  = c.roles?.includes("admin");
 
                 return (
                   <button
@@ -392,10 +392,8 @@ function MsgThread({ convo, onBack }) {
 
   const other      = convo?.otherUser || {};
   const receiverId = convo?.receiverId || convo?.conversationWith || other._id;
-  const otherIsAdmin = Array.isArray(other.roles)
-    ? other.roles.includes("admin")
-    : Array.isArray(convo?.roles) && convo.roles.includes("admin");
-  const iAmAdmin   = Array.isArray(user?.roles) && user.roles.includes("admin");
+  const otherIsAdmin = other.roles?.includes("admin") ?? convo?.roles?.includes("admin") ?? false;
+  const iAmAdmin     = user?.roles?.includes("admin") ?? false;
 
   useEffect(() => {
     if (!receiverId) { setLoading(false); return; }
@@ -407,8 +405,7 @@ function MsgThread({ convo, onBack }) {
         const sorted = [...raw].reverse();
         setMessages(sorted.map((m) => {
           const senderId = typeof m.sender === "object" ? m.sender?._id?.toString() : m.sender?.toString();
-          const isAdminMsg = m.isAdminMessage
-            || Array.isArray(m.sender?.roles) && m.sender.roles.includes("admin");
+          const isAdminMsg = m.isAdminMessage || m.sender?.roles?.includes("admin");
           return { ...m, isOwn: senderId !== receiverId.toString(), isAdminMessage: !!isAdminMsg };
         }));
         apiFetch(`/api/messages/conversation/${receiverId}/read`, { method: "PUT" }).catch(() => {});

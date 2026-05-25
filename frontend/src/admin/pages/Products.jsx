@@ -5,8 +5,13 @@ import { apiFetch } from '../../utils/api';
 const STATUS_COLOR = { active: 'green', flagged: 'amber', removed: 'red', draft: 'gray' };
 const FILTERS = ['All', 'Active', 'Flagged', 'Removed'];
 
+function sanitizeCsvCell(v) {
+  const s = String(v ?? '');
+  return /^[=+\-@]/.test(s) ? `\t${s}` : s;
+}
+
 function downloadCSV(rows, filename) {
-  const csv = rows.map(r => r.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
+  const csv = rows.map(r => r.map(v => `"${sanitizeCsvCell(v).replace(/"/g, '""')}"`).join(',')).join('\n');
   const a = Object.assign(document.createElement('a'), {
     href: URL.createObjectURL(new Blob([csv], { type: 'text/csv' })),
     download: filename,
@@ -122,16 +127,16 @@ export default function Products() {
                 </th>
                 <th>Product</th><th>Seller</th><th>Category</th>
                 <th>Price</th><th>Stock</th><th>Views</th>
-                <th>Status</th><th>Created</th><th></th>
+                <th>Status</th><th>Created</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan="10" style={{ textAlign: 'center', padding: 32, color: 'var(--ink-3)' }}>
+                <tr><td colSpan="9" style={{ textAlign: 'center', padding: 32, color: 'var(--ink-3)' }}>
                   <i className="fa-solid fa-circle-notch fa-spin"></i>
                 </td></tr>
               ) : products.length === 0 ? (
-                <tr><td colSpan="10">
+                <tr><td colSpan="9">
                   <div className="adm-empty"><i className="fa-solid fa-box"></i><p>No products found</p></div>
                 </td></tr>
               ) : products.map(p => {
@@ -158,11 +163,6 @@ export default function Products() {
                     <td><span className={`pill dot ${STATUS_COLOR[status] || 'gray'}`}>{status}</span></td>
                     <td className="muted">
                       {p.createdAt ? new Date(p.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : '—'}
-                    </td>
-                    <td onClick={e => e.stopPropagation()}>
-                      <button className="icon-action" onClick={() => setDrawer(p)}>
-                        <i className="fa-solid fa-ellipsis-vertical"></i>
-                      </button>
                     </td>
                   </tr>
                 );

@@ -44,13 +44,13 @@ export default function Cart() {
 
   async function removeItem(itemId, productId) {
     setItems((prev) => prev.filter((i) => (i._id || i.id) !== itemId));
-    try { await apiFetch(`/api/cart/remove/${productId}`, { method: "DELETE" }); } catch {}
+    try { await apiFetch(`/api/cart/remove/${productId}`, { method: "DELETE" }); } catch { /* ignore */ }
   }
 
   async function updateQty(itemId, productId, qty) {
     if (qty < 1) { removeItem(itemId, productId); return; }
     setItems((prev) => prev.map((i) => (i._id || i.id) === itemId ? { ...i, quantity: qty, qty } : i));
-    try { await apiFetch("/api/cart/update", { method: "PUT", body: { productId, quantity: qty } }); } catch {}
+    try { await apiFetch("/api/cart/update", { method: "PUT", body: { productId, quantity: qty } }); } catch { /* ignore */ }
   }
 
   function validateDelivery() {

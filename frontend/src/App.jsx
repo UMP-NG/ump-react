@@ -49,12 +49,12 @@ function MaintenanceGate({ children }) {
   const isAdmin = location.pathname.startsWith("/admin");
   const isAdminUser = user?.roles?.includes("admin");
 
-  if (flags?.maintenanceMode && !isAdmin && !isAdminUser) {
+  if (flags?.maintenanceMode && !(isAdmin || isAdminUser)) {
     return (
-      <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "#0f172a", color: "#fff", textAlign: "center", padding: 24 }}>
-        <i className="fa-solid fa-wrench" style={{ fontSize: "3.5rem", marginBottom: 20, color: "var(--accent, #6366f1)" }} />
-        <h1 style={{ fontSize: "2.4rem", fontWeight: 800, margin: "0 0 12px" }}>We'll be right back</h1>
-        <p style={{ fontSize: "1.4rem", opacity: 0.7, maxWidth: 400 }}>UMP is down for a quick maintenance. Check back in a few minutes.</p>
+      <div className="maintenance-gate">
+        <i className="fa-solid fa-wrench maintenance-gate-icon" />
+        <h1>We'll be right back</h1>
+        <p>UMP is down for a quick maintenance. Check back in a few minutes.</p>
       </div>
     );
   }

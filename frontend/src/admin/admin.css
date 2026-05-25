@@ -955,7 +955,7 @@
 /* ── Mobile-only elements (hidden on desktop) ──────── */
 .adm-mob-close    { display: none; }
 .adm-mob-backdrop { display: none; }
-.adm-mob-menu-btn { display: none; }
+.adm-mob-menu-btn { display: none !important; }
 
 /* ── Responsive: Tablet / Mobile (≤ 768px) ─────────── */
 @media (max-width: 768px) {
@@ -1027,3 +1027,6 @@
   .adm-top .crumbs { display: none; }
   .adm-body   { padding: 12px 12px 40px; }
 }
+
+.rpt-row { transition: background .1s; }
+.rpt-row:hover { background: var(--surface); }

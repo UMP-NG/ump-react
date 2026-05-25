@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
@@ -81,12 +81,12 @@ export default function Home() {
   const [slide, setSlide] = useState(0);
   const slideTimer = useRef(null);
 
-  const heroSlides = (() => {
+  const heroSlides = useMemo(() => {
     const active = configSlides?.filter(s => s.on && (s.title || s.image?.url)) || [];
     if (active.length > 0) {
       return active.map(s => ({
         img: s.image?.url || '/images/market.png',
-        tag: '',
+        tag: s.tag || '',
         heading: s.title || '',
         sub: s.subtitle || '',
         cta: s.ctaLabel || 'Learn more',
@@ -94,7 +94,7 @@ export default function Home() {
       }));
     }
     return SLIDES;
-  })();
+  }, [configSlides]);
 
   function goSlide(idx) {
     setSlide(idx);
@@ -176,9 +176,11 @@ export default function Home() {
             />
             <div style={{ position: "absolute", inset: 0, background: "linear-gradient(160deg, rgba(0,0,0,.08) 0%, rgba(0,0,0,.72) 70%)" }} />
             <div style={{ position: "relative", height: "100%", display: "flex", flexDirection: "column", justifyContent: "flex-end", padding: 24, color: "#fff" }}>
-              <span className="chip accent" style={{ alignSelf: "flex-start", marginBottom: 12, fontSize: "1.1rem" }}>
-                <i className="fas fa-bolt" /> {s.tag}
-              </span>
+              {s.tag && (
+                <span className="chip accent" style={{ alignSelf: "flex-start", marginBottom: 12, fontSize: "1.1rem" }}>
+                  <i className="fas fa-bolt" /> {s.tag}
+                </span>
+              )}
               <h1 style={{ fontSize: "3rem", fontWeight: 800, letterSpacing: "-0.03em", margin: 0, lineHeight: 1.1, whiteSpace: "pre-line" }}>
                 {s.heading}
               </h1>

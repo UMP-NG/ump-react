@@ -22,7 +22,7 @@ export default function Config() {
   const [logoUploading, setLogoUploading] = useState(false);
   const logoInputRef = useRef();
   const slideInputRefs = useRef([]);
-  const [slideUploading, setSlideUploading] = useState(-1);
+  const [slideUploading, setSlideUploading] = useState(new Set());
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState('');
@@ -78,6 +78,11 @@ export default function Config() {
   async function handleLogoUpload(e) {
     const file = e.target.files[0];
     if (!file) return;
+    const ALLOWED = ['image/jpeg', 'image/png', 'image/svg+xml', 'image/webp'];
+    if (!ALLOWED.includes(file.type)) {
+      setSaveError('Logo must be a JPEG, PNG, SVG, or WebP image.');
+      return;
+    }
     setLogoUploading(true);
     try {
       const fd = new FormData();
@@ -94,7 +99,12 @@ export default function Config() {
   async function handleSlideImageUpload(e, idx) {
     const file = e.target.files[0];
     if (!file) return;
-    setSlideUploading(idx);
+    const ALLOWED = ['image/jpeg', 'image/png', 'image/webp'];
+    if (!ALLOWED.includes(file.type)) {
+      setSaveError(`Slide ${idx + 1}: image must be JPEG, PNG, or WebP.`);
+      return;
+    }
+    setSlideUploading(prev => new Set([...prev, idx]));
     try {
       const fd = new FormData();
       fd.append('file', file);
@@ -103,7 +113,7 @@ export default function Config() {
     } catch (err) {
       setSaveError(err?.message || 'Slide image upload failed');
     } finally {
-      setSlideUploading(-1);
+      setSlideUploading(prev => { const n = new Set(prev); n.delete(idx); return n; });
     }
   }
 
@@ -207,9 +217,9 @@ export default function Config() {
                     className="hero-thumb"
                     title="Click to upload slide image"
                     style={{ cursor: 'pointer', position: 'relative', flexShrink: 0 }}
-                    onClick={() => slideInputRefs.current[i]?.click()}
+                    onClick={() => !slideUploading.has(i) && slideInputRefs.current[i]?.click()}
                   >
-                    {slideUploading === i
+                    {slideUploading.has(i)
                       ? <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,.7)', borderRadius: 6 }}>
                           <i className="fa-solid fa-circle-notch fa-spin" style={{ fontSize: '1.4rem', color: '#64748b' }} />
                         </div>

@@ -73,5 +73,5 @@ export async function unsubscribeFromPush() {
         body: { endpoint: sub.endpoint },
       }).catch(() => {});
     }
-  } catch {}
+  } catch { /* ignore */ }
 }

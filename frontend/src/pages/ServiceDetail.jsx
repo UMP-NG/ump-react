@@ -32,8 +32,8 @@ export default function ServiceDetail() {
 
   useEffect(() => {
     apiFetch(`/api/services/${id}`)
-      .then((d) => setService(d.service || d))
-      .catch(() => {})
+      .then((d) => setService(d.service || d || null))
+      .catch(() => setService(null))
       .finally(() => setLoading(false));
   }, [id]);
 
@@ -41,7 +41,7 @@ export default function ServiceDetail() {
     const url = window.location.href;
     const title = service?.title || service?.name || "Service";
     if (navigator.share) {
-      try { await navigator.share({ title, url }); } catch {}
+      try { await navigator.share({ title, url }); } catch { /* ignore */ }
     } else {
       try { await navigator.clipboard.writeText(url); showToast("Link copied!"); } catch { showToast("Could not copy link", "error"); }
     }
@@ -108,14 +108,14 @@ export default function ServiceDetail() {
           style={{ position: "absolute", top: 12, left: 12, background: "rgba(255,255,255,.85)", backdropFilter: "blur(8px)" }}
           onClick={() => navigate(-1)}
         >
-          <i className="fas fa-arrow-left" />
+          <i className="fa-solid fa-arrow-left" />
         </button>
         <button
           className="icon-btn"
           style={{ position: "absolute", top: 12, right: 12, background: "rgba(255,255,255,.85)", backdropFilter: "blur(8px)" }}
           onClick={handleShare}
         >
-          <i className="fas fa-share-nodes" />
+          <i className="fa-solid fa-share-nodes" />
         </button>
       </div>
 
@@ -130,7 +130,7 @@ export default function ServiceDetail() {
           </span>
           {(service.rating || 0) > 0 && (
             <div className="rating" style={{ fontSize: "1.4rem" }}>
-              <i className="fas fa-star star" /> {service.rating}
+              <i className="fa-solid fa-star star" /> {service.rating}
               <span className="count">({service.reviewsCount || 0})</span>
             </div>
           )}
@@ -155,15 +155,15 @@ export default function ServiceDetail() {
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                 <strong style={{ fontSize: "1.4rem" }}>{providerName}</strong>
-                {service.verified && <i className="fas fa-circle-check" style={{ color: "var(--accent)", fontSize: "1.1rem" }} />}
+                {service.verified && <i className="fa-solid fa-circle-check" style={{ color: "var(--accent)", fontSize: "1.1rem" }} />}
               </div>
               <div style={{ fontSize: "1.2rem", color: "var(--ink-3)" }}>Service provider</div>
             </div>
             <button
               className="btn btn-sm btn-ghost"
-              onClick={() => navigate(`/messages?with=${service.provider._id}&name=${encodeURIComponent(providerName)}`)}
+              onClick={() => navigate(`/messages?with=${service.provider?._id || service.provider}&name=${encodeURIComponent(providerName)}`)}
             >
-              <i className="fas fa-comment" /> Chat
+              <i className="fa-solid fa-comment" /> Chat
             </button>
           </div>
         )}
@@ -174,7 +174,7 @@ export default function ServiceDetail() {
             onClick={() => setShowReport(true)}
             style={{ background: "none", border: "none", color: "var(--ink-4)", fontSize: "1.15rem", cursor: "pointer", textDecoration: "underline", padding: 0 }}
           >
-            <i className="fas fa-flag" style={{ marginRight: 4 }} />Report this service
+            <i className="fa-solid fa-flag" style={{ marginRight: 4 }} />Report this service
           </button>
         </div>
 
@@ -200,7 +200,7 @@ export default function ServiceDetail() {
 
       <Footer />
 
-      {showReport && (
+      {showReport && service && (
         <ReportModal
           refModel="Service"
           refId={service._id}
@@ -217,7 +217,7 @@ export default function ServiceDetail() {
           </div>
         </div>
         <button className="btn btn-primary" style={{ borderRadius: "var(--r-pill)" }} onClick={() => setBookingOpen(true)}>
-          <i className="fas fa-calendar-check" /> Book session
+          <i className="fa-solid fa-calendar-check" /> Book session
         </button>
       </div>
 
@@ -262,7 +262,7 @@ export default function ServiceDetail() {
                 style={{ marginBottom: 16 }}
               />
               <button className="btn btn-primary btn-block btn-lg" type="submit" disabled={bookingLoading}>
-                {bookingLoading ? <i className="fas fa-spinner fa-spin" /> : "Confirm booking"}
+                {bookingLoading ? <i className="fa-solid fa-spinner fa-spin" /> : "Confirm booking"}
               </button>
             </form>
           </div>

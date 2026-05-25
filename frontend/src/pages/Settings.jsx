@@ -448,7 +448,7 @@ function NotificationsTab({ user, setUser, showToast }) {
     try {
       if (checked) localStorage.setItem(storageKey, "1");
       else localStorage.removeItem(storageKey);
-    } catch {}
+    } catch { /* ignore */ }
   }
 
   async function handleToggle(key, val) {

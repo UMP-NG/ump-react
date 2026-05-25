@@ -20,6 +20,7 @@ export default function Analytics() {
   const [data, setData]       = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState('');
+  const [tick, setTick]       = useState(0);
 
   useEffect(() => {
     setLoading(true);
@@ -28,7 +29,7 @@ export default function Analytics() {
       .then(d => setData(d))
       .catch(err => setError(err?.message || 'Failed to load analytics'))
       .finally(() => setLoading(false));
-  }, []);
+  }, [tick]);
 
   const gmvSeries  = data?.gmvDaily || [];
   const feeSeries  = gmvSeries.map(v => Math.round(v * 0.032));
@@ -43,7 +44,7 @@ export default function Analytics() {
         <div className="left"><h1>Analytics</h1><p>GMV, fees, category &amp; cohort performance</p></div>
       </div>
       <div style={{ padding: '48px 0', textAlign: 'center', color: 'var(--ink-3)' }}>
-        <i className="fas fa-spinner fa-spin" style={{ fontSize: '2rem' }} />
+        <i className="fa-solid fa-spinner fa-spin" style={{ fontSize: '2rem' }} />
         <p style={{ marginTop: 12, fontSize: '1.4rem' }}>Loading analytics…</p>
       </div>
     </>
@@ -55,10 +56,10 @@ export default function Analytics() {
         <div className="left"><h1>Analytics</h1></div>
       </div>
       <div style={{ padding: '48px 0', textAlign: 'center', color: '#dc2626' }}>
-        <i className="fas fa-circle-exclamation" style={{ fontSize: '2rem' }} />
+        <i className="fa-solid fa-circle-exclamation" style={{ fontSize: '2rem' }} />
         <p style={{ marginTop: 12, fontSize: '1.4rem' }}>{error}</p>
-        <button className="abtn ghost" style={{ marginTop: 16 }} onClick={() => window.location.reload()}>
-          <i className="fas fa-rotate-right" /> Retry
+        <button className="abtn ghost" style={{ marginTop: 16 }} onClick={() => setTick(t => t + 1)}>
+          <i className="fa-solid fa-rotate-right" /> Retry
         </button>
       </div>
     </>
@@ -116,7 +117,7 @@ export default function Analytics() {
               />
             ) : (
               <div style={{ height: 260, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', gap: 10 }}>
-                <i className="fas fa-chart-line" style={{ fontSize: '2.4rem' }} />
+                <i className="fa-solid fa-chart-line" style={{ fontSize: '2.4rem' }} />
                 <p style={{ margin: 0, fontSize: '1.3rem' }}>No completed orders in the last 30 days</p>
               </div>
             )}

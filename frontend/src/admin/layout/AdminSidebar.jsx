@@ -76,6 +76,18 @@ export default function AdminSidebar({ collapsed, onToggle, mobileOpen, onMobile
         </div>
       ))}
 
+      <div style={{ padding: '0 12px 8px' }}>
+        <a
+          href="/"
+          className="adm-nav-item"
+          style={{ textDecoration: 'none', color: 'inherit', gap: 10 }}
+          title="Back to main site"
+        >
+          <i className="fa-solid fa-arrow-left"></i>
+          <span>Back to site</span>
+        </a>
+      </div>
+
       <div className="adm-side-foot">
         <div
           className="adm-av"

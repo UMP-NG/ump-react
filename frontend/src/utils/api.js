@@ -8,9 +8,9 @@ export const API_BASE =
 
 // ── JWT helpers ──────────────────────────────────────────────────────────────
 const TOKEN_KEY = "ump_tk";
-export const setToken   = (t) => { try { if (t) localStorage.setItem(TOKEN_KEY, t); } catch {} };
+export const setToken   = (t) => { try { if (t) localStorage.setItem(TOKEN_KEY, t); } catch { /* ignore */ } };
 export const getToken   = ()    => { try { return localStorage.getItem(TOKEN_KEY); } catch { return null; } };
-export const clearToken = ()    => { try { localStorage.removeItem(TOKEN_KEY); } catch {} };
+export const clearToken = ()    => { try { localStorage.removeItem(TOKEN_KEY); } catch { /* ignore */ } };
 
 // ── Cookie helpers ───────────────────────────────────────────────────────────
 export function cookieSet(name, value, days = 1) {
@@ -73,7 +73,7 @@ function _read(path) {
       }
       sessionStorage.removeItem(_ssKey(path));
     }
-  } catch {}
+  } catch { /* ignore */ }
   return null;
 }
 
@@ -83,7 +83,7 @@ function _write(path, data) {
   _mem.set(path, entry);
   // Evict oldest entry when over limit
   if (_mem.size > MEM_MAX) _mem.delete(_mem.keys().next().value);
-  try { sessionStorage.setItem(_ssKey(path), JSON.stringify(entry)); } catch {}
+  try { sessionStorage.setItem(_ssKey(path), JSON.stringify(entry)); } catch { /* ignore */ }
 }
 
 function _invalidate(prefix) {
@@ -97,7 +97,7 @@ function _invalidate(prefix) {
       if (k?.startsWith(`_ac:${prefix}`)) toRemove.push(k);
     }
     toRemove.forEach(k => sessionStorage.removeItem(k));
-  } catch {}
+  } catch { /* ignore */ }
 }
 
 // Call this after a mutation to force-fresh the next GET (pages call fetchUsers() etc.)
@@ -159,8 +159,13 @@ export async function apiFetch(path, options = {}) {
       return hit.data;
     }
   } else {
-    // Any write operation: flush all admin caches so the next GET is always fresh
+    // Any write operation: flush admin + related public caches
     _invalidate("/api/admins");
+    _invalidate("/api/products");
+    _invalidate("/api/sellers");
+    _invalidate("/api/services");
+    _invalidate("/api/listings");
+    _invalidate("/api/categories");
   }
 
   try {

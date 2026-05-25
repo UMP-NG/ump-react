@@ -84,16 +84,16 @@ export default function Sellers() {
               <tr>
                 <th>Store</th><th>Owner</th><th>Category</th>
                 <th>Products</th><th>Revenue (30d)</th><th>Rating</th>
-                <th>Status</th><th>Joined</th><th></th>
+                <th>Status</th><th>Joined</th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan="9" style={{ textAlign: 'center', padding: 32, color: 'var(--ink-3)' }}>
+                <tr><td colSpan="8" style={{ textAlign: 'center', padding: 32, color: 'var(--ink-3)' }}>
                   <i className="fa-solid fa-circle-notch fa-spin"></i>
                 </td></tr>
               ) : sellers.length === 0 ? (
-                <tr><td colSpan="9">
+                <tr><td colSpan="8">
                   <div className="adm-empty"><i className="fa-solid fa-store"></i><p>No sellers found</p></div>
                 </td></tr>
               ) : sellers.map(s => {
@@ -137,11 +137,6 @@ export default function Sellers() {
                       {s.createdAt
                         ? new Date(s.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
                         : '—'}
-                    </td>
-                    <td onClick={e => e.stopPropagation()}>
-                      <button className="icon-action" onClick={() => setDrawer(s)}>
-                        <i className="fa-solid fa-ellipsis-vertical"></i>
-                      </button>
                     </td>
                   </tr>
                 );
@@ -187,6 +182,12 @@ function SellerDrawer({ seller, onClose, onApprove, onReject, onMessage }) {
   const status   = seller.verificationStatus || 'pending';
   const initials = (seller.storeName || 'ST').slice(0, 2).toUpperCase();
 
+  useEffect(() => {
+    const handler = (e) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [onClose]);
+
   return (
     <div className="adm-drawer-shell" onClick={onClose}>
       <div className="adm-drawer" onClick={e => e.stopPropagation()}>
@@ -214,7 +215,7 @@ function SellerDrawer({ seller, onClose, onApprove, onReject, onMessage }) {
             />
             <div>
               <div style={{ fontSize: '1.6rem', fontWeight: 700, lineHeight: 1.2 }}>
-                {seller.storeName}
+                {seller.storeName || '—'}
                 {status === 'verified' && (
                   <i className="fa-solid fa-circle-check" style={{ color: '#f59e0b', fontSize: '1.2rem', marginLeft: 6 }}></i>
                 )}

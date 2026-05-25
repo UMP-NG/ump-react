@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import Thumb from '../components/Thumb';
 import { MiniStat } from '../components/StatCard';
 import { apiFetch } from '../../utils/api';
+import { useAppConfig } from '../../context/AppConfigContext';
 
 const TABS = [
   { label: 'Pending',    filter: 'pending' },
@@ -13,6 +14,9 @@ const RISK_COLOR   = { Low: 'green', Medium: 'amber', High: 'red' };
 const STATUS_COLOR = { pending: 'amber', processing: 'blue', completed: 'green', failed: 'red' };
 
 export default function Payouts() {
+  const { fees } = useAppConfig();
+  const platformFeePct = parseFloat(fees?.platformFee ?? 3.2) / 100;
+
   const [tab, setTab]                 = useState(0);
   const [payouts, setPayouts]         = useState([]);
   const [summary, setSummary]         = useState(null);
@@ -66,7 +70,7 @@ export default function Payouts() {
   }
 
   const isPendingTab = TABS[tab].filter === 'pending';
-  const pendingCount = payouts.length;
+  const pageCount = payouts.length;
   const allSelected  = payouts.length > 0 && selected.size === payouts.length;
 
   return (
@@ -78,11 +82,11 @@ export default function Payouts() {
         </div>
         <div className="right">
           <button className="abtn ghost"><i className="fa-solid fa-download"></i> Export</button>
-          {isPendingTab && pendingCount > 0 && (
+          {isPendingTab && pageCount > 0 && (
             <button className="abtn primary" disabled={batchProcessing} onClick={batchApprove}>
               {batchProcessing
                 ? <><i className="fa-solid fa-circle-notch fa-spin"></i> Processing…</>
-                : <><i className="fa-solid fa-bolt"></i> {selected.size > 0 ? `Approve selected (${selected.size})` : `Approve all (${pendingCount})`}</>
+                : <><i className="fa-solid fa-bolt"></i> {selected.size > 0 ? `Approve selected (${selected.size})` : `Approve all (${pageCount})`}</>
               }
             </button>
           )}
@@ -120,7 +124,7 @@ export default function Payouts() {
                   </th>
                 )}
                 <th>Seller</th><th>Bank account</th><th>Available bal.</th>
-                <th>Requested</th><th>Net (after 3.2%)</th><th>Status</th><th>Requested at</th><th>Risk</th><th></th>
+                <th>Requested</th><th>Net (after {fees?.platformFee ?? 3.2}%)</th><th>Status</th><th>Requested at</th><th>Risk</th><th></th>
               </tr>
             </thead>
             <tbody>
@@ -134,7 +138,7 @@ export default function Payouts() {
                 </td></tr>
               ) : payouts.map(p => {
                 const risk = p.riskLevel || 'Low';
-                const net  = p.netAmount ?? (p.requestedAmount ? Math.floor(p.requestedAmount * 0.968) : 0);
+                const net  = p.netAmount ?? (p.requestedAmount ? Math.floor(p.requestedAmount * (1 - platformFeePct)) : 0);
                 return (
                   <tr key={p._id} onClick={() => setDrawer(p)} style={{ cursor: 'pointer' }}>
                     {isPendingTab && (
@@ -194,6 +198,12 @@ export default function Payouts() {
 }
 
 function PayoutDrawer({ payout, onClose, onApprove, processing }) {
+  useEffect(() => {
+    const handler = (e) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [onClose]);
+
   return (
     <div className="adm-drawer-shell" onClick={onClose}>
       <div className="adm-drawer" onClick={e => e.stopPropagation()}>
@@ -251,7 +261,7 @@ function PayoutDrawer({ payout, onClose, onApprove, processing }) {
               className="abtn success"
               style={{ flex: 1 }}
               disabled={processing === payout._id}
-              onClick={() => { onApprove(payout._id); onClose(); }}
+              onClick={async () => { await onApprove(payout._id); onClose(); }}
             >
               {processing === payout._id
                 ? <><i className="fa-solid fa-circle-notch fa-spin"></i> Approving…</>

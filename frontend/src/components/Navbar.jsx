@@ -40,10 +40,10 @@ export default function Navbar({ frosted = false, dark = false }) {
 
   // Real-time: bump badge whenever a new notification arrives over the socket
   useEffect(() => {
-    function onNewNotif() { setNotifCount((c) => c + 1); }
+    function onNewNotif() { if (user) setNotifCount((c) => c + 1); }
     socket.on("new_notification", onNewNotif);
     return () => socket.off("new_notification", onNewNotif);
-  }, []);
+  }, [user]);
   const mobInputRef = useRef(null);
 
   const cls = ["nav", frosted ? "frosted" : "", dark ? "dark" : ""].filter(Boolean).join(" ");

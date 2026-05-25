@@ -34,7 +34,7 @@ export default function HostelDetail() {
       apiFetch(`/api/listings/${id}`),
       apiFetch("/api/listings?limit=4"),
     ]).then(([detail, all]) => {
-      setListing(detail.listing || detail);
+      setListing(detail.listing || detail || null);
       setRelated((all.listings || all || []).filter((l) => l._id !== id).slice(0, 3));
     }).catch(() => {})
     .finally(() => setLoading(false));
@@ -77,7 +77,15 @@ export default function HostelDetail() {
       <Skel.HostelDetail />
     </div>
   );
-  if (!listing) return <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16 }}><p style={{ fontSize: "1.6rem", color: "var(--ink-2)" }}>Listing not found.</p><button className="btn btn-primary" onClick={() => navigate("/hostel")}>Back to Hostel Hub</button></div>;
+  if (!listing) return (
+    <div className="page">
+      <Navbar />
+      <div style={{ minHeight: "60vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16 }}>
+        <p style={{ fontSize: "1.6rem", color: "var(--ink-2)" }}>Listing not found.</p>
+        <button className="btn btn-primary" onClick={() => navigate("/hostel")}>Back to Hostel Hub</button>
+      </div>
+    </div>
+  );
 
   return (
     <div className="page">

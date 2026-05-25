@@ -1073,7 +1073,7 @@ export default function SellerDashboard() {
     try {
       await apiFetch("/api/sellers/request-verification", { method: "POST" });
       setProfile((p) => ({ ...p, verificationRequested: true }));
-    } catch {}
+    } catch { /* ignore */ }
     finally { setVerifyLoading(false); }
   }
 

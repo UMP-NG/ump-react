@@ -60,7 +60,7 @@ export default function Notifications() {
     try {
       await apiFetch("/api/notifications/read-all", { method: "PATCH" });
       setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
-    } catch {}
+    } catch { /* ignore */ }
     finally { setMarkingAll(false); }
   }
 
