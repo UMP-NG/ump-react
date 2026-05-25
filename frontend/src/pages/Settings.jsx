@@ -11,6 +11,14 @@ import ImageCropModal from "../components/ImageCropModal";
 const DOMAIN = "@live.unilag.edu.ng";
 const BASE_TABS = ["Profile", "Security", "Notifications"];
 
+const UNILAG_SETUP_STEPS = [
+  { n: 1, text: "Go to portal.office.com and click Sign in" },
+  { n: 2, text: "Enter your matric number email, e.g. 190401234@live.unilag.edu.ng" },
+  { n: 3, text: "Use the temporary password sent to you by UNILAG (ABS-CITS)" },
+  { n: 4, text: "You will be asked to change your password and set up recovery options" },
+  { n: 5, text: "Once in, open Outlook — your OTP from UMP will arrive there" },
+];
+
 // ─── Avatar ──────────────────────────────────────────────────────────────────
 function AvatarPicker({ avatarUrl, initials, onPick, uploading }) {
   const ref = useRef();
@@ -700,18 +708,20 @@ function VerifyTab({ user, setUser, showToast }) {
         <div style={{ marginBottom: 20, border: "1px solid var(--line)", borderRadius: 12, overflow: "hidden" }}>
           <button
             type="button"
+            aria-expanded={showEmailHelp}
+            aria-controls="email-help-content"
             onClick={() => setShowEmailHelp((v) => !v)}
             style={{ width: "100%", background: "var(--surface)", border: "none", padding: "12px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", cursor: "pointer", fontFamily: "var(--font-sans)" }}
           >
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <i className="fas fa-circle-question" style={{ color: "var(--accent)", fontSize: "1.3rem" }} />
+              <i className="fas fa-circle-question" style={{ color: "var(--accent)", fontSize: "1.3rem" }} aria-hidden="true" />
               <span style={{ fontSize: "1.3rem", fontWeight: 600, color: "var(--ink-1)" }}>How do I find my UNILAG student email?</span>
             </div>
-            <i className={`fas fa-chevron-${showEmailHelp ? "up" : "down"}`} style={{ color: "var(--ink-3)", fontSize: "1.1rem" }} />
+            <i className={`fas fa-chevron-${showEmailHelp ? "up" : "down"}`} style={{ color: "var(--ink-3)", fontSize: "1.1rem" }} aria-hidden="true" />
           </button>
 
           {showEmailHelp && (
-            <div style={{ padding: "0 16px 16px", borderTop: "1px solid var(--line)" }}>
+            <div id="email-help-content" role="region" aria-label="UNILAG student email setup guide" style={{ padding: "0 16px 16px", borderTop: "1px solid var(--line)" }}>
               <p style={{ fontSize: "1.25rem", color: "var(--ink-2)", lineHeight: 1.6, margin: "12px 0 10px" }}>
                 UNILAG sends every student an institutional email. Check the email you used to apply — it looks like this:
               </p>
@@ -724,13 +734,7 @@ function VerifyTab({ user, setUser, showToast }) {
               </div>
 
               <div style={{ fontSize: "1.25rem", fontWeight: 700, color: "var(--ink-1)", marginBottom: 8 }}>Steps to access your account:</div>
-              {[
-                { n: 1, text: "Go to portal.office.com and click Sign in" },
-                { n: 2, text: "Enter your matric number email, e.g. 190401234@live.unilag.edu.ng" },
-                { n: 3, text: "Use the temporary password sent to you by UNILAG (ABS-CITS)" },
-                { n: 4, text: "You will be asked to change your password and set up recovery options" },
-                { n: 5, text: "Once in, open Outlook — your OTP from UMP will arrive there" },
-              ].map(({ n, text }) => (
+              {UNILAG_SETUP_STEPS.map(({ n, text }) => (
                 <div key={n} style={{ display: "flex", gap: 10, alignItems: "flex-start", marginBottom: 8 }}>
                   <div style={{ width: 22, height: 22, borderRadius: "50%", background: "var(--accent)", color: "#fff", fontSize: "1.1rem", fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 1 }}>{n}</div>
                   <span style={{ fontSize: "1.25rem", color: "var(--ink-2)", lineHeight: 1.5 }}>{text}</span>
@@ -742,17 +746,19 @@ function VerifyTab({ user, setUser, showToast }) {
                   href="https://portal.office.com"
                   target="_blank"
                   rel="noopener noreferrer"
+                  aria-label="Open Microsoft 365 portal (opens in new tab)"
                   style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", background: "#0078d4", color: "#fff", borderRadius: 10, textDecoration: "none", fontSize: "1.3rem", fontWeight: 600 }}
                 >
-                  <i className="fas fa-arrow-up-right-from-square" /> Open Microsoft 365 (portal.office.com)
+                  <i className="fas fa-arrow-up-right-from-square" aria-hidden="true" /> Open Microsoft 365 (portal.office.com)
                 </a>
                 <a
-                  href="https://bit.ly/unilagmail"
+                  href="https://drive.google.com/file/d/1ELEGuNePvGmMatpBbWlFed9TaPMVWUc2/view?usp=sharing"
                   target="_blank"
                   rel="noopener noreferrer"
+                  aria-label="Read the full UNILAG email setup guide (opens in new tab)"
                   style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", background: "var(--surface)", color: "var(--accent)", border: "1px solid var(--line)", borderRadius: 10, textDecoration: "none", fontSize: "1.25rem", fontWeight: 600 }}
                 >
-                  <i className="fas fa-book-open" /> Read the full UNILAG setup guide
+                  <i className="fas fa-book-open" aria-hidden="true" /> Read the full UNILAG setup guide
                 </a>
               </div>
             </div>

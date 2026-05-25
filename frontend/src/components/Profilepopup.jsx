@@ -33,6 +33,16 @@ export default function ProfilePopup({ onClose }) {
   const [avatarBroken, setAvatarBroken] = useState(false);
 
   async function handleLogout() {
+    // Unsubscribe push while session is still valid so the DB record is removed
+    try {
+      const reg = await navigator.serviceWorker?.getRegistration?.("/sw.js");
+      const sub = reg ? await reg.pushManager.getSubscription() : null;
+      if (sub) {
+        await sub.unsubscribe();
+        await apiFetch("/api/push/unsubscribe", { method: "DELETE", body: { endpoint: sub.endpoint } });
+      }
+    } catch { /* ignore — push cleanup is best-effort */ }
+
     try { await apiFetch("/api/auth/logout", { method: "POST" }); } catch { /* ignore */ }
     clearToken();
     setUser(null);

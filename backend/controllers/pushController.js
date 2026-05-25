@@ -68,7 +68,12 @@ export const unsubscribe = async (req, res) => {
  * Called by notify() so every notification reaches the user even when offline.
  *
  * @param {string|ObjectId} userId
- * @param {{ title, body, url, icon }} payload
+ * @param {{ title: string, body: string, url?: string, icon?: string, tag?: string }} payload
+ *   - title  — notification heading shown by the OS
+ *   - body   — notification body text
+ *   - url    — deep-link the user is taken to when they tap the notification
+ *   - icon   — path to the notification icon (defaults to ump-icon.svg in the SW)
+ *   - tag    — deduplication key; a new push with the same tag replaces a previous unread one
  */
 export async function sendPushToUser(userId, payload) {
   if (!_pushReady) return;
