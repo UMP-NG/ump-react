@@ -1,10 +1,11 @@
-import { Routes, Route } from "react-router-dom";
+import { Routes, Route, useLocation } from "react-router-dom";
 import FloatingChat from "./components/FloatingChat";
 import PrivateRoute from "./components/PrivateRoute";
 import InstallPrompt from "./components/InstallPrompt";
 import LimitedAccountBanner from "./components/LimitedAccountBanner";
 import AdminRoutes from "./admin/index";
-import { AppConfigProvider } from "./context/AppConfigContext";
+import { AppConfigProvider, useAppConfig } from "./context/AppConfigContext";
+import { useUser } from "./context/UserContext";
 
 import Home from "./pages/Home";
 import Market from "./pages/Market";
@@ -40,9 +41,31 @@ import NotFound from "./pages/NotFound";
 import Terms from "./pages/Terms";
 import Privacy from "./pages/Privacy";
 
+function MaintenanceGate({ children }) {
+  const { flags } = useAppConfig();
+  const { user } = useUser();
+  const location = useLocation();
+
+  const isAdmin = location.pathname.startsWith("/admin");
+  const isAdminUser = user?.roles?.includes("admin");
+
+  if (flags?.maintenanceMode && !isAdmin && !isAdminUser) {
+    return (
+      <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "#0f172a", color: "#fff", textAlign: "center", padding: 24 }}>
+        <i className="fa-solid fa-wrench" style={{ fontSize: "3.5rem", marginBottom: 20, color: "var(--accent, #6366f1)" }} />
+        <h1 style={{ fontSize: "2.4rem", fontWeight: 800, margin: "0 0 12px" }}>We'll be right back</h1>
+        <p style={{ fontSize: "1.4rem", opacity: 0.7, maxWidth: 400 }}>UMP is down for a quick maintenance. Check back in a few minutes.</p>
+      </div>
+    );
+  }
+
+  return children;
+}
+
 export default function App() {
   return (
     <AppConfigProvider>
+    <MaintenanceGate>
     <LimitedAccountBanner />
     <FloatingChat />
     <InstallPrompt />
@@ -101,6 +124,7 @@ export default function App() {
       {/* 404 catch-all */}
       <Route path="*" element={<NotFound />} />
     </Routes>
+    </MaintenanceGate>
     </AppConfigProvider>
   );
 }

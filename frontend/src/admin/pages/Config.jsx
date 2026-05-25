@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { apiFetch } from '../../utils/api';
+import { useAppConfig } from '../../context/AppConfigContext';
 
 const DEFAULT_FLAGS = [
   { key: 'hostelListings',        label: 'Hostel listings',         sub: 'Off-campus rental hub',         on: true },
@@ -13,16 +14,15 @@ const DEFAULT_FLAGS = [
 const DEFAULT_LOGO = '/images/ump-icon.svg';
 
 export default function Config() {
+  const { refreshConfig } = useAppConfig();
   const [fees, setFees] = useState({ platformFee: '3.2', serviceFee: '5.0', minPayout: '2000', payoutCadence: 'Daily' });
   const [flags, setFlags] = useState(DEFAULT_FLAGS);
-  const [slides, setSlides] = useState([
-    { title: 'Back-to-school deals', url: '/market?cat=electronics', on: true },
-    { title: 'Hostel hub now live',  url: '/hostel',                 on: true },
-    { title: 'Eat — ₦500 off first order', url: '/food',             on: true },
-  ]);
+  const [slides, setSlides] = useState([]);
   const [logo, setLogo] = useState({ url: '', publicId: '' });
   const [logoUploading, setLogoUploading] = useState(false);
   const logoInputRef = useRef();
+  const slideInputRefs = useRef([]);
+  const [slideUploading, setSlideUploading] = useState(-1);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState('');
@@ -32,6 +32,7 @@ export default function Config() {
       if (d?.fees) setFees(f => ({ ...f, ...d.fees }));
       if (d?.flags) setFlags(prev => prev.map(f => ({ ...f, on: d.flags[f.key] ?? f.on })));
       if (d?.slides) setSlides(d.slides);
+      else setSlides([]);
       if (d?.logo?.url) setLogo(d.logo);
     }).catch(() => {});
   }, []);
@@ -60,6 +61,7 @@ export default function Config() {
         method: 'PUT',
         body: { fees: { ...fees, platformFee, serviceFee, minPayout }, flags: flagsObj, slides, logo },
       });
+      refreshConfig();
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
     } catch (err) {
@@ -86,6 +88,22 @@ export default function Config() {
       setSaveError(err?.message || 'Logo upload failed');
     } finally {
       setLogoUploading(false);
+    }
+  }
+
+  async function handleSlideImageUpload(e, idx) {
+    const file = e.target.files[0];
+    if (!file) return;
+    setSlideUploading(idx);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const data = await apiFetch('/api/upload', { method: 'POST', body: fd });
+      setSlides(prev => prev.map((sl, j) => j === idx ? { ...sl, image: { url: data.url, publicId: data.publicId || '' } } : sl));
+    } catch (err) {
+      setSaveError(err?.message || 'Slide image upload failed');
+    } finally {
+      setSlideUploading(-1);
     }
   }
 
@@ -172,33 +190,81 @@ export default function Config() {
         <div className="adm-card">
           <div className="adm-card-head">
             <h3>Hero carousel</h3>
-            <button className="abtn ghost sm" onClick={() => setSlides(s => [...s, { title: '', url: '', on: true }])}>
+            <button className="abtn ghost sm" onClick={() => setSlides(s => [...s, { title: '', subtitle: '', ctaLabel: '', url: '', image: { url: '', publicId: '' }, on: true }])}>
               <i className="fa-solid fa-plus"></i> Add slide
             </button>
           </div>
-          <div className="adm-card-body" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div className="adm-card-body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {slides.length === 0 && (
+              <div className="muted" style={{ textAlign: 'center', padding: '20px 0', fontSize: '1.3rem' }}>No slides yet — click "Add slide" to get started.</div>
+            )}
             {slides.map((s, i) => (
-              <div key={i} className="hero-slide-row">
-                <div className="hero-drag"><i className="fa-solid fa-grip-vertical"></i></div>
-                <div className="hero-thumb">
-                  <div className="img-ph ph-electronics" style={{ height: '100%' }}>{i + 1}</div>
-                </div>
-                <div style={{ flex: 1 }}>
+              <div key={i} style={{ border: '1px solid #e3e5eb', borderRadius: 10, padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {/* Row 1: drag + thumb + title + toggle + delete */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div className="hero-drag"><i className="fa-solid fa-grip-vertical"></i></div>
+                  <div
+                    className="hero-thumb"
+                    title="Click to upload slide image"
+                    style={{ cursor: 'pointer', position: 'relative', flexShrink: 0 }}
+                    onClick={() => slideInputRefs.current[i]?.click()}
+                  >
+                    {slideUploading === i
+                      ? <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,.7)', borderRadius: 6 }}>
+                          <i className="fa-solid fa-circle-notch fa-spin" style={{ fontSize: '1.4rem', color: '#64748b' }} />
+                        </div>
+                      : null
+                    }
+                    {s.image?.url
+                      ? <img src={s.image.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 6 }} />
+                      : <div className="img-ph ph-electronics" style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem', color: '#94a3b8', gap: 4 }}>
+                          <i className="fa-solid fa-image" /> {i + 1}
+                        </div>
+                    }
+                    <input
+                      ref={el => slideInputRefs.current[i] = el}
+                      type="file"
+                      accept="image/*"
+                      style={{ display: 'none' }}
+                      onChange={e => handleSlideImageUpload(e, i)}
+                    />
+                  </div>
                   <input
-                    style={{ width: '100%', border: 'none', fontWeight: 600, fontSize: '1.3rem', background: 'transparent', fontFamily: 'inherit', color: 'var(--ink-1)', outline: 'none' }}
-                    value={s.title}
+                    style={{ flex: 1, border: 'none', fontWeight: 600, fontSize: '1.3rem', background: 'transparent', fontFamily: 'inherit', color: 'var(--ink-1)', outline: 'none' }}
+                    value={s.title || ''}
                     onChange={e => setSlides(prev => prev.map((sl, j) => j === i ? { ...sl, title: e.target.value } : sl))}
                     placeholder="Slide title"
                   />
-                  <div className="mono muted" style={{ fontSize: '1.15rem' }}>{s.url || '/link'}</div>
+                  <span
+                    className={`adm-toggle${s.on ? ' on' : ''}`}
+                    onClick={() => setSlides(prev => prev.map((sl, j) => j === i ? { ...sl, on: !sl.on } : sl))}
+                  ></span>
+                  <button className="icon-action" onClick={() => setSlides(prev => prev.filter((_, j) => j !== i))}>
+                    <i className="fa-solid fa-trash"></i>
+                  </button>
                 </div>
-                <span
-                  className={`adm-toggle${s.on ? ' on' : ''}`}
-                  onClick={() => setSlides(prev => prev.map((sl, j) => j === i ? { ...sl, on: !sl.on } : sl))}
-                ></span>
-                <button className="icon-action" onClick={() => setSlides(prev => prev.filter((_, j) => j !== i))}>
-                  <i className="fa-solid fa-trash"></i>
-                </button>
+                {/* Row 2: subtitle */}
+                <input
+                  value={s.subtitle || ''}
+                  onChange={e => setSlides(prev => prev.map((sl, j) => j === i ? { ...sl, subtitle: e.target.value } : sl))}
+                  placeholder="Subtitle / description (optional)"
+                  style={{ fontSize: '1.2rem', borderRadius: 6, border: '1px solid #e3e5eb', padding: '6px 10px', fontFamily: 'inherit', color: 'var(--ink-2)', background: 'var(--surface)' }}
+                />
+                {/* Row 3: link + CTA label */}
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <input
+                    value={s.url || ''}
+                    onChange={e => setSlides(prev => prev.map((sl, j) => j === i ? { ...sl, url: e.target.value } : sl))}
+                    placeholder="Link (e.g. /market or https://…)"
+                    style={{ flex: 2, fontSize: '1.2rem', borderRadius: 6, border: '1px solid #e3e5eb', padding: '6px 10px', fontFamily: 'inherit', color: 'var(--ink-2)', background: 'var(--surface)' }}
+                  />
+                  <input
+                    value={s.ctaLabel || ''}
+                    onChange={e => setSlides(prev => prev.map((sl, j) => j === i ? { ...sl, ctaLabel: e.target.value } : sl))}
+                    placeholder="Button label (e.g. Explore)"
+                    style={{ flex: 1, fontSize: '1.2rem', borderRadius: 6, border: '1px solid #e3e5eb', padding: '6px 10px', fontFamily: 'inherit', color: 'var(--ink-2)', background: 'var(--surface)' }}
+                  />
+                </div>
               </div>
             ))}
           </div>

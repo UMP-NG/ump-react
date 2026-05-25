@@ -1,40 +1,79 @@
-export function LineChart({ data, color = 'var(--accent)', height = 240, fill = true }) {
+function fmtLabel(lbl) {
+  if (!lbl && lbl !== 0) return '';
+  if (typeof lbl === 'string' && lbl.length === 10) {
+    // "2024-01-15" → "15 Jan"
+    const d = new Date(lbl + 'T12:00:00');
+    return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+  }
+  if (typeof lbl === 'string' && lbl.length === 7) {
+    // "2024-01" → "Jan '24"
+    const d = new Date(lbl + '-01T12:00:00');
+    return d.toLocaleDateString('en-GB', { month: 'short', year: '2-digit' });
+  }
+  return String(lbl);
+}
+
+export function LineChart({ data, data2, color = 'var(--accent)', color2 = '#22c55e', height = 240, fill = true, labels }) {
   if (!data || data.length === 0) {
     return <div style={{ height, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontSize: '1.2rem' }}>No data</div>;
   }
   const w = 800, h = height - 30;
-  const max = Math.max(...data);
-  const min = Math.min(...data);
+
+  // Scale both series on the same axis so they're comparable
+  const all = data2 ? [...data, ...data2] : data;
+  const max = Math.max(...all);
+  const min = Math.min(...all);
   const range = max - min || 1;
+
   const stepX = data.length > 1 ? w / (data.length - 1) : w;
-  const pts = data.map((v, i) => [
-    data.length > 1 ? i * stepX : w / 2,
-    h - ((v - min) / range) * (h - 20) - 10,
-  ]);
-  const path = pts.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ');
+
+  function mkPts(arr) {
+    return arr.map((v, i) => [
+      arr.length > 1 ? i * stepX : w / 2,
+      h - ((v - min) / range) * (h - 20) - 10,
+    ]);
+  }
+
+  const pts  = mkPts(data);
+  const pts2 = data2 ? mkPts(data2) : null;
+
+  function mkPath(p) {
+    return p.map((pt, i) => (i ? 'L' : 'M') + pt[0].toFixed(1) + ',' + pt[1].toFixed(1)).join(' ');
+  }
+
+  const path     = mkPath(pts);
   const areaPath = path + ` L ${w},${h} L 0,${h} Z`;
-  const labelIdxs = [0, Math.floor(data.length * 0.2), Math.floor(data.length * 0.4),
-    Math.floor(data.length * 0.6), Math.floor(data.length * 0.8), data.length - 1];
+  const gradId   = `cg_${color.replace(/[^a-z0-9]/gi, '_')}`;
+
+  // Spread ~6 label slots evenly; always include first and last
+  const MAX_LABELS = 6;
+  const step = Math.max(1, Math.floor(data.length / MAX_LABELS));
+  const labelIdxs = [];
+  for (let i = 0; i < data.length; i += step) labelIdxs.push(i);
+  if (labelIdxs[labelIdxs.length - 1] !== data.length - 1) labelIdxs.push(data.length - 1);
 
   return (
     <svg className="chart-svg" viewBox={`0 0 ${w} ${h + 26}`} preserveAspectRatio="none">
       <defs>
-        <linearGradient id="cgrad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={color} stopOpacity="0.22" />
+        <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity="0.18" />
           <stop offset="100%" stopColor={color} stopOpacity="0" />
         </linearGradient>
       </defs>
       {[0.25, 0.5, 0.75, 1].map((p, i) => (
         <line key={i} x1="0" x2={w} y1={h * p} y2={h * p} stroke="#eef0f4" strokeWidth="1" />
       ))}
-      {fill && <path d={areaPath} fill="url(#cgrad)" />}
+      {fill && <path d={areaPath} fill={`url(#${gradId})`} />}
       <path d={path} fill="none" stroke={color} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+      {pts2 && (
+        <path d={mkPath(pts2)} fill="none" stroke={color2} strokeWidth="2" strokeDasharray="6 3" strokeLinejoin="round" strokeLinecap="round" />
+      )}
       {pts.map((p, i) => (i % 5 === 0 || i === pts.length - 1) && (
         <circle key={i} cx={p[0]} cy={p[1]} r="3" fill="#fff" stroke={color} strokeWidth="2" />
       ))}
       {labelIdxs.map(i => (
         <text key={i} x={data.length > 1 ? i * stepX : w / 2} y={h + 18} fontSize="11" fill="#94a3b8" textAnchor="middle">
-          {i}
+          {labels ? fmtLabel(labels[i]) : i}
         </text>
       ))}
     </svg>

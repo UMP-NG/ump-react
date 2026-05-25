@@ -6,6 +6,7 @@ import Users from './pages/Users';
 import Sellers from './pages/Sellers';
 import Providers from './pages/Providers';
 import Products from './pages/Products';
+import Services from './pages/Services';
 import Orders from './pages/Orders';
 import Payouts from './pages/Payouts';
 import Disputes from './pages/Disputes';
@@ -13,6 +14,11 @@ import Analytics from './pages/Analytics';
 import Broadcast from './pages/Broadcast';
 import Config from './pages/Config';
 import Admins from './pages/Admins';
+import Listings from './pages/Listings';
+import Categories from './pages/Categories';
+import Bookings from './pages/Bookings';
+import Reviews from './pages/Reviews';
+import Reports from './pages/Reports';
 import Placeholder from './pages/Placeholder';
 
 export default function AdminRoutes() {
@@ -25,15 +31,15 @@ export default function AdminRoutes() {
           <Route path="sellers"    element={<Sellers />} />
           <Route path="providers"  element={<Providers />} />
           <Route path="products"   element={<Products />} />
-          <Route path="services"   element={<Placeholder title="Services"          icon="fa-handshake" />} />
-          <Route path="listings"   element={<Placeholder title="Listings (Hostel)" icon="fa-bed" />} />
-          <Route path="categories" element={<Placeholder title="Categories"        icon="fa-folder-tree" />} />
+          <Route path="services"   element={<Services />} />
+          <Route path="listings"   element={<Listings />} />
+          <Route path="categories" element={<Categories />} />
           <Route path="orders"     element={<Orders />} />
-          <Route path="bookings"   element={<Placeholder title="Bookings"          icon="fa-calendar-check" />} />
+          <Route path="bookings"   element={<Bookings />} />
           <Route path="payouts"    element={<Payouts />} />
-          <Route path="reviews"    element={<Placeholder title="Reviews"           icon="fa-star" />} />
+          <Route path="reviews"    element={<Reviews />} />
           <Route path="disputes"   element={<Disputes />} />
-          <Route path="reports"    element={<Placeholder title="Reported Content"  icon="fa-flag" />} />
+          <Route path="reports"    element={<Reports />} />
           <Route path="analytics"  element={<Analytics />} />
           <Route path="broadcast"  element={<Broadcast />} />
           <Route path="config"     element={<Config />} />

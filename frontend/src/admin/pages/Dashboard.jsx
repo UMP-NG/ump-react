@@ -1,83 +1,200 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { StatCard } from '../components/StatCard';
 import { LineChart } from '../components/charts';
 import { apiFetch } from '../../utils/api';
 
+const PERIOD_OPTIONS = [
+  { label: 'Last 1 day',   days: 1,    short: '1d'  },
+  { label: 'Last 7 days',  days: 7,    short: '7d'  },
+  { label: 'Last 30 days', days: 30,   short: '30d' },
+  { label: 'Last 1 year',  days: 365,  short: '1y'  },
+  { label: 'Last 5 years', days: 1825, short: '5y'  },
+];
+
+const METRIC_COLORS = {
+  orders:  'var(--accent)',
+  revenue: '#6366f1',
+  users:   '#22c55e',
+};
+
+function downloadCSV(rows, filename) {
+  const csv = rows.map(r => r.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
+  const a = Object.assign(document.createElement('a'), {
+    href: URL.createObjectURL(new Blob([csv], { type: 'text/csv' })),
+    download: filename,
+  });
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(a.href);
+}
+
 export default function Dashboard() {
   const navigate = useNavigate();
-  const [metric, setMetric] = useState('orders');
-  const [stats, setStats] = useState(null);
-  const [chartSeries, setChartSeries] = useState({ orders: [], revenue: [], users: [] });
+  const [metric, setMetric]             = useState('orders');
+  const [period, setPeriod]             = useState(30);
+  const [periodOpen, setPeriodOpen]     = useState(false);
+  const periodRef                       = useRef(null);
+  const [stats, setStats]               = useState(null);
+  const [chartSeries, setChartSeries]   = useState({ orders: [], revenue: [], users: [] });
+  const [chartLabels, setChartLabels]   = useState([]);
   const [recentOrders, setRecentOrders] = useState([]);
   const [pendingVerif, setPendingVerif] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading]           = useState(true);
+  const [refreshing, setRefreshing]     = useState(false);
+  const chartInitRef                    = useRef(false);
 
+  const periodOpt   = PERIOD_OPTIONS.find(p => p.days === period) ?? PERIOD_OPTIONS[2];
+  const periodLabel = periodOpt.label;
+  const periodShort = periodOpt.short;
+
+  // Initial load — stats, chart, orders, verifications all at default period
   useEffect(() => {
     Promise.all([
-      apiFetch('/api/admins/stats').catch(() => null),
-      apiFetch('/api/admins/activity-chart').catch(() => null),
+      apiFetch('/api/admins/stats?days=30').catch(() => null),
+      apiFetch('/api/admins/activity-chart?days=30').catch(() => null),
       apiFetch('/api/admins/recent-orders?limit=6').catch(() => []),
       apiFetch('/api/admins/pending-verifications?limit=4').catch(() => []),
     ]).then(([s, chart, orders, verif]) => {
-      setStats(s);
-      if (chart) setChartSeries({ orders: chart.orders || [], revenue: chart.revenue || [], users: chart.users || [] });
-      setRecentOrders(Array.isArray(orders) ? orders : orders?.orders || []);
-      setPendingVerif(Array.isArray(verif) ? verif : verif?.results || []);
+      if (s) setStats(s);
+      if (chart) {
+        setChartSeries({ orders: chart.orders || [], revenue: chart.revenue || [], users: chart.users || [] });
+        setChartLabels(chart.labels || []);
+      }
+      setRecentOrders(Array.isArray(orders) ? orders : (orders?.orders || []));
+      setPendingVerif(Array.isArray(verif) ? verif : (verif?.results || []));
+      chartInitRef.current = true;
     }).finally(() => setLoading(false));
   }, []);
 
-  const statusColor = s => ({ completed: 'green', confirmed: 'blue', shipped: 'amber', pending: 'gray', cancelled: 'red', disputed: 'red' }[s?.toLowerCase()] || 'gray');
+  // Period change — refresh BOTH stats KPIs and chart together
+  useEffect(() => {
+    if (!chartInitRef.current) return;
+    setRefreshing(true);
+    Promise.all([
+      apiFetch(`/api/admins/stats?days=${period}`).catch(() => null),
+      apiFetch(`/api/admins/activity-chart?days=${period}`).catch(() => null),
+    ]).then(([s, chart]) => {
+      if (s) setStats(s);
+      if (chart) {
+        setChartSeries({ orders: chart.orders || [], revenue: chart.revenue || [], users: chart.users || [] });
+        setChartLabels(chart.labels || []);
+      }
+    }).catch(() => {}).finally(() => setRefreshing(false));
+  }, [period]);
+
+  // Close period dropdown on outside click
+  useEffect(() => {
+    if (!periodOpen) return;
+    function close(e) { if (periodRef.current && !periodRef.current.contains(e.target)) setPeriodOpen(false); }
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [periodOpen]);
+
+  function exportOrders() {
+    if (!recentOrders.length) return;
+    const header = ['Ref', 'Buyer', 'Email', 'Amount (₦)', 'Status', 'Date'];
+    const rows = recentOrders.map(o => [
+      o.orderRef || `UMP-${String(o._id).slice(-6).toUpperCase()}`,
+      o.buyer?.name  || '—',
+      o.buyer?.email || '—',
+      o.totalAmount  ?? 0,
+      o.status,
+      o.createdAt ? new Date(o.createdAt).toLocaleDateString('en-GB') : '—',
+    ]);
+    downloadCSV([header, ...rows], `ump-orders-${new Date().toISOString().slice(0, 10)}.csv`);
+  }
+
+  function downloadChart() {
+    const series = chartSeries[metric] || [];
+    if (!series.length) return;
+    const metricLabel = { orders: 'Orders', revenue: 'Revenue (₦)', users: 'New Users' }[metric];
+    const rows = series.map((v, i) => [chartLabels[i] ?? i + 1, v]);
+    downloadCSV([['Date', metricLabel], ...rows], `ump-${metric}-${new Date().toISOString().slice(0, 10)}.csv`);
+  }
+
+  const statusColor = s =>
+    ({ completed: 'green', confirmed: 'blue', shipped: 'amber', pending: 'gray', cancelled: 'red', disputed: 'red' }[s?.toLowerCase()] ?? 'gray');
+
+  // KPI shows '—' while initial loading, dims slightly while refreshing
+  const val = (v) => (loading ? '—' : (v ?? '—'));
 
   return (
     <>
       <div className="adm-page-head">
         <div className="left">
           <h1>Dashboard</h1>
-          <p>Real-time overview of UMP marketplace activity</p>
+          <p>
+            Real-time overview of UMP marketplace activity
+            {refreshing && <span style={{ marginLeft: 8, fontSize: '1.1rem', color: 'var(--ink-3)' }}>
+              <i className="fa-solid fa-circle-notch fa-spin"></i> Updating…
+            </span>}
+          </p>
         </div>
         <div className="right">
-          <button className="abtn ghost"><i className="fa-regular fa-calendar"></i> Last 30 days</button>
-          <button className="abtn ghost"><i className="fa-solid fa-download"></i> Export</button>
+          {/* Period picker */}
+          <div style={{ position: 'relative' }} ref={periodRef}>
+            <button className="abtn ghost" onClick={() => setPeriodOpen(o => !o)}>
+              <i className="fa-regular fa-calendar"></i> {periodLabel}
+              <i className="fa-solid fa-chevron-down" style={{ fontSize: '1rem', marginLeft: 4 }}></i>
+            </button>
+            {periodOpen && (
+              <div className="adm-period-drop">
+                {PERIOD_OPTIONS.map(opt => (
+                  <button
+                    key={opt.days}
+                    className={`adm-period-opt${period === opt.days ? ' active' : ''}`}
+                    onClick={() => { setPeriod(opt.days); setPeriodOpen(false); }}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <button className="abtn ghost" onClick={exportOrders} title="Export recent orders as CSV">
+            <i className="fa-solid fa-download"></i> Export
+          </button>
         </div>
       </div>
 
-      <div className="adm-stats">
+      <div className="adm-stats" style={{ opacity: refreshing ? 0.7 : 1, transition: 'opacity 0.2s' }}>
         <StatCard
-          label="Total users"
-          value={loading ? '—' : (stats?.totalUsers?.toLocaleString() ?? '—')}
-          delta={stats?.newUsersToday ? `+${stats.newUsersToday} today` : '—'}
+          label={`New users (${periodShort})`}
+          value={val(stats?.newUsers?.toLocaleString())}
+          delta={stats?.totalUsers ? `${stats.totalUsers.toLocaleString()} total` : '—'}
           icon="fa-users"
         />
         <StatCard
-          label="Total sellers"
-          value={loading ? '—' : (stats?.totalSellers?.toLocaleString() ?? '—')}
-          delta={stats?.newSellersToday ? `+${stats.newSellersToday} today` : '—'}
+          label={`New sellers (${periodShort})`}
+          value={val(stats?.newSellers?.toLocaleString())}
+          delta={stats?.totalSellers ? `${stats.totalSellers.toLocaleString()} total` : '—'}
           icon="fa-store"
           badge={stats?.pendingSellers ? <span className="pill-warn">{stats.pendingSellers} pending</span> : null}
         />
         <StatCard
-          label="Active orders"
-          value={loading ? '—' : (stats?.activeOrdersValue ?? '—')}
-          delta={stats?.activeOrdersDelta ?? '—'}
+          label={`Orders placed (${periodShort})`}
+          value={val(stats?.periodOrdersValue)}
+          delta={stats?.periodOrderCount != null ? `${stats.periodOrderCount} orders` : '—'}
           icon="fa-receipt"
         />
         <StatCard
-          label="Platform revenue (30d)"
-          value={loading ? '—' : (stats?.platformRevenue30d ?? '—')}
-          delta={stats?.revenueDelta ?? '—'}
+          label={`Platform revenue (${periodShort})`}
+          value={val(stats?.platformRevenue)}
+          delta={stats?.activeOrdersValue ? `${stats.activeOrdersValue} in flight` : '—'}
           icon="fa-naira-sign"
         />
         <StatCard
           label="Pending payouts"
-          value={loading ? '—' : (stats?.pendingPayoutsValue ?? '—')}
+          value={val(stats?.pendingPayoutsValue)}
           delta={stats?.pendingPayoutsCount ? `${stats.pendingPayoutsCount} requests` : '—'}
           icon="fa-money-bill-transfer"
           badge={stats?.pendingPayoutsCount > 0 ? <span className="pill-warn">action</span> : null}
         />
         <StatCard
           label="Flagged content"
-          value={loading ? '—' : (stats?.flaggedCount ?? '—')}
+          value={val(stats?.flaggedCount)}
           delta={stats ? `${stats.disputes ?? 0} disputes · ${stats.reports ?? 0} reports` : '—'}
           icon="fa-flag"
           badge={stats?.flaggedCount > 0 ? <span className="pill-red">review</span> : null}
@@ -85,31 +202,40 @@ export default function Dashboard() {
         />
       </div>
 
+      {/* Activity over time */}
       <div className="adm-card" style={{ marginBottom: 16 }}>
         <div className="adm-card-head">
           <div>
             <h3>Activity over time</h3>
-            <div className="muted" style={{ fontSize: '1.2rem', marginTop: 2 }}>Past 30 days</div>
+            <div className="muted" style={{ fontSize: '1.2rem', marginTop: 2 }}>{periodLabel}</div>
           </div>
           <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
             <div className="chart-toggle">
-              {[['orders','Orders'],['revenue','Revenue'],['users','New users']].map(([k, lbl]) => (
+              {[['orders', 'Orders'], ['revenue', 'Revenue'], ['users', 'New users']].map(([k, lbl]) => (
                 <button key={k} className={metric === k ? 'active' : ''} onClick={() => setMetric(k)}>
                   {lbl}
                 </button>
               ))}
             </div>
-            <button className="abtn ghost sm"><i className="fa-solid fa-download"></i></button>
+            <button className="abtn ghost sm" onClick={downloadChart} title="Download chart data as CSV">
+              <i className="fa-solid fa-download"></i>
+            </button>
           </div>
         </div>
         <div className="adm-card-body">
           <div className="chart-area">
-            <LineChart data={chartSeries[metric] || []} />
+            {refreshing
+              ? <div style={{ height: 240, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', fontSize: '1.3rem' }}>
+                  <i className="fa-solid fa-circle-notch fa-spin" style={{ marginRight: 8 }}></i> Updating…
+                </div>
+              : <LineChart data={chartSeries[metric] || []} labels={chartLabels} color={METRIC_COLORS[metric]} />
+            }
           </div>
         </div>
       </div>
 
       <div className="adm-2col">
+        {/* Recent orders */}
         <div className="adm-card">
           <div className="adm-card-head">
             <h3>Recent orders</h3>
@@ -124,37 +250,33 @@ export default function Dashboard() {
               </thead>
               <tbody>
                 {recentOrders.length > 0 ? recentOrders.map(o => (
-                  <tr key={o._id || o.ref}>
-                    <td className="mono">{o.orderRef || o.ref || '—'}</td>
+                  <tr key={o._id}>
+                    <td className="mono">{o.orderRef || `UMP-${String(o._id).slice(-6).toUpperCase()}`}</td>
                     <td>
                       <div className="adm-row-user">
-                        <div className="adm-av av-b">{(o.buyer?.name || o.buyer || 'U')[0]}</div>
-                        <div className="name" style={{ fontSize: '1.25rem' }}>{o.buyer?.name || o.buyer || '—'}</div>
+                        <div className="adm-av av-b">{(o.buyer?.name || 'U')[0].toUpperCase()}</div>
+                        <div className="name" style={{ fontSize: '1.25rem' }}>{o.buyer?.name || '—'}</div>
                       </div>
                     </td>
-                    <td className="amount"><span className="naira"></span>{(o.totalAmount || o.total || 0).toLocaleString()}</td>
+                    <td className="amount"><span className="naira"></span>{(o.totalAmount || 0).toLocaleString()}</td>
                     <td><span className={`pill dot ${statusColor(o.status)}`}>{o.status}</span></td>
                   </tr>
                 )) : (
-                  FALLBACK_ORDERS.map(o => (
-                    <tr key={o.ref}>
-                      <td className="mono">{o.ref}</td>
-                      <td>
-                        <div className="adm-row-user">
-                          <div className={`adm-av av-${o.av}`}>{o.buyer[0]}</div>
-                          <div className="name" style={{ fontSize: '1.25rem' }}>{o.buyer}</div>
-                        </div>
-                      </td>
-                      <td className="amount"><span className="naira"></span>{o.total}</td>
-                      <td><span className={`pill dot ${o.color}`}>{o.status}</span></td>
-                    </tr>
-                  ))
+                  <tr>
+                    <td colSpan={4}>
+                      <div className="adm-empty" style={{ padding: '28px 16px' }}>
+                        <i className="fa-solid fa-receipt"></i>
+                        <p>No orders yet</p>
+                      </div>
+                    </td>
+                  </tr>
                 )}
               </tbody>
             </table>
           </div>
         </div>
 
+        {/* Pending verifications */}
         <div className="adm-card">
           <div className="adm-card-head">
             <h3>Pending verifications</h3>
@@ -172,40 +294,37 @@ export default function Dashboard() {
                   <tr key={p._id}>
                     <td>
                       <div className="adm-row-user">
-                        <div className="adm-av av-b">{(p.name || p.storeName || 'S')[0]}</div>
+                        <div className="adm-av av-b">{(p.name || p.storeName || 'S')[0].toUpperCase()}</div>
                         <div>
-                          <div className="name" style={{ fontSize: '1.25rem' }}>{p.name || p.storeName}</div>
+                          <div className="name" style={{ fontSize: '1.25rem' }}>{p.name || p.storeName || '—'}</div>
                           <div className="email">{p.email}</div>
                         </div>
                       </div>
                     </td>
                     <td><span className={`role-pill ${p.type || 'seller'}`}>{p.type || 'Seller'}</span></td>
-                    <td className="muted" style={{ fontSize: '1.2rem' }}>{p.submittedAgo || p.createdAt?.split('T')[0]}</td>
+                    <td className="muted" style={{ fontSize: '1.2rem' }}>
+                      {p.createdAt
+                        ? new Date(p.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
+                        : '—'}
+                    </td>
                     <td>
-                      <button className="abtn success sm"><i className="fa-solid fa-check"></i></button>
-                      <button className="abtn ghost sm" style={{ marginLeft: 4 }}><i className="fa-solid fa-eye"></i></button>
+                      <button className="abtn success sm" onClick={() => navigate('/admin/sellers')} title="Review">
+                        <i className="fa-solid fa-check"></i>
+                      </button>
+                      <button className="abtn ghost sm" style={{ marginLeft: 4 }} onClick={() => navigate('/admin/sellers')} title="View">
+                        <i className="fa-solid fa-eye"></i>
+                      </button>
                     </td>
                   </tr>
                 )) : (
-                  FALLBACK_VERIF.map(p => (
-                    <tr key={p.name}>
-                      <td>
-                        <div className="adm-row-user">
-                          <div className={`adm-av av-${p.av}`}>{p.name[0]}</div>
-                          <div>
-                            <div className="name" style={{ fontSize: '1.25rem' }}>{p.name}</div>
-                            <div className="email">{p.email}</div>
-                          </div>
-                        </div>
-                      </td>
-                      <td><span className={`role-pill ${p.kind}`}>{p.kind === 'seller' ? 'Seller' : 'Provider'}</span></td>
-                      <td className="muted" style={{ fontSize: '1.2rem' }}>{p.when}</td>
-                      <td>
-                        <button className="abtn success sm"><i className="fa-solid fa-check"></i></button>
-                        <button className="abtn ghost sm" style={{ marginLeft: 4 }}><i className="fa-solid fa-eye"></i></button>
-                      </td>
-                    </tr>
-                  ))
+                  <tr>
+                    <td colSpan={4}>
+                      <div className="adm-empty" style={{ padding: '28px 16px' }}>
+                        <i className="fa-solid fa-circle-check"></i>
+                        <p>No pending verifications</p>
+                      </div>
+                    </td>
+                  </tr>
                 )}
               </tbody>
             </table>
@@ -215,19 +334,3 @@ export default function Dashboard() {
     </>
   );
 }
-
-const FALLBACK_ORDERS = [
-  { ref: 'UMP-29481', buyer: 'Tunde Adekunle', av: 'b', total: '24,500', status: 'Confirmed', color: 'blue' },
-  { ref: 'UMP-29480', buyer: 'Aisha Mohammed', av: 'g', total: '8,200',  status: 'Shipped',   color: 'amber' },
-  { ref: 'UMP-29479', buyer: 'Chinedu Okeke',  av: 'c', total: '156,000', status: 'Completed', color: 'green' },
-  { ref: 'UMP-29478', buyer: 'Funmi Bello',    av: 'e', total: '3,800',  status: 'Pending',   color: 'gray' },
-  { ref: 'UMP-29477', buyer: 'David Ogun',     av: 'd', total: '47,200', status: 'Confirmed', color: 'blue' },
-  { ref: 'UMP-29476', buyer: 'Ngozi Eze',      av: 'f', total: '12,400', status: 'Cancelled', color: 'red' },
-];
-
-const FALLBACK_VERIF = [
-  { name: 'Bolaji Tech Hub', email: 'bolajitech@unilag.edu.ng', av: 'b', kind: 'seller',    when: '2h ago' },
-  { name: 'Sade Adesina',    email: 'sade.a@unilag.edu.ng',     av: 'g', kind: 'provider',  when: '4h ago' },
-  { name: 'Lekan Books',     email: 'lekanbooks@unilag.edu.ng', av: 'e', kind: 'seller',    when: '6h ago' },
-  { name: 'Tope Designs',    email: 'tope.d@unilag.edu.ng',     av: 'c', kind: 'provider',  when: '1d ago' },
-];

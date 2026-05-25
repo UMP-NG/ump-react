@@ -4,15 +4,20 @@ import { apiFetch } from '../../utils/api';
 const ROLE_LABELS = { superadmin: 'Super admin', moderator: 'Moderator', finance: 'Finance', support: 'Support', admin: 'Admin' };
 const AV_COLORS = ['', 'av-b', 'av-c', 'av-d', 'av-e', 'av-f', 'av-g'];
 
+const SUPPORT_ROLE_LABELS = {
+  technical:      'Technical Support',
+  administrative: 'Administrative',
+};
+
 export default function Admins() {
   const [admins, setAdmins] = useState([]);
   const [activity, setActivity] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [inviteEmail, setInviteEmail] = useState('');
-  const [inviting, setInviting] = useState(false);
-  const [showInvite, setShowInvite] = useState(false);
-  const [inviteError, setInviteError] = useState('');
-  const [inviteSuccess, setInviteSuccess] = useState(false);
+
+  // Support role management
+  const [supportAdmins, setSupportAdmins] = useState([]);
+  const [supportLoading, setSupportLoading] = useState(true);
+  const [updatingRole, setUpdatingRole] = useState(null);
 
   useEffect(() => {
     Promise.all([
@@ -24,25 +29,22 @@ export default function Admins() {
     }).finally(() => setLoading(false));
   }, []);
 
-  async function invite() {
-    if (!inviteEmail) return;
-    const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRe.test(inviteEmail)) {
-      setInviteError('Enter a valid email address.');
-      return;
-    }
-    setInviteError('');
-    setInviting(true);
+  useEffect(() => {
+    apiFetch('/api/admins/support/admins')
+      .then(d => setSupportAdmins(Array.isArray(d) ? d : []))
+      .catch(() => {})
+      .finally(() => setSupportLoading(false));
+  }, []);
+
+  async function setSupportRole(userId, role) {
+    setUpdatingRole(userId);
     try {
-      await apiFetch('/api/admins/invite', { method: 'POST', body: { email: inviteEmail } });
-      setInviteEmail('');
-      setShowInvite(false);
-      setInviteSuccess(true);
-      setTimeout(() => setInviteSuccess(false), 3000);
+      await apiFetch(`/api/admins/support/admins/${userId}/role`, { method: 'PUT', body: { supportRole: role } });
+      setSupportAdmins(prev => prev.map(a => a._id === userId ? { ...a, supportRole: role || null } : a));
     } catch (err) {
-      setInviteError(err?.message || 'Failed to send invite. Please try again.');
+      console.error(err);
     } finally {
-      setInviting(false);
+      setUpdatingRole(null);
     }
   }
 
@@ -55,39 +57,58 @@ export default function Admins() {
           <h1>Admin accounts</h1>
           <p>{admins.length} admin{admins.length !== 1 ? 's' : ''} · role-based permissions</p>
         </div>
-        <div className="right">
-          <button className="abtn primary" onClick={() => setShowInvite(v => !v)}>
-            <i className="fa-solid fa-user-plus"></i> Invite admin
-          </button>
-        </div>
       </div>
 
-      {inviteSuccess && (
-        <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 10, padding: '10px 16px', marginBottom: 12, fontSize: '1.3rem', color: '#166534' }}>
-          <i className="fa-solid fa-circle-check" style={{ marginRight: 6 }}></i> Invite sent successfully.
+      {/* ── Support contact roles ── */}
+      <div className="adm-card" style={{ marginBottom: 16 }}>
+        <div className="adm-card-head">
+          <h3>Support contact roles</h3>
+          <p style={{ fontSize: '1.2rem', color: 'var(--ink-3)', margin: 0 }}>
+            Assign each admin a support role so users know who to contact. Admins without a role won't appear in the user-facing contact picker.
+          </p>
         </div>
-      )}
-      {showInvite && (
-        <div className="adm-card" style={{ marginBottom: 16 }}>
-          <div className="adm-card-body">
-            <div style={{ display: 'flex', gap: 10 }}>
-              <input
-                className="adm-field"
-                style={{ flex: 1, height: 38, border: `1px solid ${inviteError ? '#ef4444' : '#e3e5eb'}`, borderRadius: 9, padding: '0 12px', fontSize: '1.3rem', fontFamily: 'inherit', outline: 'none' }}
-                placeholder="admin@unilag.edu.ng"
-                value={inviteEmail}
-                onChange={e => { setInviteEmail(e.target.value); setInviteError(''); }}
-                onKeyDown={e => e.key === 'Enter' && invite()}
-              />
-              <button className="abtn primary" disabled={inviting || !inviteEmail} onClick={invite}>
-                {inviting ? <i className="fa-solid fa-circle-notch fa-spin"></i> : 'Send invite'}
-              </button>
-              <button className="abtn ghost" onClick={() => { setShowInvite(false); setInviteError(''); }}>Cancel</button>
+        <div className="adm-card-body">
+          {supportLoading ? (
+            <div style={{ textAlign: 'center', padding: 24, color: 'var(--ink-3)' }}>
+              <i className="fa-solid fa-circle-notch fa-spin"></i>
             </div>
-            {inviteError && <div style={{ color: '#ef4444', fontSize: '1.2rem', marginTop: 6 }}>{inviteError}</div>}
-          </div>
+          ) : supportAdmins.length === 0 ? (
+            <div className="adm-empty"><i className="fa-solid fa-user-shield"></i><p>No admin accounts found in user records</p></div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {supportAdmins.map((a, i) => (
+                <div key={a._id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: i < supportAdmins.length - 1 ? '1px solid var(--line)' : 'none' }}>
+                  <div className={`adm-av ${AV_COLORS[i % AV_COLORS.length]}`} style={{ width: 38, height: 38, fontSize: '1.3rem' }}>
+                    {a.name ? a.name.split(' ').map(n => n[0]).slice(0, 2).join('') : 'AD'}
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 600, fontSize: '1.3rem', color: 'var(--ink-1)' }}>{a.name || '—'}</div>
+                    <div style={{ fontSize: '1.1rem', color: 'var(--ink-3)' }}>{a.email}</div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    {a.supportRole && (
+                      <span className={`pill dot ${a.supportRole === 'technical' ? 'blue' : 'amber'}`}>
+                        {SUPPORT_ROLE_LABELS[a.supportRole]}
+                      </span>
+                    )}
+                    <select
+                      style={{ height: 34, border: '1px solid #e3e5eb', borderRadius: 8, padding: '0 10px', fontSize: '1.2rem', fontFamily: 'inherit', cursor: 'pointer', background: 'var(--paper)', color: 'var(--ink-1)', outline: 'none' }}
+                      value={a.supportRole || ''}
+                      disabled={updatingRole === a._id}
+                      onChange={e => setSupportRole(a._id, e.target.value)}
+                    >
+                      <option value="">No support role</option>
+                      <option value="technical">Technical Support</option>
+                      <option value="administrative">Administrative</option>
+                    </select>
+                    {updatingRole === a._id && <i className="fa-solid fa-circle-notch fa-spin" style={{ color: 'var(--ink-3)', fontSize: '1.2rem' }}></i>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
-      )}
+      </div>
 
       <div className="adm-2col-asym">
         <div className="adm-card">
@@ -116,7 +137,7 @@ export default function Admins() {
                           </div>
                         </div>
                       </td>
-                      <td><span className="role-pill admin">{ROLE_LABELS[a.adminRole] || a.adminRole || 'Admin'}</span></td>
+                      <td><span className="role-pill role-admin">{ROLE_LABELS[a.adminRole] || a.adminRole || 'Admin'}</span></td>
                       <td>{a.twoFAEnabled ? <span className="pill green dot">On</span> : <span className="pill amber dot">Off</span>}</td>
                       <td className="muted">{a.lastActiveLabel || (a.lastActive ? new Date(a.lastActive).toLocaleDateString() : '—')}</td>
                       <td><button className="icon-action"><i className="fa-solid fa-ellipsis-vertical"></i></button></td>
@@ -131,7 +152,9 @@ export default function Admins() {
         <div className="adm-card">
           <div className="adm-card-head"><h3>Recent activity</h3></div>
           <div className="adm-card-body" style={{ maxHeight: 540, overflowY: 'auto' }}>
-            {activity.length > 0 ? activity.map((a, i) => (
+            {loading ? (
+              <div style={{ padding: 24, textAlign: 'center', color: 'var(--ink-3)' }}><i className="fa-solid fa-circle-notch fa-spin"></i></div>
+            ) : activity.length > 0 ? activity.map((a, i) => (
               <div key={i} className="act-row">
                 <span className="when">{a.timeLabel || new Date(a.createdAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</span>
                 <span>
@@ -140,18 +163,7 @@ export default function Admins() {
                 </span>
               </div>
             )) : (
-              [
-                ['11:42', 'Olamide', 'approved seller', 'Bolaji Tech Hub'],
-                ['11:14', 'Kemi',    'resolved dispute', 'D-1021 → refund'],
-                ['10:48', 'Tunde',   'batch-approved payouts', '₦612K · 6 sellers'],
-                ['09:30', 'Ifeoma',  'banned user', 'Wale Iroko (spam)'],
-                ['08:22', 'Olamide', 'edited site config', 'Platform fee 3.5% → 3.2%'],
-              ].map((a, i) => (
-                <div key={i} className="act-row">
-                  <span className="when">{a[0]}</span>
-                  <span><strong>{a[1]}</strong> {a[2]} <span style={{ color: 'var(--accent)' }}>{a[3]}</span></span>
-                </div>
-              ))
+              <div className="adm-empty"><i className="fa-solid fa-clock-rotate-left"></i><p>No admin activity recorded yet</p></div>
             )}
           </div>
         </div>

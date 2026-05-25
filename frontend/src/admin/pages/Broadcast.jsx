@@ -31,6 +31,12 @@ export default function Broadcast() {
     apiFetch('/api/admins/broadcasts?limit=5').then(d => setRecent(d?.broadcasts || [])).catch(() => {});
   }
 
+  async function deleteBroadcast(id) {
+    if (!window.confirm('Delete this broadcast?')) return;
+    await apiFetch(`/api/admins/broadcasts/${id}`, { method: 'DELETE' }).catch(() => null);
+    setRecent(prev => prev.filter(b => b._id !== id));
+  }
+
   function toggleChannel(k) {
     setChannels(c => ({ ...c, [k]: !c[k] }));
   }
@@ -148,7 +154,7 @@ export default function Broadcast() {
             <div className="adm-card-head"><h3>Recent broadcasts</h3></div>
             <div className="adm-scroll-x">
               <table className="adm-table">
-                <thead><tr><th>Title</th><th>Sent</th><th>Reach</th><th>Open</th></tr></thead>
+                <thead><tr><th>Title</th><th>Sent</th><th>Reach</th><th>Open</th><th></th></tr></thead>
                 <tbody>
                   {recent.length > 0 ? recent.map(b => (
                     <tr key={b._id}>
@@ -156,15 +162,18 @@ export default function Broadcast() {
                       <td className="muted">{b.sentAt ? new Date(b.sentAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : '—'}</td>
                       <td className="amount">{(b.reach || 0).toLocaleString()}</td>
                       <td className="amount">{b.openRate ? `${b.openRate}%` : '—'}</td>
+                      <td>
+                        <button
+                          onClick={() => deleteBroadcast(b._id)}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: '2px 6px', borderRadius: 6 }}
+                          title="Delete broadcast"
+                        >
+                          <i className="fas fa-trash-can" />
+                        </button>
+                      </td>
                     </tr>
                   )) : (
-                    [
-                      ['Maintenance window · May 4', 'May 3', '14,114', '68%'],
-                      ['New: Hostel listings live',   'Apr 28', '12,840', '74%'],
-                      ['Refer a friend — earn ₦500',  'Apr 15', '11,902', '58%'],
-                    ].map(r => (
-                      <tr key={r[0]}><td>{r[0]}</td><td className="muted">{r[1]}</td><td className="amount">{r[2]}</td><td className="amount">{r[3]}</td></tr>
-                    ))
+                    <tr><td colSpan="5" style={{ textAlign: 'center', color: '#94a3b8', padding: '24px 0' }}>No broadcasts sent yet</td></tr>
                   )}
                 </tbody>
               </table>

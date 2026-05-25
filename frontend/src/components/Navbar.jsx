@@ -4,6 +4,7 @@ import Logo from "./Logo";
 import ProfilePopup from "./Profilepopup";
 import { useUser } from "../context/UserContext";
 import { apiFetch } from "../utils/api";
+import { socket } from "../utils/socket";
 
 const NAV_LINKS = [
   { path: "/", label: "Home" },
@@ -25,17 +26,24 @@ export default function Navbar({ frosted = false, dark = false }) {
   const [notifCount, setNotifCount] = useState(0);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user) { setNotifCount(0); setCartCount(0); return; }
     apiFetch("/api/cart")
       .then((d) => setCartCount((d.items || d || []).length))
       .catch(() => {});
     apiFetch("/api/notifications")
       .then((d) => {
         const list = d.notifications || d || [];
-        setNotifCount(list.filter((n) => !n.read && !n.isRead).length);
+        setNotifCount(list.filter((n) => !n.read).length);
       })
       .catch(() => {});
   }, [user]);
+
+  // Real-time: bump badge whenever a new notification arrives over the socket
+  useEffect(() => {
+    function onNewNotif() { setNotifCount((c) => c + 1); }
+    socket.on("new_notification", onNewNotif);
+    return () => socket.off("new_notification", onNewNotif);
+  }, []);
   const mobInputRef = useRef(null);
 
   const cls = ["nav", frosted ? "frosted" : "", dark ? "dark" : ""].filter(Boolean).join(" ");

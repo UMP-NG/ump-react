@@ -9,6 +9,7 @@ import Skel from "../components/Skel";
 import { apiFetch } from "../utils/api";
 import { useUser } from "../context/UserContext";
 import { useToast } from "../context/ToastContext";
+import { useAppConfig } from "../context/AppConfigContext";
 
 const SLIDES = [
   {
@@ -70,6 +71,7 @@ export default function Home() {
   const navigate = useNavigate();
   const { user } = useUser();
   const showToast = useToast();
+  const { slides: configSlides } = useAppConfig();
   const [products, setProducts] = useState([]);
   const [productsLoading, setProductsLoading] = useState(true);
   const [cats, setCats] = useState(FALLBACK_CATS);
@@ -79,16 +81,31 @@ export default function Home() {
   const [slide, setSlide] = useState(0);
   const slideTimer = useRef(null);
 
+  const heroSlides = (() => {
+    const active = configSlides?.filter(s => s.on && (s.title || s.image?.url)) || [];
+    if (active.length > 0) {
+      return active.map(s => ({
+        img: s.image?.url || '/images/market.png',
+        tag: '',
+        heading: s.title || '',
+        sub: s.subtitle || '',
+        cta: s.ctaLabel || 'Learn more',
+        ctaPath: s.url || '/',
+      }));
+    }
+    return SLIDES;
+  })();
+
   function goSlide(idx) {
     setSlide(idx);
     clearInterval(slideTimer.current);
-    slideTimer.current = setInterval(() => setSlide((s) => (s + 1) % SLIDES.length), 5000);
+    slideTimer.current = setInterval(() => setSlide((s) => (s + 1) % heroSlides.length), 5000);
   }
 
   useEffect(() => {
-    slideTimer.current = setInterval(() => setSlide((s) => (s + 1) % SLIDES.length), 5000);
+    slideTimer.current = setInterval(() => setSlide((s) => (s + 1) % heroSlides.length), 5000);
     return () => clearInterval(slideTimer.current);
-  }, []);
+  }, [heroSlides.length]);
 
   function handleBecomeSeller() {
     if (user) {
@@ -142,7 +159,7 @@ export default function Home() {
 
       {/* Hero slideshow */}
       <div style={{ position: "relative", margin: "12px 16px 0", borderRadius: "var(--r-2xl)", overflow: "hidden", height: 380 }}>
-        {SLIDES.map((s, i) => (
+        {heroSlides.map((s, i) => (
           <div
             key={i}
             style={{
@@ -184,7 +201,7 @@ export default function Home() {
 
         {/* Dot indicators */}
         <div style={{ position: "absolute", bottom: 14, left: "50%", transform: "translateX(-50%)", display: "flex", gap: 6, zIndex: 10 }}>
-          {SLIDES.map((_, i) => (
+          {heroSlides.map((_, i) => (
             <button
               key={i}
               onClick={() => goSlide(i)}

@@ -1,5 +1,7 @@
 import { useLocation, useNavigate } from 'react-router-dom';
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { useUser } from '../../context/UserContext';
+import { apiFetch } from '../../utils/api';
 
 const ROUTE_LABELS = {
   '/admin':            ['Admin', 'Dashboard'],
@@ -22,12 +24,42 @@ const ROUTE_LABELS = {
   '/admin/admins':     ['Admin', 'Admin Accounts'],
 };
 
-export default function AdminTopbar() {
+export default function AdminTopbar({ onMenuOpen }) {
   const { pathname } = useLocation();
-  const navigate = useNavigate();
-  const [query, setQuery] = useState('');
+  const navigate     = useNavigate();
+  const [query, setQuery]           = useState('');
+  const { user }                    = useUser();
+  const [avatarBroken, setAvatarBroken] = useState(false);
+  const [notifOpen, setNotifOpen]   = useState(false);
+  const [helpOpen, setHelpOpen]     = useState(false);
+  const [notifStats, setNotifStats] = useState(null);
+  const notifRef = useRef(null);
+  const helpRef  = useRef(null);
 
-  const crumbs = ROUTE_LABELS[pathname] || ['Admin', pathname.split('/').pop()];
+  const initials  = user?.name ? user.name.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase() : 'AD';
+  const avatarUrl = user?.avatar?.url || null;
+  const crumbs    = ROUTE_LABELS[pathname] || ['Admin', pathname.split('/').pop()];
+
+  // Fetch notification counts once on mount
+  useEffect(() => {
+    apiFetch('/api/admins/stats?days=30').then(s => setNotifStats(s)).catch(() => {});
+  }, []);
+
+  // Close both panels on outside click
+  useEffect(() => {
+    function close(e) {
+      if (notifRef.current && !notifRef.current.contains(e.target)) setNotifOpen(false);
+      if (helpRef.current  && !helpRef.current.contains(e.target))  setHelpOpen(false);
+    }
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, []);
+
+  const hasBadge = notifStats && (
+    (notifStats.pendingSellers  || 0) +
+    (notifStats.pendingPayoutsCount || 0) +
+    (notifStats.disputes        || 0)
+  ) > 0;
 
   function handleSearch(e) {
     if (e.key === 'Enter' && query.trim()) {
@@ -37,6 +69,9 @@ export default function AdminTopbar() {
 
   return (
     <header className="adm-top">
+      <button className="icon-btn adm-mob-menu-btn" onClick={onMenuOpen} title="Open menu">
+        <i className="fa-solid fa-bars"></i>
+      </button>
       <div className="crumbs">
         {crumbs.map((c, i) => (
           <span key={i}>
@@ -59,22 +94,100 @@ export default function AdminTopbar() {
 
       <div className="adm-top-spacer"></div>
 
-      <button className="icon-btn" title="Help">
-        <i className="fa-regular fa-circle-question"></i>
-      </button>
-      <button className="icon-btn" title="Notifications" style={{ position: 'relative' }}>
-        <i className="fa-regular fa-bell"></i>
-        <span className="dot"></span>
-      </button>
+      {/* Help */}
+      <div ref={helpRef} style={{ position: 'relative' }}>
+        <button
+          className="icon-btn"
+          title="Help"
+          onClick={() => { setHelpOpen(o => !o); setNotifOpen(false); }}
+        >
+          <i className="fa-regular fa-circle-question"></i>
+        </button>
+        {helpOpen && (
+          <div className="adm-notif-drop">
+            <div className="adm-notif-head">Help &amp; Quick links</div>
+            <button className="adm-notif-item" onClick={() => { navigate('/admin/broadcast'); setHelpOpen(false); }}>
+              <i className="fa-solid fa-bullhorn" style={{ color: 'var(--accent)' }}></i>
+              <span>Send broadcast notification</span>
+            </button>
+            <button className="adm-notif-item" onClick={() => { navigate('/admin/config'); setHelpOpen(false); }}>
+              <i className="fa-solid fa-sliders" style={{ color: '#22c55e' }}></i>
+              <span>Site configuration</span>
+            </button>
+            <button className="adm-notif-item" onClick={() => { navigate('/admin/admins'); setHelpOpen(false); }}>
+              <i className="fa-solid fa-user-shield" style={{ color: '#6366f1' }}></i>
+              <span>Manage admin accounts</span>
+            </button>
+            <a className="adm-notif-item" href="mailto:support@myump.com.ng">
+              <i className="fa-regular fa-envelope" style={{ color: '#f59e0b' }}></i>
+              <span>Email support</span>
+            </a>
+          </div>
+        )}
+      </div>
+
+      {/* Notifications */}
+      <div ref={notifRef} style={{ position: 'relative' }}>
+        <button
+          className="icon-btn"
+          title="Notifications"
+          onClick={() => { setNotifOpen(o => !o); setHelpOpen(false); }}
+          style={{ position: 'relative' }}
+        >
+          <i className="fa-regular fa-bell"></i>
+          {hasBadge && <span className="dot"></span>}
+        </button>
+        {notifOpen && (
+          <div className="adm-notif-drop">
+            <div className="adm-notif-head">Notifications</div>
+            {notifStats?.pendingSellers > 0 && (
+              <button className="adm-notif-item" onClick={() => { navigate('/admin/sellers'); setNotifOpen(false); }}>
+                <i className="fa-solid fa-store" style={{ color: '#f59e0b' }}></i>
+                <span>
+                  <strong>{notifStats.pendingSellers}</strong> seller{notifStats.pendingSellers > 1 ? 's' : ''} pending verification
+                </span>
+              </button>
+            )}
+            {notifStats?.pendingPayoutsCount > 0 && (
+              <button className="adm-notif-item" onClick={() => { navigate('/admin/payouts'); setNotifOpen(false); }}>
+                <i className="fa-solid fa-money-bill-transfer" style={{ color: '#6366f1' }}></i>
+                <span>
+                  <strong>{notifStats.pendingPayoutsCount}</strong> payout{notifStats.pendingPayoutsCount > 1 ? 's' : ''} awaiting approval
+                </span>
+              </button>
+            )}
+            {notifStats?.disputes > 0 && (
+              <button className="adm-notif-item" onClick={() => { navigate('/admin/disputes'); setNotifOpen(false); }}>
+                <i className="fa-solid fa-scale-balanced" style={{ color: '#ef4444' }}></i>
+                <span>
+                  <strong>{notifStats.disputes}</strong> active dispute{notifStats.disputes > 1 ? 's' : ''}
+                </span>
+              </button>
+            )}
+            {!hasBadge && (
+              <div style={{ padding: '18px', color: '#94a3b8', fontSize: '1.3rem', textAlign: 'center' }}>
+                All clear — no pending items
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Admin avatar */}
       <div
+        title={user?.name || 'Admin'}
         style={{
           width: 34, height: 34, borderRadius: '50%',
           background: 'linear-gradient(135deg,#f97316,#ea580c)',
           display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
           color: '#fff', fontWeight: 700, fontSize: '1.2rem', flexShrink: 0,
+          overflow: 'hidden', padding: 0,
         }}
       >
-        AD
+        {avatarUrl && !avatarBroken
+          ? <img src={avatarUrl} alt={initials} onError={() => setAvatarBroken(true)}
+              style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+          : initials}
       </div>
     </header>
   );

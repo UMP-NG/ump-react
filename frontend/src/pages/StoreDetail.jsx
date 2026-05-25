@@ -10,6 +10,7 @@ import useReveal from "../hooks/useReveal";
 import { useUser } from "../context/UserContext";
 import { useToast } from "../context/ToastContext";
 import Skel from "../components/Skel";
+import ReportModal from "../components/ReportModal";
 
 export default function StoreDetail() {
   const { id } = useParams();
@@ -20,6 +21,7 @@ export default function StoreDetail() {
   const [loading, setLoading] = useState(true);
   const [following, setFollowing] = useState(false);
   const [followLoading, setFollowLoading] = useState(false);
+  const [showReport, setShowReport] = useState(false);
 
   useReveal(".product-card", [seller?.products?.length]);
 
@@ -164,6 +166,16 @@ export default function StoreDetail() {
         )}
       </div>
 
+      {/* Report link */}
+      <div style={{ padding: "0 16px 4px", textAlign: "right" }}>
+        <button
+          onClick={() => setShowReport(true)}
+          style={{ background: "none", border: "none", color: "var(--ink-4)", fontSize: "1.15rem", cursor: "pointer", textDecoration: "underline", padding: 0 }}
+        >
+          <i className="fas fa-flag" style={{ marginRight: 4 }} />Report this store
+        </button>
+      </div>
+
       {/* Products */}
       <div style={{ padding: "24px 16px 0" }}>
         <h2 style={{ margin: "0 0 14px", fontSize: "1.8rem", fontWeight: 800 }}>
@@ -185,6 +197,15 @@ export default function StoreDetail() {
 
       <Footer />
       <BottomNav />
+
+      {showReport && (
+        <ReportModal
+          refModel="Seller"
+          refId={seller._id}
+          refName={seller.storeName || seller.name}
+          onClose={() => setShowReport(false)}
+        />
+      )}
     </div>
   );
 }

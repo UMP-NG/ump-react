@@ -7,6 +7,7 @@ import { naira } from "../components/ProductCard";
 import { apiFetch } from "../utils/api";
 import { useToast } from "../context/ToastContext";
 import Skel from "../components/Skel";
+import ReportModal from "../components/ReportModal";
 
 const AMENITY_ICONS = {
   "WiFi": "wifi", "Water": "droplet", "Electricity": "bolt",
@@ -26,6 +27,7 @@ export default function HostelDetail() {
   const [booking, setBooking] = useState({ name: "", phone: "", message: "", date: "" });
   const [booking_loading, setBookingLoading] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [showReport, setShowReport] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -155,6 +157,16 @@ export default function HostelDetail() {
           </div>
         )}
 
+        {/* Report link */}
+        <div style={{ textAlign: "right", marginBottom: 8 }}>
+          <button
+            onClick={() => setShowReport(true)}
+            style={{ background: "none", border: "none", color: "var(--ink-4)", fontSize: "1.15rem", cursor: "pointer", textDecoration: "underline", padding: 0 }}
+          >
+            <i className="fas fa-flag" style={{ marginRight: 4 }} />Report this listing
+          </button>
+        </div>
+
         {/* Related */}
         {related.length > 0 && (
           <>
@@ -180,6 +192,15 @@ export default function HostelDetail() {
       </div>
 
       <Footer />
+
+      {showReport && (
+        <ReportModal
+          refModel="Listing"
+          refId={listing._id}
+          refName={listing.name}
+          onClose={() => setShowReport(false)}
+        />
+      )}
 
       {/* sticky book bar */}
       <div style={{ position: "fixed", left: 16, right: 16, bottom: 16, background: "var(--white)", border: "1px solid var(--line)", borderRadius: "var(--r-pill)", padding: "10px 16px", display: "flex", alignItems: "center", gap: 12, boxShadow: "var(--shadow-pop)", zIndex: 40 }}>

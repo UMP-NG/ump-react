@@ -6,6 +6,7 @@ import Ph from "../components/Ph";
 import { naira } from "../components/ProductCard";
 import { apiFetch } from "../utils/api";
 import Skel from "../components/Skel";
+import ReportModal from "../components/ReportModal";
 
 export default function ServiceDetail() {
   const { id } = useParams();
@@ -18,6 +19,7 @@ export default function ServiceDetail() {
   const [bookingNotes, setBookingNotes] = useState("");
   const [bookingLoading, setBookingLoading] = useState(false);
   const [toast, setToast] = useState(null);
+  const [showReport, setShowReport] = useState(false);
   const toastTimer = useRef(null);
 
   const today = new Date().toISOString().split("T")[0];
@@ -166,6 +168,16 @@ export default function ServiceDetail() {
           </div>
         )}
 
+        {/* Report link */}
+        <div style={{ textAlign: "right", marginBottom: 8 }}>
+          <button
+            onClick={() => setShowReport(true)}
+            style={{ background: "none", border: "none", color: "var(--ink-4)", fontSize: "1.15rem", cursor: "pointer", textDecoration: "underline", padding: 0 }}
+          >
+            <i className="fas fa-flag" style={{ marginRight: 4 }} />Report this service
+          </button>
+        </div>
+
         {/* Time slots */}
         <div style={{ marginBottom: 14 }}>
           <h3 style={{ fontSize: "1.5rem", fontWeight: 700, margin: "0 0 10px" }}>Available slots</h3>
@@ -187,6 +199,15 @@ export default function ServiceDetail() {
       </div>
 
       <Footer />
+
+      {showReport && (
+        <ReportModal
+          refModel="Service"
+          refId={service._id}
+          refName={service.title || service.name}
+          onClose={() => setShowReport(false)}
+        />
+      )}
 
       {/* Sticky book bar */}
       <div style={{ position: "fixed", left: 16, right: 16, bottom: 16, background: "var(--white)", border: "1px solid var(--line)", borderRadius: "var(--r-pill)", padding: "10px 16px", display: "flex", alignItems: "center", gap: 12, boxShadow: "var(--shadow-pop)", zIndex: 40 }}>

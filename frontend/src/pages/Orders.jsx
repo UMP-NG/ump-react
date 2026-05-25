@@ -122,6 +122,86 @@ function OrderTimeline({ status }) {
   );
 }
 
+const DISPUTE_REASONS = [
+  "Item not received",
+  "Item not as described",
+  "Damaged or defective item",
+  "Wrong item sent",
+  "Seller unresponsive",
+  "Other",
+];
+
+function DisputeModal({ order, onClose, onDone }) {
+  const showToast = useToast();
+  const [reason, setReason]       = useState(DISPUTE_REASONS[0]);
+  const [description, setDesc]    = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  async function submit(e) {
+    e.preventDefault();
+    setSubmitting(true);
+    try {
+      await apiFetch(`/api/orders/${order._id || order.id}/dispute`, {
+        method: "POST",
+        body: { reason, description },
+      });
+      showToast("Dispute raised — our team will review it within 48 hours", "success");
+      onDone();
+    } catch (err) {
+      showToast(err.message || "Failed to raise dispute", "error");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.5)", zIndex: 2000, display: "flex", alignItems: "flex-end", justifyContent: "center" }} onClick={onClose}>
+      <div style={{ background: "var(--paper)", borderRadius: "20px 20px 0 0", width: "100%", maxWidth: 540, padding: 24, paddingBottom: 36 }} onClick={(e) => e.stopPropagation()}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+          <div>
+            <h3 style={{ margin: 0, fontSize: "1.8rem", fontWeight: 800 }}>Raise a Dispute</h3>
+            <p style={{ margin: "4px 0 0", fontSize: "1.2rem", color: "var(--ink-3)" }}>Order #{(order._id || order.id)?.toString().slice(-6)}</p>
+          </div>
+          <button className="icon-btn" onClick={onClose}><i className="fas fa-xmark" /></button>
+        </div>
+
+        <div style={{ padding: "10px 12px", background: "rgba(239,68,68,.06)", border: "1px solid rgba(239,68,68,.2)", borderRadius: 10, marginBottom: 20, display: "flex", gap: 10, alignItems: "flex-start" }}>
+          <i className="fas fa-triangle-exclamation" style={{ color: "#dc2626", marginTop: 2, flexShrink: 0 }} />
+          <p style={{ margin: 0, fontSize: "1.2rem", color: "var(--ink-2)", lineHeight: 1.5 }}>
+            Raising a dispute will flag this order for admin review. Our team typically responds within 48 hours. Please message the seller first to try to resolve the issue.
+          </p>
+        </div>
+
+        <form onSubmit={submit}>
+          <label style={{ fontSize: "1.2rem", fontWeight: 600, color: "var(--ink-2)", display: "block", marginBottom: 6 }}>Reason</label>
+          <select
+            className="input"
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            style={{ width: "100%", marginBottom: 14, height: 44 }}
+          >
+            {DISPUTE_REASONS.map(r => <option key={r}>{r}</option>)}
+          </select>
+
+          <label style={{ fontSize: "1.2rem", fontWeight: 600, color: "var(--ink-2)", display: "block", marginBottom: 6 }}>Details <span style={{ fontWeight: 400, color: "var(--ink-4)" }}>(optional)</span></label>
+          <textarea
+            className="input"
+            placeholder="Describe the issue in more detail…"
+            value={description}
+            onChange={(e) => setDesc(e.target.value)}
+            rows={3}
+            style={{ width: "100%", resize: "none", marginBottom: 18 }}
+          />
+          <button className="btn btn-block" type="submit" disabled={submitting}
+            style={{ background: "#dc2626", color: "#fff", border: "none", borderRadius: "var(--r-pill)", height: 48, fontWeight: 700, fontSize: "1.4rem", cursor: "pointer" }}>
+            {submitting ? <i className="fas fa-spinner fa-spin" /> : <><i className="fas fa-flag" /> Submit Dispute</>}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 function ReviewModal({ order, onClose, onDone }) {
   const showToast = useToast();
   const [rating, setRating] = useState(5);
@@ -190,8 +270,9 @@ export default function Orders() {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState(null);
-  const [cancelling, setCancelling] = useState(null);
+  const [cancelling, setCancelling]   = useState(null);
   const [reviewOrder, setReviewOrder] = useState(null);
+  const [disputeOrder, setDisputeOrder] = useState(null);
 
   useEffect(() => {
     apiFetch("/api/orders/me")
@@ -394,6 +475,15 @@ export default function Orders() {
                             : <><i className="fas fa-xmark" /> Cancel order</>}
                         </button>
                       )}
+                      {["confirmed", "shipped", "pending-verification"].includes(o.status) && (
+                        <button
+                          className="btn btn-sm"
+                          style={{ color: "#dc2626", border: "1px solid rgba(220,38,38,.4)", background: "rgba(220,38,38,.05)" }}
+                          onClick={() => setDisputeOrder(o)}
+                        >
+                          <i className="fas fa-flag" /> Raise Dispute
+                        </button>
+                      )}
                     </div>
                   </div>
                 )}
@@ -408,6 +498,21 @@ export default function Orders() {
           order={reviewOrder}
           onClose={() => setReviewOrder(null)}
           onDone={() => setReviewOrder(null)}
+        />
+      )}
+
+      {disputeOrder && (
+        <DisputeModal
+          order={disputeOrder}
+          onClose={() => setDisputeOrder(null)}
+          onDone={() => {
+            setDisputeOrder(null);
+            setOrders(prev => prev.map(o =>
+              (o._id || o.id) === (disputeOrder._id || disputeOrder.id)
+                ? { ...o, status: "disputed" }
+                : o
+            ));
+          }}
         />
       )}
 

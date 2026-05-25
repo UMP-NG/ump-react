@@ -6,6 +6,7 @@ import Ph from "../components/Ph";
 import { getImageUrl, naira } from "../components/ProductCard";
 import { apiFetch } from "../utils/api";
 import Skel from "../components/Skel";
+import ReportModal from "../components/ReportModal";
 
 const TABS = [
   { key: "description",  label: "Description" },
@@ -38,8 +39,9 @@ function Stars({ value, onChange, readonly }) {
 export default function ProductDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const [product, setProduct] = useState(null);
-  const [tab, setTab] = useState("description");
+  const [product, setProduct]   = useState(null);
+  const [tab, setTab]           = useState("description");
+  const [showReport, setShowReport] = useState(false);
   const [qty, setQty] = useState(1);
   const [thumb, setThumb] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -476,9 +478,30 @@ export default function ProductDetail() {
           </>
         )}
 
+        {/* Report link */}
+        {product && (
+          <div style={{ textAlign: "center", marginTop: 8, paddingBottom: 8 }}>
+            <button
+              onClick={() => setShowReport(true)}
+              style={{ background: "none", border: "none", color: "var(--ink-4)", fontSize: "1.2rem", cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 5 }}
+            >
+              <i className="fas fa-flag" style={{ fontSize: "1rem" }} /> Report this listing
+            </button>
+          </div>
+        )}
+
         <div style={{ height: isDesktop ? 40 : 90 }} />
       </div>
       <Footer />
+
+      {showReport && product && (
+        <ReportModal
+          refModel="Product"
+          refId={product._id}
+          refName={product.name}
+          onClose={() => setShowReport(false)}
+        />
+      )}
 
       {/* mobile-only fixed cart bar */}
       {!isDesktop && (

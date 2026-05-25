@@ -15,8 +15,9 @@ export default function Disputes() {
   const [loading, setLoading] = useState(true);
   const [outcome, setOutcome] = useState('Refund buyer in full');
   const [note, setNote] = useState('');
-  const [submitting, setSubmitting] = useState(false);
+  const [submitting, setSubmitting]   = useState(false);
   const [resolveError, setResolveError] = useState('');
+  const [showPlaybook, setShowPlaybook] = useState(false);
 
   useEffect(() => {
     apiFetch('/api/admins/disputes?status=open')
@@ -58,7 +59,7 @@ export default function Disputes() {
           <p>{disputes.length} open dispute{disputes.length !== 1 ? 's' : ''} need admin resolution</p>
         </div>
         <div className="right">
-          <button className="abtn ghost"><i className="fa-solid fa-book"></i> Resolution playbook</button>
+          <button className="abtn ghost" onClick={() => setShowPlaybook(true)}><i className="fa-solid fa-book"></i> Resolution playbook</button>
         </div>
       </div>
 
@@ -184,6 +185,186 @@ export default function Disputes() {
           )}
         </div>
       </div>
+
+      {showPlaybook && <PlaybookModal onClose={() => setShowPlaybook(false)} />}
     </>
+  );
+}
+
+const PLAYBOOK = [
+  {
+    outcome: 'Refund buyer in full',
+    icon: 'fa-rotate-left',
+    color: '#ef4444',
+    bg: '#fef2f2',
+    border: 'rgba(239,68,68,.2)',
+    when: [
+      'Item was never received and tracking confirms non-delivery',
+      'Item is significantly not as described (wrong product, major defect)',
+      'Seller has not responded within 48 hours of the dispute being opened',
+    ],
+    steps: [
+      'Verify the buyer\'s claim with any chat history or photos provided',
+      'Check order tracking / delivery confirmation',
+      'Contact seller via DM to get their side before deciding',
+      'Select "Refund buyer in full" and add your internal note',
+    ],
+    result: 'Order status → Cancelled. Escrow funds returned to buyer.',
+  },
+  {
+    outcome: 'Refund 50%',
+    icon: 'fa-scale-balanced',
+    color: '#f59e0b',
+    bg: '#fffbeb',
+    border: 'rgba(245,158,11,.2)',
+    when: [
+      'Item received but partially as described (minor defects, missing accessories)',
+      'Both parties share some responsibility for the issue',
+      'Buyer contributed to the problem (late collection, incorrect address)',
+    ],
+    steps: [
+      'Review evidence from both buyer and seller',
+      'Determine fair split based on fault percentage',
+      'Document your reasoning clearly in the internal note',
+      'Select "Refund 50%" — both parties get notified',
+    ],
+    result: 'Order status → Cancelled. Half of escrow returned to buyer; half released to seller.',
+  },
+  {
+    outcome: 'Seller credit',
+    icon: 'fa-store',
+    color: '#3b82f6',
+    bg: '#eff6ff',
+    border: 'rgba(59,130,246,.2)',
+    when: [
+      'Delivery was successful but buyer has a minor complaint',
+      'Issue is cosmetic or does not substantially affect function',
+      'Buyer\'s claim appears exaggerated or in bad faith',
+    ],
+    steps: [
+      'Confirm delivery was completed (delivery code used or tracking delivered)',
+      'Review buyer complaint — is it substantive or trivial?',
+      'If seller fulfilled their obligation, choose this outcome',
+      'Add a note explaining why the seller was credited',
+    ],
+    result: 'Order status → Completed. Full escrow released to seller.',
+  },
+  {
+    outcome: 'Reject claim',
+    icon: 'fa-ban',
+    color: '#6b7280',
+    bg: '#f9fafb',
+    border: 'rgba(107,114,128,.2)',
+    when: [
+      'Dispute was filed after the 7-day dispute window',
+      'Claim is clearly fraudulent or made in bad faith',
+      'Buyer already confirmed delivery and is now disputing without new evidence',
+    ],
+    steps: [
+      'Verify the timeline — when was the dispute filed vs. delivery date?',
+      'Check if buyer previously confirmed receipt',
+      'Look for patterns — has this buyer raised multiple disputes?',
+      'Select "Reject claim" and document the reason thoroughly',
+    ],
+    result: 'Order status → Completed. Escrow released to seller. Buyer notified of rejection.',
+  },
+];
+
+function PlaybookModal({ onClose }) {
+  return (
+    <div
+      style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,.5)', display: 'flex', alignItems: 'flex-start', justifyContent: 'center', padding: '40px 16px', overflowY: 'auto' }}
+      onClick={onClose}
+    >
+      <div
+        style={{ background: 'var(--paper)', borderRadius: 16, width: '100%', maxWidth: 720, boxShadow: '0 20px 60px rgba(0,0,0,.25)' }}
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div style={{ padding: '20px 24px 16px', borderBottom: '1px solid var(--line)', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+              <i className="fa-solid fa-book" style={{ color: 'var(--accent)', fontSize: '1.5rem' }}></i>
+              <h2 style={{ margin: 0, fontSize: '1.8rem', fontWeight: 800 }}>Dispute Resolution Playbook</h2>
+            </div>
+            <p style={{ margin: 0, fontSize: '1.2rem', color: 'var(--ink-3)' }}>
+              Use this guide to choose the right outcome for each dispute. Always document your reasoning in the internal note.
+            </p>
+          </div>
+          <button className="icon-btn" style={{ flexShrink: 0, marginLeft: 12 }} onClick={onClose}>
+            <i className="fa-solid fa-xmark"></i>
+          </button>
+        </div>
+
+        {/* General principles */}
+        <div style={{ padding: '16px 24px', background: 'rgba(59,130,246,.04)', borderBottom: '1px solid var(--line)', display: 'flex', gap: 24, flexWrap: 'wrap' }}>
+          {[
+            { icon: 'fa-clock', label: '48h SLA', desc: 'Resolve all open disputes within 48 hours of opening' },
+            { icon: 'fa-comments', label: 'Hear both sides', desc: 'Message seller and buyer before deciding' },
+            { icon: 'fa-file-lines', label: 'Document always', desc: 'Every resolution must have an internal note' },
+          ].map(p => (
+            <div key={p.label} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', flex: '1 1 180px' }}>
+              <div style={{ width: 32, height: 32, borderRadius: 8, background: 'rgba(59,130,246,.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <i className={`fa-solid ${p.icon}`} style={{ color: '#3b82f6', fontSize: '1rem' }}></i>
+              </div>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: '1.2rem', color: 'var(--ink-1)' }}>{p.label}</div>
+                <div style={{ fontSize: '1.1rem', color: 'var(--ink-3)', lineHeight: 1.4 }}>{p.desc}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Outcomes */}
+        <div style={{ padding: '16px 24px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {PLAYBOOK.map(p => (
+            <div key={p.outcome} style={{ border: `1px solid ${p.border}`, borderRadius: 12, overflow: 'hidden' }}>
+              {/* Outcome header */}
+              <div style={{ padding: '12px 16px', background: p.bg, display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ width: 34, height: 34, borderRadius: 8, background: p.color, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <i className={`fa-solid ${p.icon}`} style={{ color: '#fff', fontSize: '1rem' }}></i>
+                </div>
+                <div style={{ fontWeight: 800, fontSize: '1.4rem', color: p.color }}>{p.outcome}</div>
+              </div>
+
+              <div style={{ padding: '14px 16px', display: 'flex', gap: 24, flexWrap: 'wrap' }}>
+                {/* When to use */}
+                <div style={{ flex: '1 1 220px' }}>
+                  <div style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--ink-3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>When to use</div>
+                  <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 5 }}>
+                    {p.when.map((w, i) => (
+                      <li key={i} style={{ display: 'flex', gap: 7, alignItems: 'flex-start', fontSize: '1.2rem', color: 'var(--ink-2)', lineHeight: 1.4 }}>
+                        <i className="fa-solid fa-check" style={{ color: p.color, fontSize: '0.9rem', marginTop: 3, flexShrink: 0 }}></i>
+                        {w}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                {/* Steps */}
+                <div style={{ flex: '1 1 220px' }}>
+                  <div style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--ink-3)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Steps</div>
+                  <ol style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 5, counterReset: 'step' }}>
+                    {p.steps.map((s, i) => (
+                      <li key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: '1.2rem', color: 'var(--ink-2)', lineHeight: 1.4 }}>
+                        <span style={{ minWidth: 20, height: 20, borderRadius: '50%', background: 'var(--line)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1rem', fontWeight: 700, color: 'var(--ink-3)', flexShrink: 0, marginTop: 1 }}>{i + 1}</span>
+                        {s}
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+              </div>
+
+              {/* Result */}
+              <div style={{ padding: '8px 16px 12px', borderTop: `1px solid ${p.border}`, background: p.bg }}>
+                <span style={{ fontSize: '1.15rem', color: p.color, fontWeight: 600 }}>
+                  <i className="fa-solid fa-arrow-right" style={{ marginRight: 6 }}></i>{p.result}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
   );
 }

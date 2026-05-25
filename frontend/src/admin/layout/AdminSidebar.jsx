@@ -1,4 +1,5 @@
 import { NavLink, useNavigate } from 'react-router-dom';
+import { useState } from 'react';
 import { useUser } from '../../context/UserContext';
 
 const NAV_GROUPS = [
@@ -34,29 +35,25 @@ const NAV_GROUPS = [
   ]},
 ];
 
-export default function AdminSidebar({ collapsed, onToggle }) {
+export default function AdminSidebar({ collapsed, onToggle, mobileOpen, onMobileClose }) {
   const { user } = useUser();
+  const [avatarBroken, setAvatarBroken] = useState(false);
+
   const initials = user?.name
     ? user.name.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase()
     : 'AD';
+  const avatarUrl = user?.avatar?.url || null;
 
   return (
-    <aside className={`adm-side${collapsed ? ' collapsed' : ''}`}>
+    <aside className={`adm-side${collapsed ? ' collapsed' : ''}${mobileOpen ? ' mob-open' : ''}`}>
       <div className="adm-side-head">
-        {!collapsed && <div className="logo">U<span className="m">M</span>P</div>}
-        <button className="adm-collapse" title="Collapse sidebar" onClick={onToggle}>
+        <div className="logo adm-side-logo">U<span className="m">M</span>P</div>
+        <button className="adm-collapse adm-desktop-toggle" title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} onClick={onToggle}>
           <i className={`fa-solid ${collapsed ? 'fa-chevrons-right' : 'fa-chevrons-left'}`}></i>
         </button>
-        {collapsed && (
-          <button
-            className="adm-collapse"
-            title="Expand sidebar"
-            onClick={onToggle}
-            style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)' }}
-          >
-            <i className="fa-solid fa-chevrons-right"></i>
-          </button>
-        )}
+        <button className="adm-collapse adm-mob-close" title="Close menu" onClick={onMobileClose}>
+          <i className="fa-solid fa-xmark"></i>
+        </button>
       </div>
 
       {NAV_GROUPS.map(g => (
@@ -88,13 +85,17 @@ export default function AdminSidebar({ collapsed, onToggle }) {
             borderRadius: '50%', display: 'inline-flex',
             alignItems: 'center', justifyContent: 'center',
             color: '#fff', fontWeight: 700, flexShrink: 0,
+            overflow: 'hidden', padding: 0,
           }}
         >
-          {initials}
+          {avatarUrl && !avatarBroken
+            ? <img src={avatarUrl} alt={initials} onError={() => setAvatarBroken(true)}
+                style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+            : initials}
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div className="name">{user?.name || 'Admin'}</div>
-          <div className="role">{user?.roles?.includes('admin') ? 'admin' : (user?.roles?.[0] || 'admin')}</div>
+          <div className="role">{user?.roles?.includes('admin') ? 'Admin' : (user?.roles?.[0] || 'Admin')}</div>
         </div>
         <i className="fa-solid fa-ellipsis-vertical" style={{ color: '#6b7891' }}></i>
       </div>
