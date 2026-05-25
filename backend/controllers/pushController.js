@@ -64,6 +64,23 @@ export const unsubscribe = async (req, res) => {
 };
 
 /**
+ * Send a web-push to every device a single user has subscribed from.
+ * Called by notify() so every notification reaches the user even when offline.
+ *
+ * @param {string|ObjectId} userId
+ * @param {{ title, body, url, icon }} payload
+ */
+export async function sendPushToUser(userId, payload) {
+  if (!_pushReady) return;
+  try {
+    const subs = await PushSub.find({ user: userId });
+    if (subs.length) await sendPushToSubs(subs, payload);
+  } catch (err) {
+    console.error("sendPushToUser:", err.message);
+  }
+}
+
+/**
  * Send a web-push to a set of subscribers.
  * Called by createBroadcast. Returns the number of successful deliveries.
  *

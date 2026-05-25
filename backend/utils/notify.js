@@ -1,5 +1,6 @@
 import Notification from "../models/Notification.js";
 import { getIO } from "./socket.js";
+import { sendPushToUser } from "../controllers/pushController.js";
 
 /**
  * Persist a notification to MongoDB and push it to the recipient in real time
@@ -27,6 +28,15 @@ export async function notify(userId, { type = "system", title, message, link } =
         createdAt: notif.createdAt,
       });
     }
+
+    // Background delivery — works even when browser is closed / tab is not open
+    sendPushToUser(userId, {
+      title: notif.title || "UMP",
+      body:  notif.message || "",
+      url:   notif.link   || "/notifications",
+      icon:  "/images/ump-icon.svg",
+      tag:   notif._id.toString(),
+    });
   } catch (err) {
     console.error("notify() failed:", err.message);
   }
