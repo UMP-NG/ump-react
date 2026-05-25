@@ -22,11 +22,39 @@ const TYPE_COLOR = {
   system:  "var(--ink-3)",
 };
 
+function requestBrowserPermission() {
+  if (typeof Notification === "undefined" || Notification.permission !== "default") return;
+  Notification.requestPermission();
+}
+
+function fireBrowserNotification(notif, onClickLink) {
+  if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
+  // Only fire the OS notification when the tab is not visible
+  if (document.visibilityState === "visible") return;
+  const n = new Notification(notif.title || "UMP", {
+    body: notif.message,
+    icon: "/images/ump-icon.svg",
+    tag: notif._id, // deduplicates if same _id arrives twice
+  });
+  if (notif.link) {
+    n.onclick = () => {
+      window.focus();
+      onClickLink(notif.link);
+      n.close();
+    };
+  }
+}
+
 export default function NotificationBanner() {
   const { user } = useUser();
   const navigate = useNavigate();
   const [queue, setQueue] = useState([]);
   const timerRef = useRef({});
+
+  // Ask for OS notification permission as soon as user is logged in
+  useEffect(() => {
+    if (user) requestBrowserPermission();
+  }, [user]);
 
   useEffect(() => {
     if (!user) return;
@@ -34,10 +62,11 @@ export default function NotificationBanner() {
       const id = notif._id || Date.now().toString();
       setQueue((q) => [...q, { ...notif, _key: id }]);
       timerRef.current[id] = setTimeout(() => dismiss(id), 5000);
+      fireBrowserNotification({ ...notif, _id: id }, navigate);
     }
     socket.on("new_notification", onNew);
     return () => socket.off("new_notification", onNew);
-  }, [user]);
+  }, [user, navigate]);
 
   // Clear all pending auto-dismiss timers on unmount
   useEffect(() => {
