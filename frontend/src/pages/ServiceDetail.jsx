@@ -18,6 +18,7 @@ export default function ServiceDetail() {
   const [bookingDate, setBookingDate] = useState("");
   const [bookingNotes, setBookingNotes] = useState("");
   const [bookingLoading, setBookingLoading] = useState(false);
+  const [bookedSlots, setBookedSlots] = useState([]);
   const [toast, setToast] = useState(null);
   const [showReport, setShowReport] = useState(false);
   const toastTimer = useRef(null);
@@ -36,6 +37,13 @@ export default function ServiceDetail() {
       .catch(() => setService(null))
       .finally(() => setLoading(false));
   }, [id]);
+
+  useEffect(() => {
+    if (!bookingDate || !id) return;
+    apiFetch(`/api/bookings/booked-slots?itemId=${id}&date=${bookingDate}`)
+      .then((d) => setBookedSlots(d.bookedSlots || []))
+      .catch(() => setBookedSlots([]));
+  }, [bookingDate, id]);
 
   async function handleShare() {
     const url = window.location.href;
@@ -64,7 +72,12 @@ export default function ServiceDetail() {
       showToast("Booking confirmed! The provider will reach out soon.");
     } catch (err) {
       if (err?.status === 401) { showToast("Please sign in to book", "error"); setTimeout(() => navigate("/login"), 1500); }
-      else showToast("Failed to book. Please try again.", "error");
+      else showToast(err?.message || "Failed to book. Please try again.", "error");
+      if (bookingDate) {
+        apiFetch(`/api/bookings/booked-slots?itemId=${id}&date=${bookingDate}`)
+          .then((d) => setBookedSlots(d.bookedSlots || []))
+          .catch(() => { /* ignore */ });
+      }
     } finally {
       setBookingLoading(false);
     }
@@ -241,15 +254,30 @@ export default function ServiceDetail() {
               className="input"
               min={today}
               value={bookingDate}
-              onChange={(e) => setBookingDate(e.target.value)}
+              onChange={(e) => { setBookingDate(e.target.value); setSelectedSlot(null); }}
               style={{ marginBottom: 16 }}
             />
 
             <div className="label" style={{ marginBottom: 8 }}>Select time slot</div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
-              {slots.map((t) => (
-                <span key={t} className={`chip${selectedSlot === t ? " active" : ""}`} style={{ cursor: "pointer" }} onClick={() => setSelectedSlot(t)}>{t}</span>
-              ))}
+              {slots.map((t) => {
+                const taken = bookedSlots.includes(t);
+                return (
+                  <span
+                    key={t}
+                    className={`chip${selectedSlot === t ? " active" : ""}`}
+                    style={{
+                      cursor: taken ? "not-allowed" : "pointer",
+                      opacity: taken ? 0.45 : 1,
+                      textDecoration: taken ? "line-through" : "none",
+                      pointerEvents: taken ? "none" : "auto",
+                    }}
+                    onClick={() => !taken && setSelectedSlot(t)}
+                  >
+                    {t}
+                  </span>
+                );
+              })}
             </div>
 
             <form onSubmit={handleBook}>

@@ -25,6 +25,10 @@ export const becomeServiceProvider = async (req, res) => {
     const user = await User.findById(req.user._id);
     if (!user) return res.status(404).json({ message: "User not found" });
 
+    if (user.googleAccount && !user.isVerified) {
+      return res.status(403).json({ message: "Please link your UNILAG email before registering as a service provider." });
+    }
+
     // ✅ Add 'service_provider' to roles array
     if (!user.roles) user.roles = [];
     if (!user.roles.includes("service_provider")) {

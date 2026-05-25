@@ -418,6 +418,10 @@ function ListingModal({ listing, onClose, onSave, showToast }) {
       showToast("Name, location, and price are required", "error");
       return;
     }
+    if (!imageFiles.length && !listing?.images?.length) {
+      showToast("At least one listing photo is required", "error");
+      return;
+    }
     setSaving(true);
     try {
       const fd = new FormData();
@@ -723,6 +727,7 @@ function AddProductModal({ onClose, onSave, showToast }) {
   async function handleSave() {
     if (!form.name.trim()) { showToast("Product name is required", "error"); return; }
     if (!form.price || Number(form.price) <= 0) { showToast("Valid price is required", "error"); return; }
+    if (!imageFiles.length) { showToast("At least one product image is required", "error"); return; }
     setSaving(true);
     try {
       const fd = new FormData();

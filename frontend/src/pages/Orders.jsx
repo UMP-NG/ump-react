@@ -357,7 +357,17 @@ export default function Orders() {
                       </div>
                       <span style={{ fontSize: "1.1rem", padding: "2px 8px", borderRadius: 20, background: statusStyle.bg, color: statusStyle.color, fontWeight: 600, flexShrink: 0, marginLeft: 8 }}>{o.status}</span>
                     </div>
-                    <div style={{ fontSize: "1.5rem", fontWeight: 800, color: "var(--accent)", marginTop: 6 }}>{naira(o.totalAmount || o.total || 0)}</div>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 6 }}>
+                    <div style={{ fontSize: "1.5rem", fontWeight: 800, color: "var(--accent)" }}>{naira(o.totalAmount || o.total || 0)}</div>
+                    {["confirmed", "shipped", "pending-verification"].includes(o.status) && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setDisputeOrder(o); }}
+                        style={{ background: "none", border: "none", cursor: "pointer", fontSize: "1.1rem", color: "#dc2626", fontWeight: 600, display: "flex", alignItems: "center", gap: 4, padding: 0, fontFamily: "var(--font-sans)" }}
+                      >
+                        <i className="fas fa-flag" style={{ fontSize: "0.9rem" }} /> Issue?
+                      </button>
+                    )}
+                  </div>
                   </div>
                   <i className={`fas fa-chevron-${isOpen ? "up" : "down"}`} style={{ color: "var(--ink-3)", flexShrink: 0 }} />
                 </div>

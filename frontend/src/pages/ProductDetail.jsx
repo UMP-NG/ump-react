@@ -55,6 +55,7 @@ export default function ProductDetail() {
   const [reviewRating, setReviewRating] = useState(0);
   const [reviewText, setReviewText] = useState("");
   const [reviewLoading, setReviewLoading] = useState(false);
+  const [hasPurchased, setHasPurchased] = useState(null);
   const [toast, setToast] = useState("");
   const [isDesktop, setIsDesktop] = useState(() => window.innerWidth >= 768);
   const toastTimer = useRef(null);
@@ -85,6 +86,13 @@ export default function ProductDetail() {
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [id]);
+
+  useEffect(() => {
+    if (tab !== "reviews" || !id) return;
+    apiFetch(`/api/orders/has-purchased/${id}`)
+      .then((d) => setHasPurchased(d.purchased))
+      .catch(() => setHasPurchased(false));
+  }, [tab, id]);
 
   function showToast(msg) {
     clearTimeout(toastTimer.current);
@@ -147,8 +155,9 @@ export default function ProductDetail() {
     try {
       await apiFetch("/api/cart/add", { method: "POST", body: { productId: id, quantity: qty } });
       navigate("/cart");
-    } catch {
-      navigate("/login");
+    } catch (err) {
+      if (err?.status === 401) navigate("/login");
+      else showToast(err?.message || "Could not add to cart");
     } finally {
       setCartLoading(false);
     }
@@ -223,6 +232,9 @@ export default function ProductDetail() {
               {wishlistLoading
                 ? <i className="fas fa-spinner fa-spin" style={{ fontSize: "1rem" }} />
                 : <i className={wishlisted ? "fas fa-heart" : "far fa-heart"} />}
+            </button>
+            <button className="icon-btn" style={{ background: "rgba(255,255,255,.92)", border: "none", boxShadow: "0 2px 8px rgba(0,0,0,.12)", color: "var(--ink-3)" }} onClick={() => setShowReport(true)} title="Report this listing">
+              <i className="fas fa-flag" style={{ fontSize: "0.9rem" }} />
             </button>
           </div>
         </div>
@@ -304,21 +316,34 @@ export default function ProductDetail() {
         )}
         {tab === "reviews" && (
           <div>
-            {/* write a review */}
-            <form onSubmit={submitReview} style={{ marginBottom: 20, padding: 14, background: "var(--surface)", borderRadius: "var(--r-md)" }}>
-              <div style={{ fontSize: "1.3rem", fontWeight: 700, marginBottom: 10 }}>Write a review</div>
-              <Stars value={reviewRating} onChange={setReviewRating} />
-              <textarea
-                value={reviewText}
-                onChange={(e) => setReviewText(e.target.value)}
-                placeholder="Share your experience…"
-                rows={3}
-                style={{ width: "100%", marginTop: 10, padding: "10px 12px", borderRadius: "var(--r-md)", border: "1px solid var(--line)", fontSize: "1.3rem", fontFamily: "var(--font-sans)", resize: "vertical", boxSizing: "border-box", background: "var(--white)", color: "var(--ink-1)", outline: "none" }}
-              />
-              <button type="submit" className="btn btn-primary" style={{ marginTop: 10, width: "100%" }} disabled={reviewLoading}>
-                {reviewLoading ? <i className="fas fa-spinner fa-spin" /> : "Submit Review"}
-              </button>
-            </form>
+            {/* write a review — only for verified buyers */}
+            {hasPurchased === null ? (
+              <div style={{ marginBottom: 20, padding: 14, background: "var(--surface)", borderRadius: "var(--r-md)", textAlign: "center" }}>
+                <i className="fas fa-spinner fa-spin" style={{ color: "var(--ink-4)", fontSize: "1.4rem" }} />
+              </div>
+            ) : hasPurchased ? (
+              <form onSubmit={submitReview} style={{ marginBottom: 20, padding: 14, background: "var(--surface)", borderRadius: "var(--r-md)" }}>
+                <div style={{ fontSize: "1.3rem", fontWeight: 700, marginBottom: 10 }}>Write a review</div>
+                <Stars value={reviewRating} onChange={setReviewRating} />
+                <textarea
+                  value={reviewText}
+                  onChange={(e) => setReviewText(e.target.value)}
+                  placeholder="Share your experience…"
+                  rows={3}
+                  style={{ width: "100%", marginTop: 10, padding: "10px 12px", borderRadius: "var(--r-md)", border: "1px solid var(--line)", fontSize: "1.3rem", fontFamily: "var(--font-sans)", resize: "vertical", boxSizing: "border-box", background: "var(--white)", color: "var(--ink-1)", outline: "none" }}
+                />
+                <button type="submit" className="btn btn-primary" style={{ marginTop: 10, width: "100%" }} disabled={reviewLoading}>
+                  {reviewLoading ? <i className="fas fa-spinner fa-spin" /> : "Submit Review"}
+                </button>
+              </form>
+            ) : (
+              <div style={{ marginBottom: 20, padding: 14, background: "var(--surface)", borderRadius: "var(--r-md)", display: "flex", alignItems: "center", gap: 10 }}>
+                <i className="fas fa-lock" style={{ color: "var(--ink-4)", fontSize: "1.4rem", flexShrink: 0 }} />
+                <p style={{ margin: 0, fontSize: "1.3rem", color: "var(--ink-2)", lineHeight: 1.5 }}>
+                  Only verified buyers can leave a review. Purchase this product to share your experience.
+                </p>
+              </div>
+            )}
 
             {/* reviews list */}
             {reviews.length === 0 ? (

@@ -171,7 +171,7 @@ export const checkoutCart = async (req, res) => {
         type: "order",
         title: "New order received",
         message: `You have a new order worth ₦${order.totalAmount.toLocaleString()}. Confirm it to get started.`,
-        link: "/seller/orders",
+        link: "/seller-dashboard",
       });
     }
 
@@ -431,6 +431,23 @@ export const updateOrder = async (req, res) => {
 };
 
 // ===============================
+// Check if current user purchased a product
+// ===============================
+export const hasPurchased = async (req, res) => {
+  try {
+    const { productId } = req.params;
+    const order = await Order.findOne({
+      buyer: req.user._id,
+      "items.product": productId,
+      status: { $in: ["confirmed", "shipped", "completed"] },
+    }).select("_id");
+    res.json({ purchased: !!order });
+  } catch {
+    res.status(500).json({ purchased: false });
+  }
+};
+
+// ===============================
 // Raise a dispute (buyer only)
 // ===============================
 export const raiseDispute = async (req, res) => {
@@ -459,7 +476,7 @@ export const raiseDispute = async (req, res) => {
         type: "dispute",
         title: "Dispute raised",
         message: `A buyer has raised a dispute on order #${order._id.toString().slice(-6).toUpperCase()}. Check your orders for details.`,
-        link: "/seller/orders",
+        link: "/seller-dashboard",
       });
     }
 

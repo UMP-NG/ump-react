@@ -16,6 +16,7 @@ import {
   getEscrowDetails,
   getCurrentOrder,
   raiseDispute,
+  hasPurchased,
 } from "../controllers/orderController.js";
 import { uploadPaymentProof } from "../middleware/upload.js";
 import { protect, requireRole } from "../middleware/authMiddleware.js";
@@ -39,6 +40,8 @@ router.get(
 );
 
 router.get("/escrow-details", protect, getEscrowDetails);
+
+router.get("/has-purchased/:productId", protect, hasPurchased);
 
 router.get(
   "/current",

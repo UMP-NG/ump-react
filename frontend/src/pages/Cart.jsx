@@ -26,6 +26,15 @@ export default function Cart() {
       .finally(() => setLoading(false));
   }, []);
 
+  // Reset the "Pay" button spinner when returning via browser back/forward cache
+  useEffect(() => {
+    function handlePageShow(e) {
+      if (e.persisted) setPlacing(false);
+    }
+    window.addEventListener("pageshow", handlePageShow);
+    return () => window.removeEventListener("pageshow", handlePageShow);
+  }, []);
+
   const sub = items.reduce((s, i) => s + (i.product?.price || i.price || 0) * (i.quantity || i.qty || 1), 0);
   const deliveryFeeTotal = (() => {
     const seen = new Set();
@@ -249,29 +258,7 @@ export default function Cart() {
           {step === 3 && (
             <div style={{ paddingBottom: 24 }}>
               {/* Order summary — hidden on desktop (sidebar shows it) */}
-              <div className="mob-only card" style={{ padding: 16, marginBottom: 12, display: "flex", flexDirection: "column" }}>
-                <h3 style={{ margin: "0 0 12px", fontSize: "1.5rem", fontWeight: 700 }}>Order summary</h3>
-                {items.map((i) => {
-                  const p = i.product || i;
-                  const qty = i.quantity || i.qty || 1;
-                  return (
-                    <div key={i._id || i.id} style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", fontSize: "1.3rem" }}>
-                      <span style={{ color: "var(--ink-2)" }}>{p.name} × {qty}</span>
-                      <span>{naira(p.price * qty)}</span>
-                    </div>
-                  );
-                })}
-                <div style={{ height: 1, background: "var(--line)", margin: "10px 0" }} />
-                {deliveryFeeTotal > 0 && (
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: "1.3rem", marginBottom: 4 }}>
-                    <span style={{ color: "var(--ink-3)" }}>Delivery fee</span><span>{naira(deliveryFeeTotal)}</span>
-                  </div>
-                )}
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <span style={{ fontSize: "1.5rem", fontWeight: 700 }}>Total</span>
-                  <span style={{ fontSize: "2.2rem", fontWeight: 800, color: "var(--accent)" }}>{naira(orderTotal)}</span>
-                </div>
-              </div>
+              <MobileOrderSummary items={items} sub={sub} deliveryFeeTotal={deliveryFeeTotal} orderTotal={orderTotal} />
 
               {/* Delivery recap */}
               <div className="card" style={{ padding: "12px 16px", marginBottom: 12, fontSize: "1.2rem", color: "var(--ink-2)" }}>
@@ -376,6 +363,86 @@ export default function Cart() {
       </div>{/* /cart-grid */}
 
       <Footer />
+    </div>
+  );
+}
+
+function MobileOrderSummary({ items, sub, deliveryFeeTotal, orderTotal }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="mob-only" style={{ marginBottom: 12 }}>
+      {/* Total bar — always visible */}
+      <div
+        onClick={() => setOpen((o) => !o)}
+        style={{
+          background: "var(--navy-800)", color: "#fff",
+          borderRadius: open ? "var(--r-lg) var(--r-lg) 0 0" : "var(--r-lg)",
+          padding: "12px 16px",
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          cursor: "pointer", userSelect: "none",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ display: "flex" }}>
+            {items.slice(0, 3).map((it, i) => {
+              const img = getImageUrl((it.product || it).images?.[0]);
+              return img ? (
+                <img key={i} src={img} alt="" style={{ width: 28, height: 28, borderRadius: 6, objectFit: "cover", border: "2px solid rgba(255,255,255,.3)", marginLeft: i > 0 ? -8 : 0 }} />
+              ) : (
+                <div key={i} style={{ width: 28, height: 28, borderRadius: 6, background: "rgba(255,255,255,.15)", border: "2px solid rgba(255,255,255,.3)", marginLeft: i > 0 ? -8 : 0 }} />
+              );
+            })}
+          </div>
+          <span style={{ fontSize: "1.3rem", opacity: 0.85 }}>
+            {items.length} item{items.length !== 1 ? "s" : ""}
+          </span>
+          <i className={`fas fa-chevron-${open ? "up" : "down"}`} style={{ fontSize: "1rem", opacity: 0.6 }} />
+        </div>
+        <div style={{ textAlign: "right" }}>
+          <div style={{ fontSize: "1rem", opacity: 0.6, lineHeight: 1 }}>Total</div>
+          <div style={{ fontSize: "1.8rem", fontWeight: 800, color: "var(--accent)", lineHeight: 1.2 }}>{naira(orderTotal)}</div>
+        </div>
+      </div>
+
+      {/* Expandable item list */}
+      {open && (
+        <div style={{ background: "var(--card, #fff)", border: "1px solid var(--line)", borderTop: "none", borderRadius: "0 0 var(--r-lg) var(--r-lg)", padding: "12px 16px", display: "flex", flexDirection: "column", gap: 10 }}>
+          {items.map((it) => {
+            const p = it.product || it;
+            const qty = it.quantity || it.qty || 1;
+            const img = getImageUrl(p.images?.[0]);
+            return (
+              <div key={it._id || it.id} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <div style={{ width: 44, height: 44, borderRadius: 8, overflow: "hidden", flexShrink: 0, background: "var(--surface)" }}>
+                  {img
+                    ? <img src={img} alt={p.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    : <Ph kind="default" />}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: "1.25rem", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.name}</div>
+                  <div style={{ fontSize: "1.1rem", color: "var(--ink-3)" }}>× {qty}</div>
+                </div>
+                <div style={{ fontSize: "1.3rem", fontWeight: 700, flexShrink: 0 }}>{naira((p.price || 0) * qty)}</div>
+              </div>
+            );
+          })}
+
+          <div style={{ height: 1, background: "var(--line)", margin: "2px 0" }} />
+
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "1.25rem", color: "var(--ink-3)" }}>
+            <span>Subtotal</span><span>{naira(sub)}</span>
+          </div>
+          {deliveryFeeTotal > 0 && (
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: "1.25rem", color: "var(--ink-3)" }}>
+              <span>Delivery fee</span><span>{naira(deliveryFeeTotal)}</span>
+            </div>
+          )}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 4 }}>
+            <span style={{ fontSize: "1.4rem", fontWeight: 700 }}>Total</span>
+            <span style={{ fontSize: "2rem", fontWeight: 800, color: "var(--accent)" }}>{naira(orderTotal)}</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

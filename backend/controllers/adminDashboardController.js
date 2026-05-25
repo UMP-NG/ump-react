@@ -617,7 +617,7 @@ export const approvePayout = async (req, res) => {
         type: "payout",
         title: "Payout processing",
         message: `Your payout of ${fmt(payout.amount)} is now being processed and will be sent to your bank account shortly.`,
-        link: "/seller/payouts",
+        link: "/seller-dashboard",
       });
     }
 

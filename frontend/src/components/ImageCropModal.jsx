@@ -21,8 +21,19 @@ export default function ImageCropModal({ src, aspect = 1, onConfirm, onCancel, t
     }
   }
 
+  async function handleUseAsIs() {
+    setBusy(true);
+    try {
+      const res = await fetch(src);
+      const blob = await res.blob();
+      onConfirm(blob);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 200, display: "flex", flexDirection: "column", background: "rgba(0,0,0,.82)" }}>
+    <div style={{ position: "fixed", inset: 0, zIndex: 500, display: "flex", flexDirection: "column", background: "rgba(0,0,0,.82)" }}>
       {/* Header */}
       <div style={{ padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", background: "var(--navy-900, #0f172a)", flexShrink: 0 }}>
         <div style={{ fontSize: "1.5rem", fontWeight: 700, color: "#fff" }}>{title}</div>
@@ -56,12 +67,20 @@ export default function ImageCropModal({ src, aspect = 1, onConfirm, onCancel, t
           />
           <i className="fas fa-magnifying-glass-plus" style={{ color: "rgba(255,255,255,.5)", fontSize: "1.3rem" }} />
         </div>
-        <div style={{ display: "flex", gap: 10 }}>
-          <button className="btn btn-ghost" style={{ flex: 1, color: "#fff", border: "1px solid rgba(255,255,255,.2)" }} onClick={onCancel}>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button className="btn btn-ghost" style={{ color: "#fff", border: "1px solid rgba(255,255,255,.2)", padding: "0 14px" }} onClick={onCancel} disabled={busy}>
             Cancel
           </button>
-          <button className="btn btn-primary" style={{ flex: 2 }} onClick={handleConfirm} disabled={busy}>
-            {busy ? <i className="fas fa-spinner fa-spin" /> : <><i className="fas fa-crop-simple" /> Use this crop</>}
+          <button
+            className="btn btn-ghost"
+            style={{ flex: 1, color: "rgba(255,255,255,.85)", border: "1px solid rgba(255,255,255,.2)", fontSize: "1.25rem" }}
+            onClick={handleUseAsIs}
+            disabled={busy}
+          >
+            {busy ? <i className="fas fa-spinner fa-spin" /> : <><i className="fas fa-image" /> Use as is</>}
+          </button>
+          <button className="btn btn-primary" style={{ flex: 1.2 }} onClick={handleConfirm} disabled={busy}>
+            {busy ? <i className="fas fa-spinner fa-spin" /> : <><i className="fas fa-crop-simple" /> Crop &amp; use</>}
           </button>
         </div>
       </div>

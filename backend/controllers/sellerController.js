@@ -9,6 +9,10 @@ export const becomeSeller = async (req, res) => {
       return res.status(401).json({ message: "Unauthorized" });
     }
 
+    if (req.user.googleAccount && !req.user.isVerified) {
+      return res.status(403).json({ message: "Please link your UNILAG email before registering as a seller." });
+    }
+
     let seller = await Seller.findOne({ user: req.user._id });
 
     const logoFile = req.files?.logo?.[0];

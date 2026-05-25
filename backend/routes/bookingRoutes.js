@@ -7,9 +7,13 @@ import {
   getProviderBookings,
   acceptBooking,
   rejectBooking,
+  getBookedSlots,
 } from "../controllers/bookingController.js";
 
 const router = express.Router();
+
+// 🧭 Public: get booked slots for an item on a date
+router.get("/booked-slots", getBookedSlots);
 
 // 🧭 User creates booking (for service or listing)
 router.post("/", protect, createBooking);

@@ -3,6 +3,7 @@ import FloatingChat from "./components/FloatingChat";
 import PrivateRoute from "./components/PrivateRoute";
 import InstallPrompt from "./components/InstallPrompt";
 import LimitedAccountBanner from "./components/LimitedAccountBanner";
+import NotificationBanner from "./components/NotificationBanner";
 import AdminRoutes from "./admin/index";
 import { AppConfigProvider, useAppConfig } from "./context/AppConfigContext";
 import { useUser } from "./context/UserContext";
@@ -66,6 +67,7 @@ export default function App() {
   return (
     <AppConfigProvider>
     <MaintenanceGate>
+    <NotificationBanner />
     <LimitedAccountBanner />
     <FloatingChat />
     <InstallPrompt />

@@ -2,6 +2,7 @@ import Review from "../models/Review.js";
 import Product from "../models/Product.js";
 import Listing from "../models/Listing.js";
 import Service from "../models/Service.js";
+import Order from "../models/Order.js";
 import { notify } from "../utils/notify.js";
 
 // ✅ Create Review
@@ -13,6 +14,17 @@ export const addReview = async (req, res) => {
       return res
         .status(400)
         .json({ success: false, message: "Invalid review target" });
+    }
+
+    if (refModel === "Product") {
+      const hasOrder = await Order.findOne({
+        buyer: req.user._id,
+        "items.product": refId,
+        status: { $in: ["confirmed", "shipped", "completed"] },
+      }).select("_id");
+      if (!hasOrder) {
+        return res.status(403).json({ success: false, message: "Only verified buyers can review this product." });
+      }
     }
 
     const review = await Review.create({
@@ -36,7 +48,7 @@ export const addReview = async (req, res) => {
             type: "review",
             title: `New ${rating}-star review`,
             message: `Someone left a ${rating}-star review on your ${itemName}.`,
-            link: "/seller/dashboard",
+            link: "/seller-dashboard",
           });
         }
       }

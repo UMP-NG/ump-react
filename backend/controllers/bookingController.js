@@ -33,6 +33,16 @@ export const createBooking = async (req, res) => {
       return res.status(400).json({ message: "Invalid booking type." });
     }
 
+    const clash = await Booking.findOne({
+      item: item._id,
+      date,
+      timeSlot,
+      status: { $in: ["pending", "confirmed"] },
+    });
+    if (clash) {
+      return res.status(409).json({ message: "This time slot is already booked. Please choose a different slot or date." });
+    }
+
     const booking = await Booking.create({
       user: req.user._id,
       item: item._id,
@@ -75,7 +85,7 @@ export const createBooking = async (req, res) => {
       type: "booking",
       title: "Booking request sent",
       message: `Your booking for ${item.name || item.title || "the service"} on ${date} at ${timeSlot} has been submitted.`,
-      link: "/bookings",
+      link: "/orders",
     });
 
     res.status(201).json({
@@ -233,6 +243,27 @@ export const rejectBooking = async (req, res) => {
     });
   } catch (error) {
     console.error("❌ Error rejecting booking:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+// ===============================
+// GET BOOKED SLOTS FOR AN ITEM+DATE
+// ===============================
+export const getBookedSlots = async (req, res) => {
+  try {
+    const { itemId, date } = req.query;
+    if (!itemId || !date) {
+      return res.status(400).json({ message: "itemId and date are required" });
+    }
+    const bookings = await Booking.find({
+      item: itemId,
+      date,
+      status: { $in: ["pending", "confirmed"] },
+    }).select("timeSlot");
+    res.json({ bookedSlots: bookings.map((b) => b.timeSlot) });
+  } catch (error) {
+    console.error("❌ Error fetching booked slots:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
