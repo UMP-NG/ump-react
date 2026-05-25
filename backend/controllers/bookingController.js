@@ -43,16 +43,25 @@ export const createBooking = async (req, res) => {
       return res.status(409).json({ message: "This time slot is already booked. Please choose a different slot or date." });
     }
 
-    const booking = await Booking.create({
-      user: req.user._id,
-      item: item._id,
-      itemModel: itemType === "service" ? "Service" : "Listing",
-      provider,
-      providerModel,
-      date,
-      timeSlot,
-      notes,
-    });
+    let booking;
+    try {
+      booking = await Booking.create({
+        user: req.user._id,
+        item: item._id,
+        itemModel: itemType === "service" ? "Service" : "Listing",
+        provider,
+        providerModel,
+        date,
+        timeSlot,
+        notes,
+      });
+    } catch (createErr) {
+      // Unique index violation — two requests raced past the findOne check
+      if (createErr.code === 11000) {
+        return res.status(409).json({ message: "This time slot is already booked. Please choose a different slot or date." });
+      }
+      throw createErr;
+    }
 
     // --- Send confirmation message to service provider ---
     try {

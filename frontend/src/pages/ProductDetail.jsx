@@ -89,9 +89,14 @@ export default function ProductDetail() {
 
   useEffect(() => {
     if (tab !== "reviews" || !id) return;
+    setHasPurchased(null);
     apiFetch(`/api/orders/has-purchased/${id}`)
       .then((d) => setHasPurchased(d.purchased))
-      .catch(() => setHasPurchased(false));
+      .catch((err) => {
+        // 401 = not logged in → treat same as not purchased
+        // 5xx / network = unknown, use "error" so we don't falsely show the lock message
+        setHasPurchased(err?.status === 401 ? false : "error");
+      });
   }, [tab, id]);
 
   function showToast(msg) {
@@ -320,6 +325,13 @@ export default function ProductDetail() {
             {hasPurchased === null ? (
               <div style={{ marginBottom: 20, padding: 14, background: "var(--surface)", borderRadius: "var(--r-md)", textAlign: "center" }}>
                 <i className="fas fa-spinner fa-spin" style={{ color: "var(--ink-4)", fontSize: "1.4rem" }} />
+              </div>
+            ) : hasPurchased === "error" ? (
+              <div style={{ marginBottom: 20, padding: 14, background: "var(--surface)", borderRadius: "var(--r-md)", display: "flex", alignItems: "center", gap: 10 }}>
+                <i className="fas fa-circle-exclamation" style={{ color: "#f59e0b", fontSize: "1.4rem", flexShrink: 0 }} />
+                <p style={{ margin: 0, fontSize: "1.3rem", color: "var(--ink-2)", lineHeight: 1.5 }}>
+                  Could not verify your purchase. Please try refreshing the page.
+                </p>
               </div>
             ) : hasPurchased ? (
               <form onSubmit={submitReview} style={{ marginBottom: 20, padding: 14, background: "var(--surface)", borderRadius: "var(--r-md)" }}>

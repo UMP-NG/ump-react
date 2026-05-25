@@ -442,8 +442,9 @@ export const hasPurchased = async (req, res) => {
       status: { $in: ["confirmed", "shipped", "completed"] },
     }).select("_id");
     res.json({ purchased: !!order });
-  } catch {
-    res.status(500).json({ purchased: false });
+  } catch (err) {
+    console.error("hasPurchased:", err);
+    res.status(500).json({ message: "Server error" });
   }
 };
 

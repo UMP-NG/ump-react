@@ -39,6 +39,14 @@ export default function NotificationBanner() {
     return () => socket.off("new_notification", onNew);
   }, [user]);
 
+  // Clear all pending auto-dismiss timers on unmount
+  useEffect(() => {
+    return () => {
+      Object.values(timerRef.current).forEach(clearTimeout);
+      timerRef.current = {};
+    };
+  }, []);
+
   function dismiss(key) {
     clearTimeout(timerRef.current[key]);
     delete timerRef.current[key];

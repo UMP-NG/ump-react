@@ -56,5 +56,15 @@ const bookingSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// Atomic uniqueness guarantee — prevents race-condition double-bookings at the DB level.
+// Only active (pending/confirmed) bookings count; cancelled/completed slots can be re-booked.
+bookingSchema.index(
+  { item: 1, date: 1, timeSlot: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { status: { $in: ["pending", "confirmed"] } },
+  }
+);
+
 export default mongoose.model("Booking", bookingSchema);
 
