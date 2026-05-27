@@ -100,6 +100,9 @@ export default function Orders() {
           <p>{total.toLocaleString()} total orders</p>
         </div>
         <div className="right">
+          <button className="abtn ghost" onClick={fetchOrders} disabled={loading} title="Refresh">
+            <i className={`fa-solid fa-rotate-right${loading ? ' fa-spin' : ''}`}></i> Refresh
+          </button>
           <button className="abtn ghost" onClick={exportCSV} disabled={!orders.length}>
             <i className="fa-solid fa-download"></i> Export
           </button>

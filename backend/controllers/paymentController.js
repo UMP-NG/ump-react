@@ -5,6 +5,7 @@ import Order from "../models/Order.js";
 import Seller from "../models/Seller.js";
 import crypto from "crypto";
 import { audit } from "../utils/auditLog.js";
+import { notify } from "../utils/notify.js";
 
 // ----------------------------
 // 1️⃣ Initialize Payment (Card or Transfer)
@@ -115,15 +116,25 @@ export const verifyPayment = async (req, res) => {
     const response = await paystack.get(`/transaction/verify/${reference}`);
     const data = response.data.data;
 
-    const payment = await Payment.findOne({ reference });
-    if (!payment)
-      return res
-        .status(404)
-        .json({ success: false, message: "Payment not found" });
+    // Atomically claim this payment — prevents race with the webhook
+    const payment = await Payment.findOneAndUpdate(
+      { reference, status: "pending" },
+      { $set: { status: "processing" } },
+      { new: false }
+    );
+
+    if (!payment) {
+      // Already processing or already finalised — idempotent response
+      const existing = await Payment.findOne({ reference });
+      if (!existing)
+        return res.status(404).json({ success: false, message: "Payment not found" });
+      return res.json({ success: true, message: "Payment already processed", status: existing.status, orderId: existing.order });
+    }
 
     // Validate that the amount paid matches the expected order amount
     const expectedKobo = Math.round(payment.amount * 100);
     if (data.status === "success" && data.amount !== expectedKobo) {
+      await Payment.findOneAndUpdate({ reference }, { $set: { status: "failed" } });
       await audit("PAYMENT_AMOUNT_MISMATCH", {
         actor: req.user?._id,
         entity: "Payment",
@@ -136,16 +147,46 @@ export const verifyPayment = async (req, res) => {
       return res.status(400).json({ success: false, message: "Payment amount mismatch. Contact support." });
     }
 
-    payment.status = data.status === "success" ? "success" : "failed";
-    payment.paidAt = data.status === "success" ? new Date() : null;
-    payment.metadata = data;
-    await payment.save();
+    const finalStatus = data.status === "success" ? "success" : "failed";
+    await Payment.findOneAndUpdate(
+      { reference },
+      { $set: { status: finalStatus, paidAt: data.status === "success" ? new Date() : null, metadata: data } }
+    );
+    payment.status = finalStatus;
 
     if (data.status === "success") {
-      await Order.findByIdAndUpdate(payment.order, {
+      const confirmedOrder = await Order.findByIdAndUpdate(payment.order, {
         paymentStatus: "paid",
         status: "confirmed",
-      });
+      }, { new: true });
+
+      if (confirmedOrder) {
+        const shortId = confirmedOrder._id.toString().slice(-6).toUpperCase();
+
+        // Notify buyer — payment confirmed
+        notify(confirmedOrder.buyer, {
+          type: "order",
+          title: "Payment confirmed!",
+          message: `Your payment for order #${shortId} was successful. The seller has been notified.`,
+          link: "/orders",
+        });
+
+        // Notify seller — now that money is in escrow
+        if (confirmedOrder.seller) {
+          notify(confirmedOrder.seller, {
+            type: "order",
+            title: "New order received",
+            message: `Payment confirmed for order #${shortId} — ₦${confirmedOrder.totalAmount.toLocaleString()}. Ready to fulfil.`,
+            link: "/seller-dashboard",
+          });
+
+          await Seller.findOneAndUpdate(
+            { user: confirmedOrder.seller },
+            { $inc: { totalOrders: 1 } }
+          );
+        }
+      }
+
       audit("PAYMENT_VERIFIED", {
         actor: req.user?._id,
         entity: "Order",
@@ -290,22 +331,49 @@ export const paystackWebhook = async (req, res) => {
       const data = event.data;
       const orderId = data.metadata.orderId;
 
-      const payment = await Payment.findOne({
-        order: orderId,
-        reference: data.reference,
-      });
+      // Atomically claim — prevents double-processing with verifyPayment
+      const payment = await Payment.findOneAndUpdate(
+        { order: orderId, reference: data.reference, status: "pending" },
+        { $set: { status: "processing" } },
+        { new: false }
+      );
 
       if (payment && data.amount === payment.amount * 100) {
-        // check amount in kobo
-        payment.status = "success";
-        payment.paidAt = new Date();
-        payment.metadata = data;
-        await payment.save();
+        await Payment.findOneAndUpdate(
+          { reference: data.reference },
+          { $set: { status: "success", paidAt: new Date(), metadata: data } }
+        );
 
-        await Order.findByIdAndUpdate(orderId, {
+        const webhookOrder = await Order.findByIdAndUpdate(orderId, {
           paymentStatus: "paid",
           status: "confirmed",
-        });
+        }, { new: true });
+
+        if (webhookOrder) {
+          const shortId = webhookOrder._id.toString().slice(-6).toUpperCase();
+
+          notify(webhookOrder.buyer, {
+            type: "order",
+            title: "Payment confirmed!",
+            message: `Your payment for order #${shortId} was successful. The seller has been notified.`,
+            link: "/orders",
+          });
+
+          if (webhookOrder.seller) {
+            notify(webhookOrder.seller, {
+              type: "order",
+              title: "New order received",
+              message: `Payment confirmed for order #${shortId} — ₦${webhookOrder.totalAmount.toLocaleString()}. Ready to fulfil.`,
+              link: "/seller-dashboard",
+            });
+
+            await Seller.findOneAndUpdate(
+              { user: webhookOrder.seller },
+              { $inc: { totalOrders: 1 } }
+            );
+          }
+        }
+
         audit("WEBHOOK_PAYMENT_CONFIRMED", {
           entity: "Order",
           entityId: orderId,

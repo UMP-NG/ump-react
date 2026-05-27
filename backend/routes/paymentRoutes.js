@@ -8,13 +8,24 @@ import {
   saveBankDetails,
   paystackWebhook,
 } from "../controllers/paymentController.js";
+import {
+  initializeFlwPayment,
+  verifyFlwPayment,
+  flutterwaveWebhook,
+} from "../controllers/flutterwaveController.js";
 import { paymentLimiter } from "../middleware/rateLimits.js";
 
 const router = express.Router();
 
+// Paystack
 router.post("/initialize", protect, paymentLimiter, initializePayment);
 router.get("/verify", protect, paymentLimiter, verifyPayment);
-router.post("/webhook", paystackWebhook);
+router.post("/webhook/paystack", paystackWebhook);
+
+// Flutterwave
+router.post("/flw/initialize", protect, paymentLimiter, initializeFlwPayment);
+router.get("/flw/verify", protect, paymentLimiter, verifyFlwPayment);
+router.post("/webhook/flutterwave", flutterwaveWebhook);
 
 // Seller bank setup
 router.get("/banks", protect, getBanks);

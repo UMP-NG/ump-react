@@ -48,6 +48,15 @@ const ALLOWED_IMAGE_MIMES = new Set([
   "image/gif",
 ]);
 
+// Accepts both images and videos — used for listings/services that allow both
+const ALLOWED_MEDIA_MIMES = new Set([
+  ...ALLOWED_IMAGE_MIMES,
+  "video/mp4",
+  "video/quicktime",
+  "video/webm",
+  "video/x-msvideo",
+]);
+
 const ALLOWED_PROOF_MIMES = new Set([
   "image/jpeg",
   "image/png",
@@ -57,12 +66,18 @@ const ALLOWED_PROOF_MIMES = new Set([
 
 const imageFilter = (req, file, cb) => {
   if (ALLOWED_IMAGE_MIMES.has(file.mimetype)) return cb(null, true);
-  cb(new Error(`File type "${file.mimetype}" is not allowed. Upload JPEG, PNG, WebP, or GIF images.`), false);
+  cb(new Error(`"${file.originalname}" is not a supported image format. Please upload a JPEG, PNG, WebP, or GIF.`), false);
+};
+
+const mediaFilter = (req, file, cb) => {
+  if (ALLOWED_MEDIA_MIMES.has(file.mimetype)) return cb(null, true);
+  const isVideo = file.mimetype.startsWith("video/");
+  cb(new Error(`"${file.originalname}" is not supported. ${isVideo ? "Upload MP4, MOV, or WebM videos." : "Upload JPEG, PNG, WebP, or GIF images."}`), false);
 };
 
 const proofFilter = (req, file, cb) => {
   if (ALLOWED_PROOF_MIMES.has(file.mimetype)) return cb(null, true);
-  cb(new Error(`File type "${file.mimetype}" is not allowed. Upload an image or PDF.`), false);
+  cb(new Error(`"${file.originalname}" is not supported. Please upload a JPEG, PNG, WebP image or a PDF.`), false);
 };
 
 // Use memory storage to collect files first
@@ -72,6 +87,13 @@ const upload = multer({
   storage: memoryStorage,
   limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB max
   fileFilter: imageFilter,
+});
+
+// Accepts both images and videos — 50 MB ceiling (images enforced to 5 MB post-parse)
+const uploadMediaMulter = multer({
+  storage: memoryStorage,
+  limits: { fileSize: 50 * 1024 * 1024 },
+  fileFilter: mediaFilter,
 });
 
 const uploadProof = multer({
@@ -240,7 +262,7 @@ export const uploadPaymentProof = (req, res, cb) => {
 };
 
 export const uploadListingMedia = (req, res, cb) => {
-  const multerUpload = upload.fields([
+  const multerUpload = uploadMediaMulter.fields([
     { name: "images", maxCount: 4 },
     { name: "videos", maxCount: 2 },
   ]);
@@ -248,6 +270,15 @@ export const uploadListingMedia = (req, res, cb) => {
   multerUpload(req, res, async (err) => {
     if (err) {
       return cb(err);
+    }
+
+    // Enforce 5 MB limit on images (multer ceiling is 50 MB to accommodate videos)
+    if (req.files?.images?.length) {
+      for (const file of req.files.images) {
+        if (file.size > 5 * 1024 * 1024) {
+          return cb(new Error(`Image "${file.originalname}" exceeds 5 MB. Please compress it before uploading.`));
+        }
+      }
     }
 
     try {

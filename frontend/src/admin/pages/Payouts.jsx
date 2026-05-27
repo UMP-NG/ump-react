@@ -81,6 +81,9 @@ export default function Payouts() {
           <p>Manage seller withdrawal requests</p>
         </div>
         <div className="right">
+          <button className="abtn ghost" onClick={fetchPayouts} disabled={loading} title="Refresh">
+            <i className={`fa-solid fa-rotate-right${loading ? ' fa-spin' : ''}`}></i> Refresh
+          </button>
           <button className="abtn ghost"><i className="fa-solid fa-download"></i> Export</button>
           {isPendingTab && pageCount > 0 && (
             <button className="abtn primary" disabled={batchProcessing} onClick={batchApprove}>

@@ -159,21 +159,13 @@ export const checkoutCart = async (req, res) => {
     cart.items = [];
     await cart.save();
 
-    // Notify buyer and seller
+    // Notify buyer only — seller is notified after payment is confirmed
     notify(userId, {
       type: "order",
-      title: "Order placed",
-      message: `Your order #${order._id.toString().slice(-6).toUpperCase()} has been placed and is awaiting confirmation.`,
+      title: "Almost there!",
+      message: `Order #${order._id.toString().slice(-6).toUpperCase()} created. Complete your payment to confirm it.`,
       link: "/orders",
     });
-    if (sellerId) {
-      notify(sellerId, {
-        type: "order",
-        title: "New order received",
-        message: `You have a new order worth ₦${order.totalAmount.toLocaleString()}. Confirm it to get started.`,
-        link: "/seller-dashboard",
-      });
-    }
 
     return res.status(201).json({ success: true, order });
   } catch (err) {
@@ -216,7 +208,11 @@ export const getSellerOrders = async (req, res) => {
     if (productIds.length === 0)
       return res.json({ orders: [], message: "No products found for seller" });
 
-    const filter = { "items.product": { $in: productIds } };
+    // Only show paid/released orders to sellers — exclude payment-abandoned orders
+    const filter = {
+      "items.product": { $in: productIds },
+      paymentStatus: { $in: ["paid", "released"] },
+    };
 
     // filter by status
     if (req.query.status) filter.status = req.query.status;

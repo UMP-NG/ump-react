@@ -34,10 +34,11 @@ export const getSellerDashboard = async (req, res) => {
     // 1) Products for this seller
     const products = await Product.find({ seller: userId }).lean();
 
-    // 2) Last 10 orders (for products belonging to this seller)
+    // 2) Last 10 paid/confirmed orders (exclude abandoned payment-pending orders)
     const productIds = products.map((p) => p._id);
     const lastOrders = await Order.find({
       "items.product": { $in: productIds },
+      paymentStatus: { $in: ["paid", "released"] },
     })
       .sort({ createdAt: -1 })
       .limit(10)
@@ -148,10 +149,12 @@ export const getSellerDashboard = async (req, res) => {
 
     const thisWeekOrders = await Order.countDocuments({
       "items.product": { $in: productIds },
+      paymentStatus: { $in: ["paid", "released"] },
       createdAt: { $gte: weekAgo },
     });
     const lastWeekOrders = await Order.countDocuments({
       "items.product": { $in: productIds },
+      paymentStatus: { $in: ["paid", "released"] },
       createdAt: { $gte: twoWeeksAgo, $lt: weekAgo },
     });
     const ordersPctChange =

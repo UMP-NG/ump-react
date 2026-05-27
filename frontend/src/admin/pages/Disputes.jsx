@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../../utils/api';
 
 const SLA_COLOR = sla => {
@@ -19,7 +19,8 @@ export default function Disputes() {
   const [resolveError, setResolveError] = useState('');
   const [showPlaybook, setShowPlaybook] = useState(false);
 
-  useEffect(() => {
+  const fetchDisputes = useCallback(() => {
+    setLoading(true);
     apiFetch('/api/admins/disputes?status=open')
       .then(d => {
         const list = d?.disputes || d || [];
@@ -29,6 +30,8 @@ export default function Disputes() {
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => { fetchDisputes(); }, [fetchDisputes]);
 
   async function resolve() {
     if (!active) return;
@@ -59,6 +62,9 @@ export default function Disputes() {
           <p>{disputes.length} open dispute{disputes.length !== 1 ? 's' : ''} need admin resolution</p>
         </div>
         <div className="right">
+          <button className="abtn ghost" onClick={fetchDisputes} disabled={loading} title="Refresh">
+            <i className={`fa-solid fa-rotate-right${loading ? ' fa-spin' : ''}`}></i> Refresh
+          </button>
           <button className="abtn ghost" onClick={() => setShowPlaybook(true)}><i className="fa-solid fa-book"></i> Resolution playbook</button>
         </div>
       </div>

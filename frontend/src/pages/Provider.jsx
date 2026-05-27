@@ -41,7 +41,7 @@ export default function Provider() {
     shortDescription: "", about: "",
     rate: "", currency: "NGN", package: "",
     duration: "", certifications: "", portfolio: "",
-    policies: "", timeSlots: "", isAvailable: false, tags: "",
+    policies: "", timeSlots: [], isAvailable: false, tags: "",
   });
 
   const isLimited = user?.isLimitedAccount;
@@ -98,7 +98,7 @@ export default function Provider() {
           },
         });
       } else {
-        const { serviceImageFile, isAvailable, nameOrBusiness, shortDescription, ...rest } = service;
+        const { serviceImageFile, isAvailable, nameOrBusiness, shortDescription, timeSlots, ...rest } = service;
         const imageObj = serviceImageFile ? await uploadFile(serviceImageFile) : null;
         await apiFetch("/api/services/becomeServiceProvider", {
           method: "POST",
@@ -107,6 +107,7 @@ export default function Provider() {
             desc: shortDescription,
             available: isAvailable,
             ...rest,
+            timeSlots: JSON.stringify(timeSlots),
             ...(imageObj && { serviceImageUrl: imageObj.url }),
           },
         });
@@ -476,6 +477,71 @@ function SellerForm({ seller, setSeller }) {
   );
 }
 
+const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const HOURS = Array.from({ length: 24 }, (_, i) => {
+  const h = i % 12 || 12;
+  const ampm = i < 12 ? "am" : "pm";
+  return `${h}:00${ampm}`;
+});
+
+function TimeSlotPicker({ slots, onChange }) {
+  const [day, setDay]     = useState(DAYS[0]);
+  const [from, setFrom]   = useState(HOURS[8]);
+  const [to, setTo]       = useState(HOURS[10]);
+  const [slotError, setSlotError] = useState("");
+
+  function addSlot() {
+    if (HOURS.indexOf(from) >= HOURS.indexOf(to)) {
+      setSlotError("End time must be after start time.");
+      return;
+    }
+    setSlotError("");
+    const label = `${day} ${from}–${to}`;
+    if (!slots.includes(label)) onChange([...slots, label]);
+  }
+
+  return (
+    <div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+        <select className="select" style={{ flex: "1 1 80px" }} value={day} onChange={(e) => setDay(e.target.value)}>
+          {DAYS.map((d) => <option key={d}>{d}</option>)}
+        </select>
+        <select className="select" style={{ flex: "1 1 100px" }} value={from} onChange={(e) => setFrom(e.target.value)}>
+          {HOURS.map((h) => <option key={h}>{h}</option>)}
+        </select>
+        <span style={{ display: "flex", alignItems: "center", fontSize: "1.3rem", color: "var(--ink-3)", flexShrink: 0 }}>to</span>
+        <select className="select" style={{ flex: "1 1 100px" }} value={to} onChange={(e) => setTo(e.target.value)}>
+          {HOURS.map((h) => <option key={h}>{h}</option>)}
+        </select>
+        <button type="button" className="btn btn-primary" style={{ flexShrink: 0 }} onClick={addSlot}>
+          <i className="fas fa-plus" /> Add
+        </button>
+      </div>
+      {slotError && (
+        <p style={{ margin: "0 0 8px", fontSize: "1.2rem", color: "#dc2626" }}>
+          <i className="fas fa-circle-exclamation" style={{ marginRight: 4 }} />{slotError}
+        </p>
+      )}
+      {slots.length > 0 && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+          {slots.map((sl) => (
+            <span key={sl} style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "var(--surface)", border: "1px solid var(--line)", borderRadius: "var(--r-pill)", padding: "4px 10px", fontSize: "1.2rem" }}>
+              <i className="fas fa-clock" style={{ color: "var(--accent)", fontSize: "1rem" }} />
+              {sl}
+              <button type="button" onClick={() => onChange(slots.filter((s) => s !== sl))} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--ink-3)", padding: 0, lineHeight: 1, fontSize: "1.1rem" }}>
+                <i className="fas fa-xmark" />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+      {slots.length === 0 && (
+        <p style={{ fontSize: "1.2rem", color: "var(--ink-4)", margin: 0 }}>No time slots added yet.</p>
+      )}
+    </div>
+  );
+}
+
 function ProviderForm({ service, setService }) {
   const s   = service;
   const set = (k) => (e) => setService((prev) => ({ ...prev, [k]: e.target.value }));
@@ -571,8 +637,11 @@ function ProviderForm({ service, setService }) {
       </FormSection>
 
       <FormSection title="Availability">
-        <Field label="Time Slots">
-          <input className="input" placeholder="e.g. Mon 9am–11am, Wed 2pm–4pm" value={s.timeSlots} onChange={set("timeSlots")} />
+        <Field label="Time Slots" hint="Add the days and times you're available for bookings">
+          <TimeSlotPicker
+            slots={Array.isArray(s.timeSlots) ? s.timeSlots : []}
+            onChange={(slots) => setService((prev) => ({ ...prev, timeSlots: slots }))}
+          />
         </Field>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 0" }}>
           <div>

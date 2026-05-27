@@ -18,6 +18,8 @@ export default function Cart() {
   const [placing, setPlacing] = useState(false);
   const [stepError, setStepError] = useState("");
   const [promoCode, setPromoCode] = useState("");
+  const [provider, setProvider] = useState("flutterwave");
+  const [showDeliveryConfirm, setShowDeliveryConfirm] = useState(false);
 
   useEffect(() => {
     apiFetch("/api/cart")
@@ -73,17 +75,16 @@ export default function Cart() {
     const err = validateDelivery();
     if (err) { setStepError(err); return; }
     setStepError("");
-    setStep(3);
+    setShowDeliveryConfirm(true);
   }
 
   async function placeOrder() {
     setPlacing(true);
     try {
-      // Step 1: Create order and clear cart
       const orderRes = await apiFetch("/api/orders/checkout", {
         method: "POST",
         body: {
-          paymentMethod: "paystack",
+          paymentMethod: provider,
           shippingAddress: {
             name: delivery.name,
             phone: delivery.phone,
@@ -95,17 +96,21 @@ export default function Cart() {
       });
       const createdOrder = orderRes.order || orderRes;
 
-      // Step 2: Initialize payment via backend (uses PAYSTACK_SECRET_KEY server-side)
-      const payRes = await apiFetch("/api/payments/initialize", {
-        method: "POST",
-        body: { orderId: createdOrder._id, provider: "Paystack", method: "card" },
-      });
-
-      if (!payRes.authorization_url) throw new Error("No payment URL returned from server");
-
-      // Step 3: Redirect to Paystack hosted payment page
-      window.location.href = payRes.authorization_url;
-
+      if (provider === "flutterwave") {
+        const payRes = await apiFetch("/api/payments/flw/initialize", {
+          method: "POST",
+          body: { orderId: createdOrder._id },
+        });
+        if (!payRes.payment_link) throw new Error("No payment link returned");
+        window.location.href = payRes.payment_link;
+      } else {
+        const payRes = await apiFetch("/api/payments/initialize", {
+          method: "POST",
+          body: { orderId: createdOrder._id, provider: "Paystack", method: "card" },
+        });
+        if (!payRes.authorization_url) throw new Error("No payment URL returned from server");
+        window.location.href = payRes.authorization_url;
+      }
     } catch (err) {
       if (err?.status === 401) navigate("/login");
       else alert(err?.message || "Failed to place order. Try again.");
@@ -267,22 +272,66 @@ export default function Cart() {
                 <div style={{ color: "var(--ink-3)", marginTop: 2 }}>{delivery.address}{delivery.landmark ? ` · ${delivery.landmark}` : ""}</div>
               </div>
 
-              {/* Paystack only */}
+              {/* Payment provider selection */}
               <div className="card" style={{ padding: 14, marginBottom: 16 }}>
                 <h3 style={{ margin: "0 0 10px", fontSize: "1.4rem", fontWeight: 700 }}>Payment method</h3>
-                <div style={{ padding: 12, border: "2px solid var(--accent)", borderRadius: "var(--r-md)", display: "flex", alignItems: "center", gap: 12, background: "rgba(249,115,22,.04)" }}>
-                  <div style={{ width: 40, height: 40, borderRadius: 12, background: "var(--surface)", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: "1.6rem" }}>
-                    <i className="fas fa-credit-card" />
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+
+                  {/* Flutterwave — active */}
+                  <button
+                    type="button"
+                    onClick={() => setProvider("flutterwave")}
+                    style={{
+                      width: "100%", textAlign: "left", cursor: "pointer",
+                      padding: 12,
+                      border: `2px solid ${provider === "flutterwave" ? "var(--accent)" : "var(--line)"}`,
+                      borderRadius: "var(--r-md)",
+                      background: provider === "flutterwave" ? "rgba(249,115,22,.04)" : "var(--paper)",
+                      display: "flex", alignItems: "center", gap: 12,
+                      transition: "border-color .15s, background .15s",
+                    }}
+                  >
+                    <div style={{ width: 40, height: 40, borderRadius: 12, background: "#f4f3ff", display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                      <i className="fas fa-bolt" style={{ color: "#f5a623", fontSize: "1.4rem" }} />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 700, fontSize: "1.3rem" }}>Pay with Flutterwave</div>
+                      <div style={{ fontSize: "1.1rem", color: "var(--ink-3)" }}>Cards, bank transfer, USSD, mobile money</div>
+                    </div>
+                    <span style={{
+                      width: 20, height: 20, borderRadius: "50%", flexShrink: 0,
+                      border: `6px solid ${provider === "flutterwave" ? "var(--accent)" : "var(--line)"}`,
+                      transition: "border-color .15s",
+                    }} />
+                  </button>
+
+                  {/* Paystack — disabled, under verification */}
+                  <div
+                    style={{
+                      padding: 12,
+                      border: "2px solid var(--line)",
+                      borderRadius: "var(--r-md)",
+                      display: "flex", alignItems: "center", gap: 12,
+                      opacity: 0.55, cursor: "not-allowed",
+                      background: "var(--surface)",
+                    }}
+                  >
+                    <div style={{ width: 40, height: 40, borderRadius: 12, background: "var(--surface)", display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                      <i className="fas fa-credit-card" style={{ fontSize: "1.4rem", color: "var(--ink-3)" }} />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                        <span style={{ fontWeight: 700, fontSize: "1.3rem" }}>Pay with Paystack</span>
+                        <span style={{ fontSize: "1rem", fontWeight: 600, padding: "2px 7px", borderRadius: "var(--r-pill)", background: "#fef3c7", color: "#92400e", border: "1px solid #fde68a" }}>
+                          Under verification
+                        </span>
+                      </div>
+                      <div style={{ fontSize: "1.1rem", color: "var(--ink-3)" }}>Cards, bank transfer, USSD</div>
+                    </div>
+                    <span style={{ width: 20, height: 20, borderRadius: "50%", border: "2px solid var(--line)", flexShrink: 0 }} />
                   </div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 700, fontSize: "1.3rem" }}>Pay with Paystack</div>
-                    <div style={{ fontSize: "1.1rem", color: "var(--ink-3)" }}>Cards, bank transfer, USSD</div>
-                  </div>
-                  <span style={{ width: 22, height: 22, borderRadius: "50%", border: "6px solid var(--accent)" }} />
+
                 </div>
-                <p style={{ margin: "10px 0 0", fontSize: "1.1rem", color: "var(--ink-3)" }}>
-                  <i className="fas fa-shield-halved" /> More payment options coming soon
-                </p>
               </div>
 
               {/* Buyer safety notice */}
@@ -308,7 +357,7 @@ export default function Cart() {
                 </button>
               </div>
               <p style={{ textAlign: "center", fontSize: "1.1rem", color: "var(--ink-3)", margin: "12px 0 0" }}>
-                <i className="fas fa-shield-halved" /> Secured by Paystack
+                <i className="fas fa-shield-halved" /> Secured by {provider === "flutterwave" ? "Flutterwave" : "Paystack"}
               </p>
             </div>
           )}
@@ -363,6 +412,86 @@ export default function Cart() {
       </div>{/* /cart-grid */}
 
       <Footer />
+
+      {/* Delivery details confirmation sheet */}
+      {showDeliveryConfirm && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="delivery-confirm-title"
+          onKeyDown={(e) => e.key === "Escape" && setShowDeliveryConfirm(false)}
+          style={{
+            position: "fixed", inset: 0, zIndex: 9999,
+            background: "rgba(0,0,0,.5)", backdropFilter: "blur(2px)",
+            display: "flex", alignItems: "flex-end", justifyContent: "center",
+          }}
+          onClick={() => setShowDeliveryConfirm(false)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: "100%", maxWidth: 520,
+              background: "var(--paper)",
+              borderRadius: "var(--r-lg) var(--r-lg) 0 0",
+              padding: "24px 20px 32px",
+              boxShadow: "0 -8px 40px rgba(0,0,0,.18)",
+            }}
+          >
+            {/* Handle bar */}
+            <div style={{ width: 40, height: 4, borderRadius: 4, background: "var(--line)", margin: "0 auto 20px" }} />
+
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 18 }}>
+              <div style={{ width: 38, height: 38, borderRadius: "50%", background: "rgba(249,115,22,.1)", color: "var(--accent)", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: "1.4rem", flexShrink: 0 }}>
+                <i className="fas fa-map-location-dot" />
+              </div>
+              <div>
+                <div id="delivery-confirm-title" style={{ fontWeight: 800, fontSize: "1.5rem" }}>Confirm delivery details</div>
+                <div style={{ fontSize: "1.2rem", color: "var(--ink-3)" }}>Make sure everything looks right</div>
+              </div>
+            </div>
+
+            {/* Detail rows */}
+            <div style={{ background: "var(--surface)", borderRadius: "var(--r-md)", overflow: "hidden", marginBottom: 18 }}>
+              {[
+                { icon: "user", label: "Name", value: delivery.name },
+                { icon: "phone", label: "Phone", value: delivery.phone },
+                { icon: "location-dot", label: "Address", value: delivery.address },
+                delivery.landmark && { icon: "signs-post", label: "Landmark", value: delivery.landmark },
+                delivery.notes && { icon: "note-sticky", label: "Note", value: delivery.notes },
+              ].filter(Boolean).map((row, i, arr) => (
+                <div key={row.label} style={{
+                  display: "flex", alignItems: "flex-start", gap: 12,
+                  padding: "12px 14px",
+                  borderBottom: i < arr.length - 1 ? "1px solid var(--line)" : "none",
+                }}>
+                  <i className={`fas fa-${row.icon}`} style={{ color: "var(--accent)", width: 16, textAlign: "center", marginTop: 2, flexShrink: 0 }} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: "1.1rem", color: "var(--ink-3)", fontWeight: 600, textTransform: "uppercase", letterSpacing: ".06em" }}>{row.label}</div>
+                    <div style={{ fontSize: "1.35rem", fontWeight: 600, marginTop: 1, wordBreak: "break-word" }}>{row.value}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ display: "flex", gap: 10 }}>
+              <button
+                className="btn btn-ghost btn-lg"
+                style={{ flex: 1, borderRadius: "var(--r-pill)" }}
+                onClick={() => setShowDeliveryConfirm(false)}
+              >
+                <i className="fas fa-pen" /> Edit details
+              </button>
+              <button
+                className="btn btn-primary btn-lg"
+                style={{ flex: 1, borderRadius: "var(--r-pill)" }}
+                onClick={() => { setShowDeliveryConfirm(false); setStep(3); }}
+              >
+                <i className="fas fa-check" /> Looks good
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

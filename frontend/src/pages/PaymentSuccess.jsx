@@ -5,16 +5,37 @@ import { apiFetch } from "../utils/api";
 export default function PaymentSuccess() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const reference = searchParams.get("reference") || searchParams.get("trxref");
+
+  // Flutterwave redirects with: ?status=successful&transaction_id=xxx&tx_ref=yyy
+  // Paystack redirects with: ?reference=xxx&trxref=xxx
+  const flwTransactionId = searchParams.get("transaction_id");
+  const flwStatus = searchParams.get("status"); // "successful" | "cancelled"
+  const reference = searchParams.get("reference") || searchParams.get("trxref") || searchParams.get("tx_ref");
+  const isFlutterwave = !!flwTransactionId;
+
   const [status, setStatus] = useState("verifying");
   const [orderId, setOrderId] = useState(null);
   const [countdown, setCountdown] = useState(5);
 
   useEffect(() => {
-    if (!reference) { setStatus("failed"); return; }
+    // Flutterwave cancelled payment
+    if (isFlutterwave && flwStatus === "cancelled") {
+      setStatus("failed");
+      return;
+    }
+
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 15000);
-    apiFetch(`/api/payments/verify?reference=${encodeURIComponent(reference)}`, { signal: controller.signal })
+
+    const url = isFlutterwave
+      ? `/api/payments/flw/verify?transaction_id=${encodeURIComponent(flwTransactionId)}`
+      : reference
+        ? `/api/payments/verify?reference=${encodeURIComponent(reference)}`
+        : null;
+
+    if (!url) { setStatus("failed"); return; }
+
+    apiFetch(url, { signal: controller.signal })
       .then((d) => {
         clearTimeout(timer);
         if (d.status === "success") {
@@ -33,7 +54,7 @@ export default function PaymentSuccess() {
         }
       });
     return () => { clearTimeout(timer); controller.abort(); };
-  }, [reference]);
+  }, [flwTransactionId, flwStatus, reference, isFlutterwave]);
 
   // Auto-redirect countdown on success
   useEffect(() => {

@@ -18,17 +18,19 @@ export default function Services() {
   const [total, setTotal]       = useState(0);
   const [page, setPage]         = useState(1);
   const [loading, setLoading]   = useState(true);
+  const [error, setError]       = useState('');
   const [drawer, setDrawer]     = useState(null);
   const [search, setSearch]     = useState('');
 
   const fetchServices = useCallback(() => {
     setLoading(true);
+    setError('');
     const params = new URLSearchParams({ page, limit: 20 });
     if (TABS[tab].filter) params.set('status', TABS[tab].filter);
     if (search) params.set('q', search);
     apiFetch(`/api/admins/services?${params}`)
       .then(d => { setServices(d?.services || d || []); setTotal(d?.total || 0); })
-      .catch(() => {})
+      .catch(err => setError(err?.message || 'Failed to load services'))
       .finally(() => setLoading(false));
   }, [tab, page, search]);
 
@@ -60,6 +62,9 @@ export default function Services() {
           <p>{total.toLocaleString()} service{total !== 1 ? 's' : ''} on UMP</p>
         </div>
         <div className="right">
+          <button className="abtn ghost" onClick={fetchServices} disabled={loading} title="Refresh">
+            <i className={`fa-solid fa-rotate-right${loading ? ' fa-spin' : ''}`}></i> Refresh
+          </button>
           <button className="abtn ghost"><i className="fa-solid fa-download"></i> Export</button>
         </div>
       </div>
@@ -94,6 +99,16 @@ export default function Services() {
               {loading ? (
                 <tr><td colSpan="8" style={{ textAlign: 'center', padding: 32, color: 'var(--ink-3)' }}>
                   <i className="fa-solid fa-circle-notch fa-spin"></i>
+                </td></tr>
+              ) : error ? (
+                <tr><td colSpan="8">
+                  <div className="adm-empty" style={{ color: '#dc2626' }}>
+                    <i className="fa-solid fa-circle-exclamation"></i>
+                    <p>{error}</p>
+                    <button className="abtn ghost sm" style={{ marginTop: 8 }} onClick={fetchServices}>
+                      <i className="fa-solid fa-rotate-right" /> Retry
+                    </button>
+                  </div>
                 </td></tr>
               ) : services.length === 0 ? (
                 <tr><td colSpan="8">

@@ -73,6 +73,9 @@ export default function Analytics() {
           <p>GMV, fees, category &amp; cohort performance</p>
         </div>
         <div className="right">
+          <button className="abtn ghost" onClick={() => setTick(t => t + 1)} disabled={loading} title="Refresh">
+            <i className={`fa-solid fa-rotate-right${loading ? ' fa-spin' : ''}`}></i> Refresh
+          </button>
           <button className="abtn ghost"><i className="fa-regular fa-calendar" /> Last 90 days</button>
           <button className="abtn ghost"><i className="fa-solid fa-download" /> Export</button>
         </div>

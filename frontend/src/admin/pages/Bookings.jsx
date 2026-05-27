@@ -55,6 +55,11 @@ export default function Bookings() {
           <h1>Bookings</h1>
           <p>{total.toLocaleString()} total booking{total !== 1 ? 's' : ''}</p>
         </div>
+        <div className="right">
+          <button className="abtn ghost" onClick={fetchBookings} disabled={loading} title="Refresh">
+            <i className={`fa-solid fa-rotate-right${loading ? ' fa-spin' : ''}`}></i> Refresh
+          </button>
+        </div>
       </div>
 
       <div className="adm-stats" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>

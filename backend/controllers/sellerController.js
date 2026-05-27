@@ -143,7 +143,14 @@ export const getSellerById = async (req, res) => {
 
     if (!seller) return res.status(404).json({ message: "Seller not found" });
 
-    res.json(seller);
+    const currentUserId = req.user?._id?.toString();
+    const followersArr = seller.followers || [];
+
+    res.json({
+      ...seller.toObject(),
+      followersCount: followersArr.length,
+      isFollowing: currentUserId ? followersArr.some((f) => f.toString() === currentUserId) : false,
+    });
   } catch (error) {
     res.status(500).json({ message: "Server error", error: error.message });
   }
@@ -194,7 +201,7 @@ export const unfollowSeller = async (req, res) => {
     );
 
     await seller.save();
-    res.json({ message: "Seller unfollowed successfully" });
+    res.json({ following: false, followersCount: seller.followers.length });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

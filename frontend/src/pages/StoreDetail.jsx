@@ -30,9 +30,12 @@ export default function StoreDetail() {
       .then((d) => {
         const s = d.seller || d;
         setSeller(s);
-        if (user) {
+        // Use server-computed isFollowing when available; fall back to scanning followers array
+        if (typeof s.isFollowing === "boolean") {
+          setFollowing(s.isFollowing);
+        } else if (user) {
           const followers = s.followers || [];
-          setFollowing(followers.some((f) => (f._id || f) === (user._id || user.id)));
+          setFollowing(followers.some((f) => (f._id || f).toString() === (user._id || user.id).toString()));
         }
       })
       .catch(() => {})
@@ -77,9 +80,16 @@ export default function StoreDetail() {
       followersCount: (prev.followersCount || 0) + (wasFollowing ? -1 : 1),
     }));
     try {
-      await apiFetch(`/api/sellers/${id}/${wasFollowing ? "unfollow" : "follow"}`, { method: "POST" });
-      showToast(wasFollowing ? "Unfollowed store" : "Following store!", "success");
+      const res = await apiFetch(`/api/sellers/${id}/${wasFollowing ? "unfollow" : "follow"}`, { method: "POST" });
+      // Reconcile with authoritative server state
+      const serverFollowing = typeof res.following === "boolean" ? res.following : !wasFollowing;
+      setFollowing(serverFollowing);
+      if (typeof res.followersCount === "number") {
+        setSeller((prev) => ({ ...prev, followersCount: res.followersCount }));
+      }
+      showToast(serverFollowing ? "Following store!" : "Unfollowed store", "success");
     } catch (err) {
+      // Roll back optimistic update on failure
       setFollowing(wasFollowing);
       setSeller((prev) => ({
         ...prev,

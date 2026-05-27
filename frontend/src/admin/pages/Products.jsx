@@ -84,6 +84,9 @@ export default function Products() {
           <p>{total.toLocaleString()} listing{total !== 1 ? 's' : ''}</p>
         </div>
         <div className="right">
+          <button className="abtn ghost" onClick={fetchProducts} disabled={loading} title="Refresh">
+            <i className={`fa-solid fa-rotate-right${loading ? ' fa-spin' : ''}`}></i> Refresh
+          </button>
           <button className="abtn ghost" onClick={exportCSV}>
             <i className="fa-solid fa-download"></i> Export
           </button>

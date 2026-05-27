@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { naira } from "../components/ProductCard";
 import { apiFetch } from "../utils/api";
@@ -956,6 +956,7 @@ export default function SellerDashboard() {
   const [orders, setOrders] = useState([]);
   const [payouts, setPayouts] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [verifyLoading, setVerifyLoading] = useState(false);
   const [unreadMessages, setUnreadMessages] = useState(0);
   const [orderFilter, setOrderFilter] = useState("All");
@@ -1006,8 +1007,9 @@ export default function SellerDashboard() {
   const [deliveryCodes, setDeliveryCodes] = useState({});
   const [deliverySubmitting, setDeliverySubmitting] = useState({});
 
-  // ── Initial data load ────────────────────────────────────────────────────────
-  useEffect(() => {
+  // ── Data load (callable for manual refresh) ──────────────────────────────────
+  const loadDashboard = useCallback((isManual = false) => {
+    if (isManual) setRefreshing(true); else setLoading(true);
     Promise.all([
       apiFetch("/api/seller-dashboard").catch(() => null),
       apiFetch("/api/products/my").catch(() => []),
@@ -1017,6 +1019,7 @@ export default function SellerDashboard() {
       apiFetch("/api/payouts/details").catch(() => null),
       apiFetch("/api/listings/my").catch(() => ({ listings: [] })),
     ]).then(([dash, prods, ords, pays, unread, bankDets, listingsRes]) => {
+      if (!dash && isManual) showToast('Failed to refresh dashboard data', 'error');
       setKpis(dash?.kpis || dash);
       setProfile(dash?.profile || null);
       setProductPerformance(dash?.productPerformance || []);
@@ -1050,8 +1053,10 @@ export default function SellerDashboard() {
         const bd = dash.profile.bankDetails;
         setBankForm({ bankName: bd.bankName || "", bankCode: bd.bankCode || "", accountNumber: bd.accountNumber || "", accountName: bd.accountName || "" });
       }
-    }).finally(() => setLoading(false));
-  }, []);
+    }).finally(() => { setLoading(false); setRefreshing(false); });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => { loadDashboard(false); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Load banks when Payouts tab opens ───────────────────────────────────────
   useEffect(() => {
@@ -1333,9 +1338,21 @@ export default function SellerDashboard() {
       {/* ── Dashboard Home ── */}
       {tab === "Home" && (
         <>
-          <div style={{ marginBottom: 20 }}>
-            <h2 style={{ fontSize: "2rem", fontWeight: 800, margin: "0 0 4px" }}>Welcome to your seller dashboard</h2>
-            <p style={{ margin: 0, color: "var(--ink-3)", fontSize: "1.3rem" }}>Here's an overview of your store performance.</p>
+          <div style={{ marginBottom: 20, display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
+            <div>
+              <h2 style={{ fontSize: "2rem", fontWeight: 800, margin: "0 0 4px" }}>Welcome to your seller dashboard</h2>
+              <p style={{ margin: 0, color: "var(--ink-3)", fontSize: "1.3rem" }}>Here's an overview of your store performance.</p>
+            </div>
+            <button
+              className="btn btn-ghost btn-sm"
+              onClick={() => loadDashboard(true)}
+              disabled={refreshing || loading}
+              title="Refresh dashboard data"
+              style={{ flexShrink: 0, marginTop: 2 }}
+            >
+              <i className={`fas fa-rotate-right${refreshing ? " fa-spin" : ""}`} />
+              {refreshing ? " Refreshing…" : " Refresh"}
+            </button>
           </div>
 
           {loading ? (

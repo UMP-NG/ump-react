@@ -46,17 +46,19 @@ export default function Users() {
   const [total, setTotal]       = useState(0);
   const [page, setPage]         = useState(1);
   const [loading, setLoading]   = useState(true);
+  const [error, setError]       = useState('');
   const [search, setSearch]     = useState('');
   const [viewUser, setViewUser] = useState(null);
 
   const fetchUsers = useCallback(() => {
     setLoading(true);
+    setError('');
     const params = new URLSearchParams({ page, limit: 10 });
     if (TABS[tab].filter) params.set('role', TABS[tab].filter);
     if (search) params.set('q', search);
     apiFetch(`/api/admins/users?${params}`)
       .then(d => { setUsers(d?.users || d || []); setTotal(d?.total || 0); })
-      .catch(() => {})
+      .catch(err => setError(err?.message || 'Failed to load users'))
       .finally(() => setLoading(false));
   }, [tab, page, search]);
 
@@ -182,6 +184,9 @@ export default function Users() {
           <p>{total.toLocaleString()} registered accounts across all roles</p>
         </div>
         <div className="right">
+          <button className="abtn ghost" onClick={fetchUsers} disabled={loading} title="Refresh">
+            <i className={`fa-solid fa-rotate-right${loading ? ' fa-spin' : ''}`}></i> Refresh
+          </button>
           <button className="abtn ghost" onClick={exportCSV} disabled={!users.length}>
             <i className="fa-solid fa-download"></i> Export CSV
           </button>
@@ -231,6 +236,18 @@ export default function Users() {
                 <tr>
                   <td colSpan="6" style={{ textAlign: 'center', padding: 32, color: 'var(--ink-3)' }}>
                     <i className="fa-solid fa-circle-notch fa-spin"></i>
+                  </td>
+                </tr>
+              ) : error ? (
+                <tr>
+                  <td colSpan="6">
+                    <div className="adm-empty" style={{ color: '#dc2626' }}>
+                      <i className="fa-solid fa-circle-exclamation"></i>
+                      <p>{error}</p>
+                      <button className="abtn ghost sm" style={{ marginTop: 8 }} onClick={fetchUsers}>
+                        <i className="fa-solid fa-rotate-right" /> Retry
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ) : users.length === 0 ? (

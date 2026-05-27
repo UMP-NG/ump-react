@@ -7,7 +7,7 @@ const escapeRegex = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 export const createProduct = async (req, res) => {
   try {
-    const { name, desc, price, category, condition, colors, deliveryFee } = req.body;
+    const { name, desc, price, category, condition, colors, deliveryFee, stock } = req.body;
 
     // --- 🎨 Parse Colors safely ---
     let parsedColors = [];
@@ -68,6 +68,7 @@ export const createProduct = async (req, res) => {
       images,
       seller: req.user?._id,
       deliveryFee: Math.max(0, Number(deliveryFee) || 0),
+      stock: stock !== undefined && stock !== "" ? Math.max(0, Number(stock)) : 1,
     });
 
     // --- ✅ Link product to seller's products array ---
@@ -377,18 +378,18 @@ export const updateProduct = async (req, res) => {
         .status(404)
         .json({ success: false, message: "Product not found" });
 
-    // --- Update text fields
-    const fields = [
-      "name",
-      "price",
-      "stock",
-      "status",
-      "desc",
-      "category",
-      "condition",
-    ];
-    for (const key of fields) {
+    // --- Update text fields (numeric fields coerced to avoid NaN in DB)
+    const textFields = ["name", "status", "desc", "category", "condition"];
+    for (const key of textFields) {
       if (req.body[key] !== undefined) product[key] = req.body[key];
+    }
+    if (req.body.price !== undefined) {
+      const p = Number(req.body.price);
+      if (!isNaN(p) && p >= 0) product.price = p;
+    }
+    if (req.body.stock !== undefined && req.body.stock !== "") {
+      const s = Math.floor(Number(req.body.stock));
+      if (!isNaN(s) && s >= 0) product.stock = s;
     }
 
     // --- Update specs

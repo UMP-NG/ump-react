@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { StatCard } from '../components/StatCard';
 import { LineChart } from '../components/charts';
@@ -49,11 +49,11 @@ export default function Dashboard() {
   const periodLabel = periodOpt.label;
   const periodShort = periodOpt.short;
 
-  // Initial load — stats, chart, orders, verifications all at default period
-  useEffect(() => {
+  const refreshAll = useCallback((isManual = false) => {
+    if (isManual) setRefreshing(true); else setLoading(true);
     Promise.all([
-      apiFetch('/api/admins/stats?days=30').catch(() => null),
-      apiFetch('/api/admins/activity-chart?days=30').catch(() => null),
+      apiFetch(`/api/admins/stats?days=${period}`).catch(() => null),
+      apiFetch(`/api/admins/activity-chart?days=${period}`).catch(() => null),
       apiFetch('/api/admins/recent-orders?limit=6').catch(() => []),
       apiFetch('/api/admins/pending-verifications?limit=4').catch(() => []),
     ]).then(([s, chart, orders, verif]) => {
@@ -65,24 +65,17 @@ export default function Dashboard() {
       setRecentOrders(Array.isArray(orders) ? orders : (orders?.orders || []));
       setPendingVerif(Array.isArray(verif) ? verif : (verif?.results || []));
       chartInitRef.current = true;
-    }).finally(() => setLoading(false));
-  }, []);
+    }).finally(() => { setLoading(false); setRefreshing(false); });
+  }, [period]);
 
-  // Period change — refresh BOTH stats KPIs and chart together
+  // Initial load
+  useEffect(() => { refreshAll(false); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Period change — re-fetch everything with the new period
   useEffect(() => {
     if (!chartInitRef.current) return;
-    setRefreshing(true);
-    Promise.all([
-      apiFetch(`/api/admins/stats?days=${period}`).catch(() => null),
-      apiFetch(`/api/admins/activity-chart?days=${period}`).catch(() => null),
-    ]).then(([s, chart]) => {
-      if (s) setStats(s);
-      if (chart) {
-        setChartSeries({ orders: chart.orders || [], revenue: chart.revenue || [], users: chart.users || [] });
-        setChartLabels(chart.labels || []);
-      }
-    }).catch(() => {}).finally(() => setRefreshing(false));
-  }, [period]);
+    refreshAll(true);
+  }, [period]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Close period dropdown on outside click
   useEffect(() => {
@@ -133,6 +126,9 @@ export default function Dashboard() {
           </p>
         </div>
         <div className="right">
+          <button className="abtn ghost" onClick={() => refreshAll(true)} disabled={refreshing || loading} title="Refresh all data">
+            <i className={`fa-solid fa-rotate-right${refreshing ? ' fa-spin' : ''}`}></i> Refresh
+          </button>
           {/* Period picker */}
           <div style={{ position: 'relative' }} ref={periodRef}>
             <button className="abtn ghost" onClick={() => setPeriodOpen(o => !o)}>

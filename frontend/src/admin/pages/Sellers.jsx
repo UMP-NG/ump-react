@@ -56,6 +56,9 @@ export default function Sellers() {
           <p>{total.toLocaleString()} store{total !== 1 ? 's' : ''} on UMP</p>
         </div>
         <div className="right">
+          <button className="abtn ghost" onClick={fetchSellers} disabled={loading} title="Refresh">
+            <i className={`fa-solid fa-rotate-right${loading ? ' fa-spin' : ''}`}></i> Refresh
+          </button>
           <button className="abtn ghost"><i className="fa-solid fa-download"></i> Export</button>
         </div>
       </div>
