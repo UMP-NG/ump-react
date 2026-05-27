@@ -12,6 +12,7 @@ const ISSUE_TYPES = [
   { label: "Technical issue", desc: "App bugs, login problems, broken features", role: "technical", icon: "fa-wrench" },
   { label: "Orders & Payments", desc: "Payment disputes, refunds, order status", role: "administrative", icon: "fa-credit-card" },
   { label: "Account help", desc: "Verification, seller approval, account access", role: "administrative", icon: "fa-user-shield" },
+  { label: "Advertise on UMP", desc: "Sponsored posts, banners, promotional campaigns", role: "administrative", icon: "fa-bullhorn" },
 ];
 
 function UMPContactPicker({ onSelect, onClose }) {
@@ -163,6 +164,11 @@ export default function Messages() {
   }
 
   useEffect(() => { loadConvos(); }, []);
+
+  // Auto-open support picker when arriving from the "Advertise on UMP" banner
+  useEffect(() => {
+    if (searchParams.get("advertise") === "1") setShowPicker(true);
+  }, [searchParams]);
 
   function openThread(convo) {
     const receiverId = convo.receiverId || convo.conversationWith || convo._id;

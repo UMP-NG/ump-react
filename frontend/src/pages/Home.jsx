@@ -253,7 +253,7 @@ export default function Home() {
       {/* Advertise with us banner */}
       <div
         style={{ margin: "20px 16px 0", padding: "18px 20px", borderRadius: "var(--r-xl)", background: "linear-gradient(135deg,#0f172a,#1e1b4b)", color: "#fff", display: "flex", alignItems: "center", gap: 14, cursor: "pointer" }}
-        onClick={() => window.open("https://wa.me/2348000000000?text=Hi%2C%20I%27d%20like%20to%20advertise%20on%20UMP", "_blank")}
+        onClick={() => navigate("/messages?advertise=1")}
       >
         <div style={{ width: 48, height: 48, borderRadius: 14, background: "rgba(249,115,22,.18)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
           <i className="fas fa-bullhorn" style={{ fontSize: "2rem", color: "var(--accent)" }} />

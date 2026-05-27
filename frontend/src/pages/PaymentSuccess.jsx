@@ -2,6 +2,16 @@ import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { apiFetch } from "../utils/api";
 
+function cancelPendingOrders() {
+  try {
+    const ids = JSON.parse(sessionStorage.getItem("ump_pending_orders") || "[]");
+    sessionStorage.removeItem("ump_pending_orders");
+    if (ids.length) {
+      ids.forEach((id) => apiFetch(`/api/orders/${id}`, { method: "DELETE" }).catch(() => {}));
+    }
+  } catch { /* ignore */ }
+}
+
 export default function PaymentSuccess() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -17,6 +27,7 @@ export default function PaymentSuccess() {
 
   useEffect(() => {
     if (isFlutterwave && flwStatus === "cancelled") {
+      cancelPendingOrders();
       setStatus("failed");
       return;
     }
@@ -36,6 +47,7 @@ export default function PaymentSuccess() {
       .then((d) => {
         clearTimeout(timer);
         if (d.status === "success") {
+          sessionStorage.removeItem("ump_pending_orders");
           setStatus("success");
           // Use rich order summaries if available, fall back to bare IDs
           if (d.orders?.length) {
@@ -45,11 +57,13 @@ export default function PaymentSuccess() {
             setOrders(ids.map((id) => ({ _id: id, storeName: "", totalAmount: null })));
           }
         } else {
+          cancelPendingOrders();
           setStatus("failed");
         }
       })
       .catch((err) => {
         clearTimeout(timer);
+        cancelPendingOrders();
         if (err?.name === "AbortError") {
           setStatus("timeout");
         } else {

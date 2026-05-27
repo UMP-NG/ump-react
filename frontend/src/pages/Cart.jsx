@@ -80,6 +80,7 @@ export default function Cart() {
 
   async function placeOrder() {
     setPlacing(true);
+    let orderIds = [];
     try {
       const orderRes = await apiFetch("/api/orders/checkout", {
         method: "POST",
@@ -95,7 +96,10 @@ export default function Cart() {
         },
       });
       const createdOrders = orderRes.orders || (orderRes.order ? [orderRes.order] : [orderRes]);
-      const orderIds = createdOrders.map((o) => o._id || o);
+      orderIds = createdOrders.map((o) => o._id || o);
+
+      // Track these so PaymentSuccess can cancel them if payment is abandoned
+      sessionStorage.setItem("ump_pending_orders", JSON.stringify(orderIds));
 
       if (provider === "flutterwave") {
         const payRes = await apiFetch("/api/payments/flw/initialize", {
@@ -113,6 +117,9 @@ export default function Cart() {
         window.location.href = payRes.authorization_url;
       }
     } catch (err) {
+      // Cancel any orders that were created before the payment init failed
+      sessionStorage.removeItem("ump_pending_orders");
+      await Promise.allSettled(orderIds.map((id) => apiFetch(`/api/orders/${id}`, { method: "DELETE" }).catch(() => {})));
       if (err?.status === 401) navigate("/login");
       else alert(err?.message || "Failed to place order. Try again.");
       setPlacing(false);

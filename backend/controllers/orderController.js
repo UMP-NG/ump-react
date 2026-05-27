@@ -527,8 +527,7 @@ export const cancelOrder = async (req, res) => {
         .json({ message: "Paid orders require refund process" });
     }
 
-    // Mark as canceled instead of deleting
-    order.status = "canceled";
+    order.status = "cancelled";
     await order.save();
 
     res.json({

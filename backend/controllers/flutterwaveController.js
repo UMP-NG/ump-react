@@ -48,7 +48,7 @@ export const initializeFlwPayment = async (req, res) => {
           name: req.user.name || req.user.email,
           phonenumber: req.user.phone || "",
         },
-        meta: { orderIds: orders.map((o) => o._id.toString()) },
+        meta: { orderIds: orders.map((o) => o._id.toString()).join(",") },
         customizations: {
           title: "UMP Marketplace",
           description: "Secure escrow payment",

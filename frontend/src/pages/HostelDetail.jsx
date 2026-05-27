@@ -123,7 +123,9 @@ export default function HostelDetail() {
       {listing.videos?.length > 0 && (
         <div style={{ margin: "12px 16px 0" }}>
           <div style={{ fontSize: "1.2rem", fontWeight: 700, color: "var(--ink-3)", textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 6 }}><i className="fas fa-video" style={{ marginRight: 6, color: "var(--accent)" }} />Video tour</div>
-          <video src={listing.videos[0].url} controls style={{ width: "100%", borderRadius: "var(--r-xl)", maxHeight: 220, background: "#000" }} />
+          <video controls playsInline preload="metadata" style={{ width: "100%", borderRadius: "var(--r-xl)", maxHeight: 220, background: "#000" }}>
+              <source src={listing.videos[0].url} type="video/mp4" />
+            </video>
         </div>
       )}
 
