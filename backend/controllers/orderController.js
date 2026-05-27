@@ -7,7 +7,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import PDFDocument from "pdfkit";
 import cloudinary from "../config/cloudinary.js";
-import paystack from "../utils/paystack.js";
+import axios from "axios";
 import { audit } from "../utils/auditLog.js";
 import { notify } from "../utils/notify.js";
 
@@ -680,9 +680,9 @@ export const confirmDelivery = async (req, res) => {
       if (!ownsItem) return res.status(403).json({ message: "Not authorized" });
     }
 
-    // Look up seller profile for recipient code
+    // Look up seller profile for bank details
     const seller = await Seller.findOne({ user: order.seller || req.user._id });
-    if (!seller?.bankDetails?.paystackRecipientCode) {
+    if (!seller?.bankDetails?.bankCode || !seller?.bankDetails?.accountNumber) {
       return res.status(400).json({
         message: "Seller has not set up bank details yet. Please add your bank account in the dashboard.",
       });
@@ -706,21 +706,26 @@ export const confirmDelivery = async (req, res) => {
     const deliveredSubtotal = toDeliver.reduce((s, i) => s + i.price * i.quantity, 0);
     const proportion = allItemsSubtotal > 0 ? deliveredSubtotal / allItemsSubtotal : 1;
     const transferAmount = Math.floor(order.totalAmount * proportion * (1 - UMP_FEE));
-    const amountKobo = transferAmount * 100;
 
-    // Fire Paystack transfer for this batch
+    // Fire Flutterwave transfer — amount in naira, no pre-registration needed
     const transferRef = `ESCROW_${order._id}_${Date.now()}`;
-    const transferRes = await paystack.post("/transfer", {
-      source: "balance",
-      reason: isPartial
-        ? `UMP partial payout — Order #${order._id} (${toDeliver.length}/${order.items.length} items)`
-        : `UMP order payout — Order #${order._id}`,
-      amount: amountKobo,
-      recipient: seller.bankDetails.paystackRecipientCode,
-      reference: transferRef,
-    });
-
-    const transferData = transferRes.data?.data;
+    let transferData = { status: "pending" };
+    const transferRes = await axios.post(
+      "https://api.flutterwave.com/v3/transfers",
+      {
+        account_bank: seller.bankDetails.bankCode,
+        account_number: seller.bankDetails.accountNumber,
+        amount: transferAmount,
+        narration: isPartial
+          ? `UMP partial payout — Order #${order._id} (${toDeliver.length}/${order.items.length} items)`
+          : `UMP order payout — Order #${order._id}`,
+        currency: "NGN",
+        reference: transferRef,
+        debit_currency: "NGN",
+      },
+      { headers: { Authorization: `Bearer ${process.env.FLW_SECRET_KEY}` } }
+    );
+    transferData = transferRes.data?.data ?? transferData;
 
     // Mark delivered items
     for (const item of toDeliver) {
@@ -752,7 +757,7 @@ export const confirmDelivery = async (req, res) => {
       $push: {
         payoutHistory: {
           amount: transferAmount,
-          status: transferData?.status === "success" ? "paid" : "pending",
+          status: transferData?.status === "SUCCESSFUL" ? "paid" : "pending",
           referenceId: transferRef,
         },
       },
