@@ -116,58 +116,67 @@ export const checkoutCart = async (req, res) => {
         .json({ message: `Invalid payment method: ${paymentMethod}` });
     }
 
-    const items = cart.items.map((i) => ({
-      product: i.product._id,
-      quantity: i.quantity,
-      price: i.product.price,
-      variant: i.variant || {},
-    }));
+    // Group cart items by seller — creates one order per seller
+    const sellerGroups = new Map();
+    for (const item of cart.items) {
+      const product = item.product;
+      if (!product?._id) continue;
+      const sid = product.seller?.toString();
+      if (!sid) continue;
+      if (sid === userId.toString()) continue; // skip own products (guard at addToCart too)
+      if (!sellerGroups.has(sid)) sellerGroups.set(sid, []);
+      sellerGroups.get(sid).push(item);
+    }
 
-    const sellerId = cart.items[0].product.seller;
-    if (!sellerId)
-      return res.status(400).json({ message: "Cannot determine seller" });
+    if (sellerGroups.size === 0)
+      return res.status(400).json({ message: "No valid items to order" });
 
-    if (sellerId.toString() === userId.toString())
-      return res.status(400).json({ message: "You cannot purchase your own products" });
+    const createdOrders = [];
+    for (const [sid, sellerItems] of sellerGroups) {
+      const orderItems = sellerItems.map((i) => ({
+        product: i.product._id,
+        quantity: i.quantity,
+        price: i.product.price,
+        variant: i.variant || {},
+      }));
 
-    const subtotal = items.reduce((sum, i) => sum + i.price * i.quantity, 0);
-    // Charge each product's delivery fee once — deduplicate by product ID
-    const seenPids = new Set();
-    const deliveryFee = cart.items.reduce((s, i) => {
-      const pid = i.product._id?.toString();
-      if (pid && seenPids.has(pid)) return s;
-      if (pid) seenPids.add(pid);
-      return s + Math.max(0, i.product.deliveryFee || 0);
-    }, 0);
-    const totalAmount = subtotal + deliveryFee;
+      const subtotal = orderItems.reduce((s, i) => s + i.price * i.quantity, 0);
+      const seenPids = new Set();
+      const deliveryFee = sellerItems.reduce((s, i) => {
+        const pid = i.product._id?.toString();
+        if (pid && seenPids.has(pid)) return s;
+        if (pid) seenPids.add(pid);
+        return s + Math.max(0, i.product.deliveryFee || 0);
+      }, 0);
 
-    const order = new Order({
-      buyer: userId,
-      seller: sellerId,
-      items,
-      subtotal,
-      deliveryFee,
-      totalAmount,
-      shippingAddress: shippingAddress || {},
-      paymentMethod,
-      status: "pending",
-      deliveryCode: generateDeliveryCode(),
-    });
-
-    await order.save();
+      const order = new Order({
+        buyer: userId,
+        seller: new mongoose.Types.ObjectId(sid),
+        items: orderItems,
+        subtotal,
+        deliveryFee,
+        totalAmount: subtotal + deliveryFee,
+        shippingAddress: shippingAddress || {},
+        paymentMethod,
+        status: "pending",
+        deliveryCode: generateDeliveryCode(),
+      });
+      await order.save();
+      createdOrders.push(order);
+    }
 
     cart.items = [];
     await cart.save();
 
-    // Notify buyer only — seller is notified after payment is confirmed
+    const orderWord = createdOrders.length > 1 ? `${createdOrders.length} orders` : `order #${createdOrders[0]._id.toString().slice(-6).toUpperCase()}`;
     notify(userId, {
       type: "order",
       title: "Almost there!",
-      message: `Order #${order._id.toString().slice(-6).toUpperCase()} created. Complete your payment to confirm it.`,
+      message: `${orderWord.charAt(0).toUpperCase() + orderWord.slice(1)} created. Complete your payment to confirm.`,
       link: "/orders",
     });
 
-    return res.status(201).json({ success: true, order });
+    return res.status(201).json({ success: true, orders: createdOrders, order: createdOrders[0] });
   } catch (err) {
     console.error("❌ Checkout error:", err);
     return res.status(500).json({ success: false, message: err.message });
@@ -183,6 +192,16 @@ export const getMyOrders = async (req, res) => {
       .populate("items.product", "name price images")
       .sort({ createdAt: -1 })
       .lean();
+
+    // Attach store names so the buyer knows which delivery code belongs to which store
+    const sellerIds = [...new Set(orders.map((o) => o.seller?.toString()).filter(Boolean))];
+    if (sellerIds.length) {
+      const profiles = await Seller.find({ user: { $in: sellerIds } })
+        .select("user storeName")
+        .lean();
+      const nameMap = Object.fromEntries(profiles.map((p) => [p.user.toString(), p.storeName || ""]));
+      orders.forEach((o) => { if (o.seller) o.storeName = nameMap[o.seller.toString()] || ""; });
+    }
 
     res.json({ success: true, count: orders.length, orders });
   } catch (error) {
@@ -306,6 +325,10 @@ export const updateOrderStatus = async (req, res) => {
     // Prevent changes to already-finalised orders
     if (["completed", "cancelled"].includes(order.status))
       return res.status(400).json({ message: `Order is already ${order.status}` });
+
+    // Partial delivery in progress — only confirmDelivery can advance the order
+    if (order.status === "partial" && status !== "cancelled")
+      return res.status(400).json({ message: "Partial delivery in progress — use the delivery code to confirm remaining items" });
 
     // Enforce forward-only transitions (cancellation is always allowed)
     const FLOW = { pending: 0, confirmed: 1, shipped: 2, completed: 3 };
@@ -625,11 +648,13 @@ export const generateInvoicePDF = async (order) => {
 };
 
 // PUT /api/orders/:orderId/confirm-delivery
-// Called by SELLER — submits the delivery code given to them by the buyer in person.
-// On success, 95% of the order total is transferred to the seller's bank via Paystack.
+// Called by SELLER — submits the buyer's delivery code.
+// deliveredItemIds (optional): subdocument item _ids being delivered this round.
+//   Omit (or pass all pending items) = full delivery (current behaviour).
+//   Pass a subset = partial delivery; remaining items get a fresh code.
 export const confirmDelivery = async (req, res) => {
   try {
-    const { deliveryCode } = req.body;
+    const { deliveryCode, deliveredItemIds } = req.body;
     if (!deliveryCode)
       return res.status(400).json({ message: "Delivery code is required" });
 
@@ -649,7 +674,6 @@ export const confirmDelivery = async (req, res) => {
     const userId = req.user._id.toString();
     const sellerUserId = order.seller?.toString();
     if (sellerUserId && sellerUserId !== userId) {
-      // Allow seller who owns one of the products
       const products = await Product.find({ seller: req.user._id }).select("_id").lean();
       const productIds = products.map((p) => p._id.toString());
       const ownsItem = order.items.some((i) => productIds.includes((i.product?._id || i.product).toString()));
@@ -664,15 +688,33 @@ export const confirmDelivery = async (req, res) => {
       });
     }
 
-    const UMP_FEE = 0.05; // 5%
-    const transferAmount = Math.floor(order.totalAmount * (1 - UMP_FEE)); // naira → keep as naira, convert to kobo below
+    // Determine which pending items are being delivered now
+    const pendingItems = order.items.filter((i) => i.status !== "completed");
+    const toDeliver = deliveredItemIds?.length
+      ? pendingItems.filter((i) => deliveredItemIds.includes(i._id.toString()))
+      : pendingItems;
+
+    if (toDeliver.length === 0)
+      return res.status(400).json({ message: "No items selected for delivery" });
+
+    const isPartial = toDeliver.length < pendingItems.length;
+
+    const UMP_FEE = 0.05;
+
+    // Pro-rate payout: (delivered item value / all item value) × totalAmount × (1 - fee)
+    const allItemsSubtotal = order.items.reduce((s, i) => s + i.price * i.quantity, 0);
+    const deliveredSubtotal = toDeliver.reduce((s, i) => s + i.price * i.quantity, 0);
+    const proportion = allItemsSubtotal > 0 ? deliveredSubtotal / allItemsSubtotal : 1;
+    const transferAmount = Math.floor(order.totalAmount * proportion * (1 - UMP_FEE));
     const amountKobo = transferAmount * 100;
 
-    // Fire Paystack transfer
+    // Fire Paystack transfer for this batch
     const transferRef = `ESCROW_${order._id}_${Date.now()}`;
     const transferRes = await paystack.post("/transfer", {
       source: "balance",
-      reason: `UMP order payout — Order #${order._id}`,
+      reason: isPartial
+        ? `UMP partial payout — Order #${order._id} (${toDeliver.length}/${order.items.length} items)`
+        : `UMP order payout — Order #${order._id}`,
       amount: amountKobo,
       recipient: seller.bankDetails.paystackRecipientCode,
       reference: transferRef,
@@ -680,19 +722,32 @@ export const confirmDelivery = async (req, res) => {
 
     const transferData = transferRes.data?.data;
 
-    // Mark delivery code as used immediately; full completion happens on transfer.success webhook
-    order.deliveryCodeUsed = true;
-    order.status = "completed";
-    order.paymentStatus = "released";
-    order.escrowReleasedAt = new Date();
+    // Mark delivered items
+    for (const item of toDeliver) {
+      item.status = "completed";
+    }
+
+    if (isPartial) {
+      // Generate a fresh code for the remaining items
+      const newCode = generateDeliveryCode();
+      order.deliveryCode = newCode;
+      order.deliveryCodeUsed = false;
+      order.status = "partial";
+    } else {
+      order.deliveryCodeUsed = true;
+      order.status = "completed";
+      order.paymentStatus = "released";
+      order.escrowReleasedAt = new Date();
+    }
+
     await order.save();
 
-    // Update seller analytics optimistically
+    // Update seller analytics
     await Seller.findByIdAndUpdate(seller._id, {
       $inc: {
         pendingPayout: transferAmount,
-        totalRevenue: order.totalAmount,
-        totalOrders: 1,
+        totalRevenue: deliveredSubtotal,
+        ...(isPartial ? {} : { totalOrders: 1 }),
       },
       $push: {
         payoutHistory: {
@@ -703,8 +758,8 @@ export const confirmDelivery = async (req, res) => {
       },
     });
 
-    // Reduce stock
-    for (const item of order.items) {
+    // Reduce stock for delivered items only
+    for (const item of toDeliver) {
       const productId = item.product?._id || item.product;
       if (productId) {
         await Product.findByIdAndUpdate(productId, {
@@ -713,9 +768,32 @@ export const confirmDelivery = async (req, res) => {
       }
     }
 
+    // Notify buyer
+    if (isPartial) {
+      const remaining = pendingItems.length - toDeliver.length;
+      notify(order.buyer, {
+        type: "order",
+        title: "Partial delivery confirmed",
+        message: `${toDeliver.length} of ${order.items.length} items delivered. New delivery code for the remaining ${remaining} item${remaining > 1 ? "s" : ""}: ${order.deliveryCode}`,
+        link: "/orders",
+      });
+    } else {
+      notify(order.buyer, {
+        type: "order",
+        title: "Order delivered!",
+        message: `All items in order #${order._id.toString().slice(-6).toUpperCase()} have been delivered.`,
+        link: "/orders",
+      });
+    }
+
     res.json({
       success: true,
-      message: "Delivery confirmed. Transfer initiated to seller.",
+      partial: isPartial,
+      deliveredCount: toDeliver.length,
+      remainingCount: pendingItems.length - toDeliver.length,
+      message: isPartial
+        ? `${toDeliver.length} item${toDeliver.length > 1 ? "s" : ""} confirmed. New code sent to buyer for remaining ${pendingItems.length - toDeliver.length} item${pendingItems.length - toDeliver.length > 1 ? "s" : ""}.`
+        : "Delivery confirmed. Transfer initiated to seller.",
       transferStatus: transferData?.status,
       transferRef,
     });

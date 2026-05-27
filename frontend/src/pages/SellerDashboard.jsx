@@ -114,6 +114,7 @@ const S_STYLE = {
   pending:   { bg: "#fef3c7", color: "#d97706" },
   confirmed: { bg: "#dbeafe", color: "#1d4ed8" },
   shipped:   { bg: "#e0f2fe", color: "#0284c7" },
+  partial:   { bg: "#fef9c3", color: "#a16207" },
   completed: { bg: "#dcfce7", color: "#16a34a" },
   delivered: { bg: "#dcfce7", color: "#16a34a" },
   cancelled: { bg: "#fee2e2", color: "#dc2626" },
@@ -1006,6 +1007,9 @@ export default function SellerDashboard() {
   // Delivery codes (seller enters buyer's code to confirm delivery)
   const [deliveryCodes, setDeliveryCodes] = useState({});
   const [deliverySubmitting, setDeliverySubmitting] = useState({});
+  // Partial delivery: { [orderId]: Set<itemId> | null } — null = all pending items
+  const [partialMode, setPartialMode] = useState({});
+  const [partialSelected, setPartialSelected] = useState({});
 
   // ── Data load (callable for manual refresh) ──────────────────────────────────
   const loadDashboard = useCallback((isManual = false) => {
@@ -1264,15 +1268,32 @@ export default function SellerDashboard() {
   async function confirmDeliveryByCode(orderId) {
     const code = (deliveryCodes[orderId] || "").trim().toUpperCase();
     if (!code) { showToast("Enter the delivery code from the buyer", "error"); return; }
+    const selected = partialSelected[orderId]; // undefined = all items
     setDeliverySubmitting((s) => ({ ...s, [orderId]: true }));
     try {
-      const d = await apiFetch(`/api/orders/${orderId}/confirm-delivery`, {
-        method: "PUT",
-        body: { deliveryCode: code },
-      });
-      setOrders((prev) => prev.map((o) => (o._id || o.id) === orderId ? { ...o, status: "completed", paymentStatus: "released" } : o));
-      setDeliveryCodes((c) => { const n = { ...c }; delete n[orderId]; return n; });
-      showToast(d.message || "Delivery confirmed! Transfer initiated.", "success");
+      const body = { deliveryCode: code };
+      if (selected) body.deliveredItemIds = [...selected];
+      const d = await apiFetch(`/api/orders/${orderId}/confirm-delivery`, { method: "PUT", body });
+      if (d.partial) {
+        // Partial: mark delivered items completed in local state, keep order open
+        setOrders((prev) => prev.map((o) => {
+          if ((o._id || o.id) !== orderId) return o;
+          const updatedItems = (o.items || []).map((it) =>
+            selected?.has(it._id) ? { ...it, status: "completed" } : it
+          );
+          return { ...o, status: "partial", items: updatedItems };
+        }));
+        setDeliveryCodes((c) => { const n = { ...c }; delete n[orderId]; return n; });
+        setPartialMode((m) => { const n = { ...m }; delete n[orderId]; return n; });
+        setPartialSelected((s) => { const n = { ...s }; delete n[orderId]; return n; });
+        showToast(d.message, "success");
+      } else {
+        setOrders((prev) => prev.map((o) => (o._id || o.id) === orderId ? { ...o, status: "completed", paymentStatus: "released" } : o));
+        setDeliveryCodes((c) => { const n = { ...c }; delete n[orderId]; return n; });
+        setPartialMode((m) => { const n = { ...m }; delete n[orderId]; return n; });
+        setPartialSelected((s) => { const n = { ...s }; delete n[orderId]; return n; });
+        showToast(d.message || "Delivery confirmed! Transfer initiated.", "success");
+      }
     } catch (err) {
       showToast(err?.message || "Invalid delivery code", "error");
     } finally {
@@ -1570,9 +1591,17 @@ export default function SellerDashboard() {
 
                     <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--line)" }}>
                       {(o.items || []).map((it, i) => (
-                        <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: "1.3rem", padding: "3px 0" }}>
-                          <span>{it.product?.name || it.name || "Item"} <span style={{ color: "var(--ink-3)" }}>×{it.quantity || 1}</span></span>
-                          <span style={{ fontWeight: 600 }}>{naira((it.price || 0) * (it.quantity || 1))}</span>
+                        <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "1.3rem", padding: "4px 0" }}>
+                          <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                            {it.status === "completed"
+                              ? <i className="fas fa-circle-check" style={{ color: "#16a34a", fontSize: "1.1rem" }} />
+                              : <i className="fas fa-circle" style={{ color: "var(--ink-4)", fontSize: "1.1rem" }} />}
+                            {it.product?.name || it.name || "Item"} <span style={{ color: "var(--ink-3)" }}>×{it.quantity || 1}</span>
+                          </span>
+                          <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            <span style={{ fontWeight: 600 }}>{naira((it.price || 0) * (it.quantity || 1))}</span>
+                            {it.status === "completed" && <span style={{ fontSize: "1.05rem", color: "#16a34a", fontWeight: 600 }}>Delivered</span>}
+                          </span>
                         </div>
                       ))}
                       {o.shippingAddress?.address && (
@@ -1589,20 +1618,82 @@ export default function SellerDashboard() {
                       </div>
                     )}
 
-                    {/* Delivery code input — shown once order is shipped */}
-                    {status === "shipped" && (
+                    {/* Delivery code input — shown when shipped or partially delivered */}
+                    {(status === "shipped" || status === "partial") && (
                       <div style={{ padding: "14px 16px", background: "rgba(99,102,241,.06)", borderBottom: "1px solid var(--line)" }}>
+                        {status === "partial" && (
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, background: "rgba(234,179,8,.1)", border: "1px solid rgba(234,179,8,.3)", borderRadius: "var(--r-md)", padding: "8px 12px", marginBottom: 10, fontSize: "1.2rem", color: "#92400e" }}>
+                            <i className="fas fa-box-open" />
+                            Partial delivery in progress — {(o.items || []).filter(it => it.status === "completed").length} of {(o.items || []).length} items delivered. Enter buyer's new code for remaining items.
+                          </div>
+                        )}
                         {o.paymentStatus !== "paid" && (
                           <div style={{ display: "flex", alignItems: "center", gap: 8, background: "rgba(245,158,11,.1)", border: "1px solid rgba(245,158,11,.35)", borderRadius: "var(--r-md)", padding: "8px 12px", marginBottom: 10, fontSize: "1.15rem", color: "#92400e" }}>
                             <i className="fas fa-triangle-exclamation" /> Payment not yet confirmed — delivery confirmation will only succeed once the buyer's payment clears.
                           </div>
                         )}
                         <div style={{ fontSize: "1.2rem", fontWeight: 700, color: "#4f46e5", marginBottom: 8 }}>
-                          <i className="fas fa-key" style={{ marginRight: 6 }} />Confirm delivery — enter the buyer's code
+                          <i className="fas fa-key" style={{ marginRight: 6 }} />
+                          {status === "partial" ? "Confirm remaining items" : "Confirm delivery — enter the buyer's code"}
                         </div>
                         <div style={{ fontSize: "1.15rem", color: "var(--ink-3)", marginBottom: 10 }}>
-                          Ask the buyer to show their delivery code from the UMP app. Enter it below to release payment.
+                          Ask the buyer for their delivery code. Enter it below to release payment.
                         </div>
+
+                        {/* Partial delivery toggle — only show if multiple undelivered items */}
+                        {(() => {
+                          const pendingItems = (o.items || []).filter(it => it.status !== "completed");
+                          const isPartialOn = !!partialMode[oid];
+                          if (pendingItems.length < 2) return null;
+                          return (
+                            <div style={{ marginBottom: 12 }}>
+                              <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: "1.2rem", color: "var(--ink-2)", userSelect: "none" }}>
+                                <input
+                                  type="checkbox"
+                                  checked={isPartialOn}
+                                  onChange={(e) => {
+                                    const on = e.target.checked;
+                                    setPartialMode((m) => ({ ...m, [oid]: on }));
+                                    if (on) {
+                                      // Default: all pending items selected
+                                      setPartialSelected((s) => ({ ...s, [oid]: new Set(pendingItems.map(it => it._id)) }));
+                                    } else {
+                                      setPartialSelected((s) => { const n = { ...s }; delete n[oid]; return n; });
+                                    }
+                                  }}
+                                />
+                                Not delivering all items today (partial delivery)
+                              </label>
+                              {isPartialOn && (
+                                <div style={{ marginTop: 10, padding: "10px 12px", background: "var(--surface)", borderRadius: "var(--r-md)", border: "1px solid var(--line)" }}>
+                                  <div style={{ fontSize: "1.15rem", color: "var(--ink-3)", marginBottom: 8 }}>Select items being delivered now:</div>
+                                  {pendingItems.map((it) => {
+                                    const sel = partialSelected[oid] || new Set();
+                                    const checked = sel.has(it._id);
+                                    return (
+                                      <label key={it._id} style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: "1.25rem", padding: "4px 0" }}>
+                                        <input
+                                          type="checkbox"
+                                          checked={checked}
+                                          onChange={() => {
+                                            setPartialSelected((s) => {
+                                              const prev = new Set(s[oid] || pendingItems.map(x => x._id));
+                                              if (checked) prev.delete(it._id); else prev.add(it._id);
+                                              return { ...s, [oid]: prev };
+                                            });
+                                          }}
+                                        />
+                                        {it.product?.name || "Item"} ×{it.quantity || 1}
+                                        <span style={{ marginLeft: "auto", color: "var(--ink-3)" }}>{naira((it.price || 0) * (it.quantity || 1))}</span>
+                                      </label>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
+
                         <div style={{ display: "flex", gap: 8 }}>
                           <input
                             style={{ flex: 1, padding: "8px 12px", borderRadius: "var(--r-md)", border: "2px solid #6366f1", background: "var(--paper)", fontSize: "1.6rem", fontFamily: "monospace", fontWeight: 800, letterSpacing: ".12em", textTransform: "uppercase", opacity: o.paymentStatus !== "paid" ? 0.5 : 1 }}

@@ -94,19 +94,20 @@ export default function Cart() {
           notes: delivery.notes,
         },
       });
-      const createdOrder = orderRes.order || orderRes;
+      const createdOrders = orderRes.orders || (orderRes.order ? [orderRes.order] : [orderRes]);
+      const orderIds = createdOrders.map((o) => o._id || o);
 
       if (provider === "flutterwave") {
         const payRes = await apiFetch("/api/payments/flw/initialize", {
           method: "POST",
-          body: { orderId: createdOrder._id },
+          body: { orderIds },
         });
         if (!payRes.payment_link) throw new Error("No payment link returned");
         window.location.href = payRes.payment_link;
       } else {
         const payRes = await apiFetch("/api/payments/initialize", {
           method: "POST",
-          body: { orderId: createdOrder._id, provider: "Paystack", method: "card" },
+          body: { orderIds, provider: "Paystack", method: "card" },
         });
         if (!payRes.authorization_url) throw new Error("No payment URL returned from server");
         window.location.href = payRes.authorization_url;
@@ -153,6 +154,15 @@ export default function Cart() {
                 </div>
               ) : (
                 <>
+                  {(() => {
+                    const sellerIds = new Set(items.map(it => (it.product?.seller || '').toString()).filter(Boolean));
+                    return sellerIds.size > 1 ? (
+                      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderRadius: "var(--r-md)", background: "rgba(59,130,246,.08)", border: "1px solid rgba(59,130,246,.2)", marginBottom: 12, fontSize: "1.25rem", color: "var(--ink-2)" }}>
+                        <i className="fas fa-store" style={{ color: "#3b82f6", flexShrink: 0 }} />
+                        Items from {sellerIds.size} different stores — a separate order will be placed for each.
+                      </div>
+                    ) : null;
+                  })()}
                   <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 12 }}>
                     {items.map((it) => {
                       const p = it.product || it;

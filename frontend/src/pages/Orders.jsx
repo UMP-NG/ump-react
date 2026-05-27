@@ -83,6 +83,7 @@ const STATUS_STYLE = {
   pending:            { bg: "#fef3c7", color: "#d97706" },
   confirmed:          { bg: "#dbeafe", color: "#1d4ed8" },
   shipped:            { bg: "#e0f2fe", color: "#0284c7" },
+  partial:            { bg: "#fef9c3", color: "#a16207" },
   completed:          { bg: "#dcfce7", color: "#16a34a" },
   delivered:          { bg: "#dcfce7", color: "#16a34a" },
   cancelled:          { bg: "#fee2e2", color: "#dc2626" },
@@ -92,7 +93,9 @@ const STATUS_STYLE = {
 const STATUS_STEPS = ["pending", "confirmed", "shipped", "completed"];
 function OrderTimeline({ status }) {
   if (status === "cancelled") return null;
-  const idx = STATUS_STEPS.indexOf(status);
+  // treat "partial" as being at the "shipped" stage on the timeline
+  const displayStatus = status === "partial" ? "shipped" : status;
+  const idx = STATUS_STEPS.indexOf(displayStatus);
   if (idx < 0) return null;
   const labels = ["Placed", "Confirmed", "Shipped", "Delivered"];
   return (
@@ -284,7 +287,7 @@ export default function Orders() {
 
   const filtered = orders.filter((o) => {
     if (filter === "All") return true;
-    if (filter === "Active") return !["completed", "delivered", "cancelled"].includes(o.status);
+    if (filter === "Active") return !["completed", "delivered", "cancelled"].includes(o.status) || o.status === "partial";
     if (filter === "Delivered") return ["completed", "delivered"].includes(o.status);
     if (filter === "Cancelled") return o.status === "cancelled";
     return true;
@@ -353,6 +356,7 @@ export default function Orders() {
                         <div style={{ fontSize: "1.3rem", fontWeight: 700 }}>Order #{orderId.toString().slice(-6)}</div>
                         <div style={{ fontSize: "1.1rem", color: "var(--ink-3)", marginTop: 2 }}>
                           {new Date(o.createdAt || Date.now()).toLocaleDateString()} · {(o.items || []).length} item{(o.items || []).length !== 1 ? "s" : ""}
+                          {o.storeName ? <> · <span style={{ color: "var(--ink-2)", fontWeight: 600 }}>{o.storeName}</span></> : null}
                         </div>
                       </div>
                       <span style={{ fontSize: "1.1rem", padding: "2px 8px", borderRadius: 20, background: statusStyle.bg, color: statusStyle.color, fontWeight: 600, flexShrink: 0, marginLeft: 8 }}>{o.status}</span>
@@ -398,15 +402,18 @@ export default function Orders() {
                       </div>
                     )}
 
-                    {/* Delivery code — shown to buyer when order is shipped/active */}
-                    {o.deliveryCode && o.paymentStatus === "paid" && ["confirmed", "shipped"].includes(o.status) && (
+                    {/* Delivery code — shown to buyer when order is confirmed, shipped, or partially delivered */}
+                    {o.deliveryCode && o.paymentStatus === "paid" && ["confirmed", "shipped", "partial"].includes(o.status) && (
                       <div style={{ padding: "14px 16px", borderRadius: "var(--r-lg)", background: "linear-gradient(135deg, #1e1b4b 0%, #0f172a 100%)", marginBottom: 12, position: "relative", overflow: "hidden" }}>
                         <div style={{ fontSize: "1.1rem", color: "rgba(255,255,255,.65)", fontWeight: 600, letterSpacing: ".06em", marginBottom: 6 }}>
-                          <i className="fas fa-key" style={{ marginRight: 6 }} />DELIVERY CODE
+                          <i className="fas fa-key" style={{ marginRight: 6 }} />
+                          DELIVERY CODE{o.storeName ? ` — ${o.storeName}` : ""}
                         </div>
                         <div style={{ fontSize: "3.2rem", fontWeight: 900, color: "#fff", letterSpacing: ".18em", fontFamily: "monospace" }}>{o.deliveryCode}</div>
                         <div style={{ fontSize: "1.1rem", color: "rgba(255,255,255,.55)", marginTop: 6 }}>
-                          Share this code with the seller when you receive your order. The seller will enter it to confirm delivery and receive payment.
+                          {o.status === "partial"
+                            ? `Some items from this order are already delivered. Show this new code to ${o.storeName || "the seller"} when they bring the remaining items.`
+                            : `Show this code to ${o.storeName ? `the ${o.storeName} seller` : "the seller"} when they arrive to deliver your order. They will enter it to confirm delivery and receive payment.`}
                         </div>
                       </div>
                     )}

@@ -13,6 +13,11 @@ export const getCart = async (req, res) => {
       return res.json({ items: [], message: "🛒 Your cart is empty" });
     }
 
+    // Remove items whose product was deleted (populate returns null for missing refs)
+    const before = cart.items.length;
+    cart.items = cart.items.filter((item) => item.product != null);
+    if (cart.items.length !== before) await cart.save();
+
     res.json({ items: cart.items });
   } catch (error) {
     console.error("❌ Error fetching cart:", error);

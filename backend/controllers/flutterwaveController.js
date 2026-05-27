@@ -8,6 +8,41 @@ import { notify } from "../utils/notify.js";
 
 const FLW_BASE = "https://api.flutterwave.com/v3";
 
+// Confirm all orders tied to a payment, notify each seller once and the buyer once
+async function confirmAllOrders(payment) {
+  const orderIds = payment.orders?.length ? payment.orders : [payment.order];
+  let buyerNotified = false;
+  for (const orderId of orderIds) {
+    const o = await Order.findByIdAndUpdate(
+      orderId,
+      { paymentStatus: "paid", status: "confirmed" },
+      { new: true }
+    );
+    if (!o) continue;
+    const shortId = o._id.toString().slice(-6).toUpperCase();
+    if (!buyerNotified) {
+      notify(o.buyer, {
+        type: "order",
+        title: "Payment confirmed!",
+        message: orderIds.length > 1
+          ? `Your payment was successful. ${orderIds.length} orders are now being processed.`
+          : `Your payment for order #${shortId} was successful. The seller has been notified.`,
+        link: "/orders",
+      });
+      buyerNotified = true;
+    }
+    if (o.seller) {
+      notify(o.seller, {
+        type: "order",
+        title: "New order received",
+        message: `Payment confirmed for order #${shortId} — ₦${o.totalAmount.toLocaleString()}. Ready to fulfil.`,
+        link: "/seller-dashboard",
+      });
+      await Seller.findOneAndUpdate({ user: o.seller }, { $inc: { totalOrders: 1 } });
+    }
+  }
+}
+
 function flwHeaders() {
   return { Authorization: `Bearer ${process.env.FLW_SECRET_KEY}` };
 }
@@ -23,12 +58,16 @@ function clientUrl() {
 // ----------------------------
 export const initializeFlwPayment = async (req, res) => {
   try {
-    const { orderId } = req.body;
+    // Accept either a single orderId (legacy) or an orderIds array (multi-seller)
+    const rawIds = req.body.orderIds || (req.body.orderId ? [req.body.orderId] : []);
+    if (!rawIds.length)
+      return res.status(400).json({ success: false, message: "orderIds required" });
 
-    const order = await Order.findById(orderId);
-    if (!order)
-      return res.status(404).json({ success: false, message: "Order not found" });
+    const orders = await Order.find({ _id: { $in: rawIds }, buyer: req.user._id });
+    if (!orders.length)
+      return res.status(404).json({ success: false, message: "Orders not found" });
 
+    const totalAmount = orders.reduce((s, o) => s + o.totalAmount, 0);
     const reference = `UMP_FLW_${Date.now()}`;
     const base = clientUrl();
 
@@ -36,7 +75,7 @@ export const initializeFlwPayment = async (req, res) => {
       `${FLW_BASE}/payments`,
       {
         tx_ref: reference,
-        amount: order.totalAmount,
+        amount: totalAmount,
         currency: "NGN",
         redirect_url: `${base}/payment-success`,
         customer: {
@@ -44,7 +83,7 @@ export const initializeFlwPayment = async (req, res) => {
           name: req.user.name || req.user.email,
           phonenumber: req.user.phone || "",
         },
-        meta: { orderId: order._id.toString() },
+        meta: { orderIds: orders.map((o) => o._id.toString()) },
         customizations: {
           title: "UMP Marketplace",
           description: "Secure escrow payment",
@@ -59,10 +98,11 @@ export const initializeFlwPayment = async (req, res) => {
       throw new Error("No payment link returned from Flutterwave");
 
     await Payment.create({
-      order: orderId,
+      order: orders[0]._id,
+      orders: orders.map((o) => o._id),
       user: req.user._id,
       provider: "Flutterwave",
-      amount: order.totalAmount,
+      amount: totalAmount,
       reference,
       status: "pending",
     });
@@ -133,46 +173,27 @@ export const verifyFlwPayment = async (req, res) => {
     );
     payment.status = succeeded ? "success" : "failed";
 
+    let orderSummaries = [];
     if (succeeded) {
-      const confirmedOrder = await Order.findByIdAndUpdate(
-        payment.order,
-        { paymentStatus: "paid", status: "confirmed" },
-        { new: true }
-      );
-
-      if (confirmedOrder) {
-        const shortId = confirmedOrder._id.toString().slice(-6).toUpperCase();
-
-        notify(confirmedOrder.buyer, {
-          type: "order",
-          title: "Payment confirmed!",
-          message: `Your payment for order #${shortId} was successful. The seller has been notified.`,
-          link: "/orders",
-        });
-
-        if (confirmedOrder.seller) {
-          notify(confirmedOrder.seller, {
-            type: "order",
-            title: "New order received",
-            message: `Payment confirmed for order #${shortId} — ₦${confirmedOrder.totalAmount.toLocaleString()}. Ready to fulfil.`,
-            link: "/seller-dashboard",
-          });
-
-          await Seller.findOneAndUpdate(
-            { user: confirmedOrder.seller },
-            { $inc: { totalOrders: 1 } }
-          );
-        }
-      }
-
+      await confirmAllOrders(payment);
       audit("PAYMENT_VERIFIED", {
         actor: req.user?._id,
-        entity: "Order",
-        entityId: payment.order,
+        entity: "Payment",
+        entityId: payment._id,
         amount: payment.amount,
         meta: { reference: payment.reference, provider: "Flutterwave", transaction_id },
         req,
       });
+      const allIds = payment.orders?.length ? payment.orders : [payment.order];
+      const confirmedOrders = await Order.find({ _id: { $in: allIds } }).lean();
+      const sellerIds = [...new Set(confirmedOrders.map((o) => o.seller?.toString()).filter(Boolean))];
+      const profiles = await Seller.find({ user: { $in: sellerIds } }).select("user storeName").lean();
+      const nameMap = Object.fromEntries(profiles.map((p) => [p.user.toString(), p.storeName || ""]));
+      orderSummaries = confirmedOrders.map((o) => ({
+        _id: o._id,
+        storeName: o.seller ? (nameMap[o.seller.toString()] || "") : "",
+        totalAmount: o.totalAmount,
+      }));
     }
 
     return res.json({
@@ -180,6 +201,8 @@ export const verifyFlwPayment = async (req, res) => {
       message: "Payment verified",
       status: payment.status,
       orderId: payment.order,
+      orderIds: payment.orders?.length ? payment.orders : [payment.order],
+      orders: orderSummaries,
     });
   } catch (err) {
     console.error("💥 Flutterwave verify error:", err.response?.data || err.message);
@@ -220,41 +243,10 @@ export const flutterwaveWebhook = async (req, res) => {
           { reference: data.tx_ref },
           { $set: { status: "success", paidAt: new Date(), metadata: data } }
         );
-
-        const webhookOrder = await Order.findByIdAndUpdate(
-          orderId || payment.order,
-          { paymentStatus: "paid", status: "confirmed" },
-          { new: true }
-        );
-
-        if (webhookOrder) {
-          const shortId = webhookOrder._id.toString().slice(-6).toUpperCase();
-
-          notify(webhookOrder.buyer, {
-            type: "order",
-            title: "Payment confirmed!",
-            message: `Your payment for order #${shortId} was successful. The seller has been notified.`,
-            link: "/orders",
-          });
-
-          if (webhookOrder.seller) {
-            notify(webhookOrder.seller, {
-              type: "order",
-              title: "New order received",
-              message: `Payment confirmed for order #${shortId} — ₦${webhookOrder.totalAmount.toLocaleString()}. Ready to fulfil.`,
-              link: "/seller-dashboard",
-            });
-
-            await Seller.findOneAndUpdate(
-              { user: webhookOrder.seller },
-              { $inc: { totalOrders: 1 } }
-            );
-          }
-        }
-
+        await confirmAllOrders(payment);
         audit("WEBHOOK_PAYMENT_CONFIRMED", {
-          entity: "Order",
-          entityId: orderId || payment.order,
+          entity: "Payment",
+          entityId: payment._id,
           amount: data.amount,
           meta: { reference: data.tx_ref, provider: "Flutterwave" },
           req,
