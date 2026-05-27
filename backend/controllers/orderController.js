@@ -723,7 +723,7 @@ export const confirmDelivery = async (req, res) => {
         reference: transferRef,
         debit_currency: "NGN",
       },
-      { headers: { Authorization: `Bearer ${process.env.FLW_SECRET_KEY}` } }
+      { headers: { Authorization: `Bearer ${process.env.FLW_SECRET_KEY}` }, timeout: 15000 }
     );
     transferData = transferRes.data?.data ?? transferData;
 
@@ -757,7 +757,7 @@ export const confirmDelivery = async (req, res) => {
       $push: {
         payoutHistory: {
           amount: transferAmount,
-          status: transferData?.status === "SUCCESSFUL" ? "paid" : "pending",
+          status: transferData?.status === "SUCCESSFUL" ? "paid" : transferData?.status === "FAILED" ? "failed" : "pending",
           referenceId: transferRef,
         },
       },
