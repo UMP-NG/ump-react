@@ -155,7 +155,10 @@ export default function Cart() {
               ) : (
                 <>
                   {(() => {
-                    const sellerIds = new Set(items.map(it => (it.product?.seller || '').toString()).filter(Boolean));
+                    const sellerIds = new Set(items.map(it => {
+                      const s = it.product?.seller;
+                      return (typeof s === "object" ? s?._id : s)?.toString() || "";
+                    }).filter(Boolean));
                     return sellerIds.size > 1 ? (
                       <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderRadius: "var(--r-md)", background: "rgba(59,130,246,.08)", border: "1px solid rgba(59,130,246,.2)", marginBottom: 12, fontSize: "1.25rem", color: "var(--ink-2)" }}>
                         <i className="fas fa-store" style={{ color: "#3b82f6", flexShrink: 0 }} />

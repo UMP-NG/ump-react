@@ -2,11 +2,6 @@ import mongoose from "mongoose";
 
 const paymentSchema = new mongoose.Schema(
   {
-    order: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Order",
-    },
-    // All orders covered by this payment (one per seller when cart has multiple sellers)
     orders: [{ type: mongoose.Schema.Types.ObjectId, ref: "Order" }],
     user: {
       type: mongoose.Schema.Types.ObjectId,

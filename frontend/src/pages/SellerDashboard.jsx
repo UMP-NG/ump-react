@@ -1268,11 +1268,14 @@ export default function SellerDashboard() {
   async function confirmDeliveryByCode(orderId) {
     const code = (deliveryCodes[orderId] || "").trim().toUpperCase();
     if (!code) { showToast("Enter the delivery code from the buyer", "error"); return; }
-    const selected = partialSelected[orderId]; // undefined = all items
+    const selected = partialSelected[orderId]; // undefined = all items; Set = partial selection
+    if (partialMode[orderId] && selected instanceof Set && selected.size === 0) {
+      showToast("Select at least one item being delivered now", "error"); return;
+    }
     setDeliverySubmitting((s) => ({ ...s, [orderId]: true }));
     try {
       const body = { deliveryCode: code };
-      if (selected) body.deliveredItemIds = [...selected];
+      if (selected instanceof Set) body.deliveredItemIds = [...selected];
       const d = await apiFetch(`/api/orders/${orderId}/confirm-delivery`, { method: "PUT", body });
       if (d.partial) {
         // Partial: mark delivered items completed in local state, keep order open
@@ -1655,8 +1658,7 @@ export default function SellerDashboard() {
                                     const on = e.target.checked;
                                     setPartialMode((m) => ({ ...m, [oid]: on }));
                                     if (on) {
-                                      // Default: all pending items selected
-                                      setPartialSelected((s) => ({ ...s, [oid]: new Set(pendingItems.map(it => it._id)) }));
+                                      setPartialSelected((s) => ({ ...s, [oid]: new Set() }));
                                     } else {
                                       setPartialSelected((s) => { const n = { ...s }; delete n[oid]; return n; });
                                     }

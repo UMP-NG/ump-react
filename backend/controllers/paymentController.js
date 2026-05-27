@@ -5,42 +5,7 @@ import Order from "../models/Order.js";
 import Seller from "../models/Seller.js";
 import crypto from "crypto";
 import { audit } from "../utils/auditLog.js";
-import { notify } from "../utils/notify.js";
-
-// Confirm all orders tied to a payment, notify each seller once and the buyer once
-async function confirmAllOrders(payment) {
-  const orderIds = payment.orders?.length ? payment.orders : [payment.order];
-  let buyerNotified = false;
-  for (const orderId of orderIds) {
-    const o = await Order.findByIdAndUpdate(
-      orderId,
-      { paymentStatus: "paid", status: "confirmed" },
-      { new: true }
-    );
-    if (!o) continue;
-    const shortId = o._id.toString().slice(-6).toUpperCase();
-    if (!buyerNotified) {
-      notify(o.buyer, {
-        type: "order",
-        title: "Payment confirmed!",
-        message: orderIds.length > 1
-          ? `Your payment was successful. ${orderIds.length} orders are now being processed.`
-          : `Your payment for order #${shortId} was successful. The seller has been notified.`,
-        link: "/orders",
-      });
-      buyerNotified = true;
-    }
-    if (o.seller) {
-      notify(o.seller, {
-        type: "order",
-        title: "New order received",
-        message: `Payment confirmed for order #${shortId} — ₦${o.totalAmount.toLocaleString()}. Ready to fulfil.`,
-        link: "/seller-dashboard",
-      });
-      await Seller.findOneAndUpdate({ user: o.seller }, { $inc: { totalOrders: 1 } });
-    }
-  }
-}
+import { confirmAllOrders } from "../utils/confirmOrders.js";
 
 // ----------------------------
 // 1️⃣ Initialize Payment (Card or Transfer)
@@ -110,7 +75,6 @@ export const initializePayment = async (req, res) => {
 
     // Save payment record
     await Payment.create({
-      order: orders[0]._id,
       orders: orders.map((o) => o._id),
       user: req.user._id,
       provider,
@@ -167,7 +131,7 @@ export const verifyPayment = async (req, res) => {
       const existing = await Payment.findOne({ reference });
       if (!existing)
         return res.status(404).json({ success: false, message: "Payment not found" });
-      return res.json({ success: true, message: "Payment already processed", status: existing.status, orderId: existing.order });
+      return res.json({ success: true, message: "Payment already processed", status: existing.status, orderId: existing.orders?.[0] });
     }
 
     // Validate that the amount paid matches the expected order amount
@@ -220,8 +184,8 @@ export const verifyPayment = async (req, res) => {
       success: true,
       message: "Payment verified",
       status: payment.status,
-      orderId: payment.order,
-      orderIds: payment.orders?.length ? payment.orders : [payment.order],
+      orderId: payment.orders?.[0],
+      orderIds: payment.orders,
       orders: orderSummaries,
     });
   } catch (err) {

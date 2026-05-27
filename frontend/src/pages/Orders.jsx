@@ -287,7 +287,7 @@ export default function Orders() {
 
   const filtered = orders.filter((o) => {
     if (filter === "All") return true;
-    if (filter === "Active") return !["completed", "delivered", "cancelled"].includes(o.status) || o.status === "partial";
+    if (filter === "Active") return !["completed", "delivered", "cancelled"].includes(o.status);
     if (filter === "Delivered") return ["completed", "delivered"].includes(o.status);
     if (filter === "Cancelled") return o.status === "cancelled";
     return true;
