@@ -119,7 +119,7 @@ export default function Cart() {
     } catch (err) {
       // Cancel any orders that were created before the payment init failed
       sessionStorage.removeItem("ump_pending_orders");
-      await Promise.allSettled(orderIds.map((id) => apiFetch(`/api/orders/${id}`, { method: "DELETE" }).catch(() => {})));
+      await Promise.allSettled(orderIds.map((id) => apiFetch(`/api/orders/${id}`, { method: "DELETE" })));
       if (err?.status === 401) navigate("/login");
       else alert(err?.message || "Failed to place order. Try again.");
       setPlacing(false);

@@ -2,12 +2,12 @@ import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { apiFetch } from "../utils/api";
 
-function cancelPendingOrders() {
+async function cancelPendingOrders() {
   try {
     const ids = JSON.parse(sessionStorage.getItem("ump_pending_orders") || "[]");
     sessionStorage.removeItem("ump_pending_orders");
     if (ids.length) {
-      ids.forEach((id) => apiFetch(`/api/orders/${id}`, { method: "DELETE" }).catch(() => {}));
+      await Promise.allSettled(ids.map((id) => apiFetch(`/api/orders/${id}`, { method: "DELETE" })));
     }
   } catch { /* ignore */ }
 }
@@ -27,7 +27,7 @@ export default function PaymentSuccess() {
 
   useEffect(() => {
     if (isFlutterwave && flwStatus === "cancelled") {
-      cancelPendingOrders();
+      await cancelPendingOrders();
       setStatus("failed");
       return;
     }
@@ -57,13 +57,13 @@ export default function PaymentSuccess() {
             setOrders(ids.map((id) => ({ _id: id, storeName: "", totalAmount: null })));
           }
         } else {
-          cancelPendingOrders();
+          await cancelPendingOrders();
           setStatus("failed");
         }
       })
       .catch((err) => {
         clearTimeout(timer);
-        cancelPendingOrders();
+        await cancelPendingOrders();
         if (err?.name === "AbortError") {
           setStatus("timeout");
         } else {
