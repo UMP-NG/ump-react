@@ -27,7 +27,7 @@ export default function PaymentSuccess() {
 
   useEffect(() => {
     if (isFlutterwave && flwStatus === "cancelled") {
-      await cancelPendingOrders();
+      cancelPendingOrders(); // fire-and-forget — no state depends on completion
       setStatus("failed");
       return;
     }
@@ -44,12 +44,11 @@ export default function PaymentSuccess() {
     if (!url) { setStatus("failed"); return; }
 
     apiFetch(url, { signal: controller.signal })
-      .then((d) => {
+      .then(async (d) => {
         clearTimeout(timer);
         if (d.status === "success") {
           sessionStorage.removeItem("ump_pending_orders");
           setStatus("success");
-          // Use rich order summaries if available, fall back to bare IDs
           if (d.orders?.length) {
             setOrders(d.orders);
           } else {
@@ -61,7 +60,7 @@ export default function PaymentSuccess() {
           setStatus("failed");
         }
       })
-      .catch((err) => {
+      .catch(async (err) => {
         clearTimeout(timer);
         await cancelPendingOrders();
         if (err?.name === "AbortError") {
