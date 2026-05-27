@@ -7,7 +7,6 @@ import path from "path";
 import { fileURLToPath } from "url";
 import PDFDocument from "pdfkit";
 import cloudinary from "../config/cloudinary.js";
-import axios from "axios";
 import { audit } from "../utils/auditLog.js";
 import { notify } from "../utils/notify.js";
 
@@ -680,13 +679,8 @@ export const confirmDelivery = async (req, res) => {
       if (!ownsItem) return res.status(403).json({ message: "Not authorized" });
     }
 
-    // Look up seller profile for bank details
+    // Look up seller profile
     const seller = await Seller.findOne({ user: order.seller || req.user._id });
-    if (!seller?.bankDetails?.bankCode || !seller?.bankDetails?.accountNumber) {
-      return res.status(400).json({
-        message: "Seller has not set up bank details yet. Please add your bank account in the dashboard.",
-      });
-    }
 
     // Determine which pending items are being delivered now
     const pendingItems = order.items.filter((i) => i.status !== "completed");
@@ -701,31 +695,12 @@ export const confirmDelivery = async (req, res) => {
 
     const UMP_FEE = 0.05;
 
-    // Pro-rate payout: (delivered item value / all item value) × totalAmount × (1 - fee)
+    // Pro-rate the amount owed to the seller for this batch (5% platform cut)
     const allItemsSubtotal = order.items.reduce((s, i) => s + i.price * i.quantity, 0);
     const deliveredSubtotal = toDeliver.reduce((s, i) => s + i.price * i.quantity, 0);
     const proportion = allItemsSubtotal > 0 ? deliveredSubtotal / allItemsSubtotal : 1;
-    const transferAmount = Math.floor(order.totalAmount * proportion * (1 - UMP_FEE));
-
-    // Fire Flutterwave transfer — amount in naira, no pre-registration needed
-    const transferRef = `ESCROW_${order._id}_${Date.now()}`;
-    let transferData = { status: "pending" };
-    const transferRes = await axios.post(
-      "https://api.flutterwave.com/v3/transfers",
-      {
-        account_bank: seller.bankDetails.bankCode,
-        account_number: seller.bankDetails.accountNumber,
-        amount: transferAmount,
-        narration: isPartial
-          ? `UMP partial payout — Order #${order._id} (${toDeliver.length}/${order.items.length} items)`
-          : `UMP order payout — Order #${order._id}`,
-        currency: "NGN",
-        reference: transferRef,
-        debit_currency: "NGN",
-      },
-      { headers: { Authorization: `Bearer ${process.env.FLW_SECRET_KEY}` }, timeout: 15000 }
-    );
-    transferData = transferRes.data?.data ?? transferData;
+    const payoutAmount = Math.floor(order.totalAmount * proportion * (1 - UMP_FEE));
+    const payoutRef = `ESCROW_${order._id}_${Date.now()}`;
 
     // Mark delivered items
     for (const item of toDeliver) {
@@ -747,21 +722,23 @@ export const confirmDelivery = async (req, res) => {
 
     await order.save();
 
-    // Update seller analytics
-    await Seller.findByIdAndUpdate(seller._id, {
-      $inc: {
-        pendingPayout: transferAmount,
-        totalRevenue: deliveredSubtotal,
-        ...(isPartial ? {} : { totalOrders: 1 }),
-      },
-      $push: {
-        payoutHistory: {
-          amount: transferAmount,
-          status: transferData?.status === "SUCCESSFUL" ? "paid" : transferData?.status === "FAILED" ? "failed" : "pending",
-          referenceId: transferRef,
+    // Credit seller's pending balance — actual bank transfer happens when they request a payout (24h hold)
+    if (seller) {
+      await Seller.findByIdAndUpdate(seller._id, {
+        $inc: {
+          pendingPayout: payoutAmount,
+          totalRevenue: deliveredSubtotal,
+          ...(isPartial ? {} : { totalOrders: 1 }),
         },
-      },
-    });
+        $push: {
+          payoutHistory: {
+            amount: payoutAmount,
+            status: "pending",
+            referenceId: payoutRef,
+          },
+        },
+      });
+    }
 
     // Reduce stock for delivered items only
     for (const item of toDeliver) {
@@ -798,9 +775,7 @@ export const confirmDelivery = async (req, res) => {
       remainingCount: pendingItems.length - toDeliver.length,
       message: isPartial
         ? `${toDeliver.length} item${toDeliver.length > 1 ? "s" : ""} confirmed. New code sent to buyer for remaining ${pendingItems.length - toDeliver.length} item${pendingItems.length - toDeliver.length > 1 ? "s" : ""}.`
-        : "Delivery confirmed. Transfer initiated to seller.",
-      transferStatus: transferData?.status,
-      transferRef,
+        : "Delivery confirmed. Payout credited to seller balance.",
     });
   } catch (err) {
     console.error("confirmDelivery error:", err.response?.data || err.message);
