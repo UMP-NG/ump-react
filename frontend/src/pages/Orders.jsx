@@ -402,6 +402,17 @@ export default function Orders() {
                       </div>
                     )}
 
+                    {/* Delivery fee — buyer pays rider directly via transfer */}
+                    {o.deliveryMethod === "delivery" && o.blackboxFee > 0 && (
+                      <div style={{ margin: "0 0 12px", padding: "12px 16px", borderRadius: "var(--r-md)", background: "rgba(245,158,11,.08)", border: "1px solid rgba(245,158,11,.3)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: "1.2rem", color: "#92400e" }}>
+                          <i className="fas fa-motorcycle" style={{ flexShrink: 0 }} />
+                          <span>Pay dispatch rider via transfer</span>
+                        </div>
+                        <strong style={{ fontSize: "1.5rem", color: "#b45309", flexShrink: 0 }}>₦{Number(o.blackboxFee).toLocaleString()}</strong>
+                      </div>
+                    )}
+
                     {/* Delivery code — shown to buyer when order is confirmed, shipped, or partially delivered */}
                     {o.deliveryCode && o.paymentStatus === "paid" && ["confirmed", "shipped", "partial"].includes(o.status) && (
                       <div style={{ padding: "14px 16px", borderRadius: "var(--r-lg)", background: "linear-gradient(135deg, #1e1b4b 0%, #0f172a 100%)", marginBottom: 12, position: "relative", overflow: "hidden" }}>

@@ -33,7 +33,7 @@ export default function Provider() {
 
   const [seller, setSeller] = useState({
     storeName: "", businessName: "", bio: "",
-    category: [], description: "", location: "",
+    category: [], description: "", address: "",
   });
 
   const [service, setService] = useState({
@@ -469,8 +469,14 @@ function SellerForm({ seller, setSeller }) {
         <Field label="Store Description">
           <textarea className="textarea" style={{ minHeight: 90 }} placeholder="Tell buyers what makes your store special — products, pricing, turnaround…" value={s.description} onChange={set("description")} />
         </Field>
-        <Field label="Store Location" required>
-          <input className="input" placeholder="e.g. Moremi Hall, Faculty of Science block…" value={s.location} onChange={set("location")} required />
+        <Field label="Store / Pickup Location" required>
+          <input className="input" placeholder="e.g. Moremi Hall, Faculty of Science block…" value={s.address} onChange={set("address")} required />
+          <div style={{ marginTop: 6, padding: "8px 12px", background: "rgba(249,115,22,.07)", border: "1px solid rgba(249,115,22,.25)", borderRadius: "var(--r-md)", display: "flex", gap: 8, alignItems: "flex-start" }}>
+            <i className="fas fa-circle-info" style={{ color: "var(--accent)", flexShrink: 0, marginTop: 1, fontSize: "1.1rem" }} />
+            <span style={{ fontSize: "1.15rem", color: "var(--ink-2)", lineHeight: 1.55 }}>
+              Use your <strong>actual store or pickup address</strong> — buyers who choose self-pickup will see this location and use it to collect their orders. It also helps with BlackBox delivery dispatch.
+            </span>
+          </div>
         </Field>
       </FormSection>
     </>

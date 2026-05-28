@@ -106,16 +106,18 @@ export default function ProductDetail() {
   }
 
   async function handleFollow() {
+    if (!product?.seller) return;
     setFollowLoading(true);
+    // Use seller profile ID if available, otherwise fall back to User ID (route accepts both)
+    const targetId = product.seller.sellerProfileId || product.seller._id;
+    const wasFollowing = following;
+    setFollowing(!wasFollowing);
     try {
-      if (following) {
-        await apiFetch(`/api/follows/${product.seller._id}`, { method: "DELETE" });
-        setFollowing(false);
-      } else {
-        await apiFetch(`/api/follows/${product.seller._id}`, { method: "POST" });
-        setFollowing(true);
-      }
+      const res = await apiFetch(`/api/sellers/${targetId}/${wasFollowing ? "unfollow" : "follow"}`, { method: "POST" });
+      const serverFollowing = typeof res.following === "boolean" ? res.following : !wasFollowing;
+      setFollowing(serverFollowing);
     } catch (err) {
+      setFollowing(wasFollowing);
       if (err.status === 401) {
         showToast("Please sign in to follow this seller");
       } else {
@@ -421,6 +423,12 @@ export default function ProductDetail() {
                 </p>
               </div>
             ) : null}
+            {(seller.address || seller.location) && (
+              <div style={{ padding: "0 16px 12px", display: "flex", alignItems: "center", gap: 6, fontSize: "1.2rem", color: "var(--ink-3)" }}>
+                <i className="fas fa-location-dot" style={{ color: "var(--accent)", flexShrink: 0 }} />
+                <span>{seller.address || seller.location}</span>
+              </div>
+            )}
             <div style={{ padding: "0 16px 14px" }}>
               <button
                 className="btn btn-ghost"

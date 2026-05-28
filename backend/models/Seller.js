@@ -79,6 +79,10 @@ const sellerSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// Query index — `user` already has unique:true (which creates an index) but declaring
+// it explicitly here ensures Mongoose registers it for .findOne({ user }) lookups.
+sellerSchema.index({ user: 1 });
+
 // ✅ Add searchable text index
 sellerSchema.index({
   name: "text",

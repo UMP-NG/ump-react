@@ -251,8 +251,12 @@ export default function Config() {
                     className={`adm-toggle${s.on ? ' on' : ''}`}
                     onClick={() => setSlides(prev => prev.map((sl, j) => j === i ? { ...sl, on: !sl.on } : sl))}
                   ></span>
-                  <button className="icon-action" onClick={() => setSlides(prev => prev.filter((_, j) => j !== i))}>
-                    <i className="fa-solid fa-trash"></i>
+                  <button
+                    title="Delete slide"
+                    onClick={() => { if (window.confirm('Delete this slide?')) setSlides(prev => prev.filter((_, j) => j !== i)); }}
+                    style={{ flexShrink: 0, padding: '5px 10px', borderRadius: 7, border: '1px solid #fca5a5', background: '#fff1f2', color: '#dc2626', cursor: 'pointer', fontSize: '1.15rem', display: 'flex', alignItems: 'center', gap: 5, fontFamily: 'inherit', fontWeight: 600 }}
+                  >
+                    <i className="fa-solid fa-trash" /> Delete
                   </button>
                 </div>
                 {/* Row 2: subtitle */}

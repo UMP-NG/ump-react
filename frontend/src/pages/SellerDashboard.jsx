@@ -131,21 +131,21 @@ function VerifyBanner({ requested, onRequest, loading }) {
       <div style={{ padding: "12px 16px", borderRadius: "var(--r-md)", background: "rgba(59,130,246,.08)", border: "1px solid rgba(59,130,246,.25)", display: "flex", alignItems: "center", gap: 14, marginBottom: 16 }}>
         <i className="fas fa-clock" style={{ fontSize: "1.6rem", color: "#3b82f6", flexShrink: 0 }} />
         <div style={{ flex: 1 }}>
-          <div style={{ fontSize: "1.3rem", fontWeight: 700, color: "#1d4ed8" }}>Verification pending</div>
-          <div style={{ fontSize: "1.15rem", color: "var(--ink-3)" }}>We're reviewing your store. You'll be notified once approved.</div>
+          <div style={{ fontSize: "1.3rem", fontWeight: 700, color: "#1d4ed8" }}>Subscription pending</div>
+          <div style={{ fontSize: "1.15rem", color: "var(--ink-3)" }}>We're reviewing your subscription request. You'll be notified once activated.</div>
         </div>
       </div>
     );
   }
   return (
     <div style={{ padding: "12px 16px", borderRadius: "var(--r-md)", background: "rgba(249,115,22,.07)", border: "1px solid rgba(249,115,22,.25)", display: "flex", alignItems: "center", gap: 14, marginBottom: 16 }}>
-      <i className="fas fa-shield-halved" style={{ fontSize: "1.6rem", color: "var(--accent)", flexShrink: 0 }} />
+      <i className="fas fa-crown" style={{ fontSize: "1.6rem", color: "#f59e0b", flexShrink: 0 }} />
       <div style={{ flex: 1 }}>
-        <div style={{ fontSize: "1.3rem", fontWeight: 700 }}>Get your store verified</div>
-        <div style={{ fontSize: "1.15rem", color: "var(--ink-3)" }}>Earn a verified badge to build buyer trust and boost sales.</div>
+        <div style={{ fontSize: "1.3rem", fontWeight: 700 }}>Subscribe your store</div>
+        <div style={{ fontSize: "1.15rem", color: "var(--ink-3)" }}>Get the UMP crown badge — show buyers you're a serious seller and boost visibility.</div>
       </div>
       <button className="btn btn-primary btn-sm" style={{ borderRadius: "var(--r-pill)", flexShrink: 0 }} onClick={onRequest} disabled={loading}>
-        {loading ? <i className="fas fa-spinner fa-spin" /> : <><i className="fas fa-badge-check" /> Get Verified</>}
+        {loading ? <i className="fas fa-spinner fa-spin" /> : <><i className="fas fa-crown" /> Subscribe</>}
       </button>
     </div>
   );
@@ -982,7 +982,7 @@ export default function SellerDashboard() {
   const [dashPwd, setDashPwd] = useState({ old: "", new: "", confirm: "" });
   const [pwdSaving, setPwdSaving] = useState(false);
   const [pwdShow, setPwdShow] = useState({ old: false, new: false, confirm: false });
-  const [dashStore, setDashStore] = useState({ storeName: "", desc: "", avatarUrl: "", avatarPublicId: "", bannerUrl: "", bannerPublicId: "" });
+  const [dashStore, setDashStore] = useState({ storeName: "", desc: "", address: "", avatarUrl: "", avatarPublicId: "", bannerUrl: "", bannerPublicId: "" });
   const [storeSaving, setStoreSaving] = useState(false);
   const [storeAvatarUploading, setStoreAvatarUploading] = useState(false);
   const [storeBannerUploading, setStoreBannerUploading] = useState(false);
@@ -1038,6 +1038,7 @@ export default function SellerDashboard() {
         setDashStore({
           storeName: dash.profile.storeName || "",
           desc: dash.profile.description || dash.profile.desc || "",
+          address: dash.profile.address || "",
           avatarUrl: dash.profile.logo?.url || dash.profile.avatar?.url || "",
           avatarPublicId: dash.profile.logo?.publicId || dash.profile.avatar?.publicId || "",
           bannerUrl: dash.profile.banner?.url || "",
@@ -1086,9 +1087,9 @@ export default function SellerDashboard() {
     setVerifyLoading(true);
     try {
       await apiFetch("/api/sellers/request-verification", { method: "POST" });
-      setProfile((p) => ({ ...p, verificationRequested: true }));
+      setProfile((p) => ({ ...p, subscriptionRequested: true }));
     } catch (err) {
-      showToast(err?.message || "Verification request failed. Please try again.", "error");
+      showToast(err?.message || "Subscription request failed. Please try again.", "error");
     } finally { setVerifyLoading(false); }
   }
 
@@ -1207,11 +1208,12 @@ export default function SellerDashboard() {
         body: {
           storeName: dashStore.storeName,
           description: dashStore.desc,
+          address: dashStore.address,
           ...(dashStore.avatarUrl && { logoUrl: dashStore.avatarUrl, logoPublicId: dashStore.avatarPublicId }),
           ...(dashStore.bannerUrl && { bannerUrl: dashStore.bannerUrl, bannerPublicId: dashStore.bannerPublicId }),
         },
       });
-      setProfile((p) => ({ ...p, storeName: dashStore.storeName, description: dashStore.desc }));
+      setProfile((p) => ({ ...p, storeName: dashStore.storeName, description: dashStore.desc, address: dashStore.address }));
       showToast("Store profile updated", "success");
     } catch (err) {
       showToast(err?.message || "Failed to update store profile", "error");
@@ -1353,8 +1355,8 @@ export default function SellerDashboard() {
   // ═══════════════════════════════════════════════════════════════════════════════
   const PAGE_CONTENT = (
     <div style={{ padding: "20px 20px 80px" }}>
-      {!loading && !profile?.isVerified && (
-        <VerifyBanner requested={!!profile?.verificationRequested} onRequest={requestVerification} loading={verifyLoading} />
+      {!loading && !profile?.isSubscribed && (
+        <VerifyBanner requested={!!profile?.subscriptionRequested} onRequest={requestVerification} loading={verifyLoading} />
       )}
 
       <Alerts orders={orders} products={products} kpis={kpis} setTab={setTab} />
@@ -1618,6 +1620,49 @@ export default function SellerDashboard() {
                     {!isDone && o.paymentStatus === "paid" && status !== "shipped" && (
                       <div style={{ padding: "10px 16px", background: "rgba(59,130,246,.06)", borderBottom: "1px solid var(--line)", display: "flex", alignItems: "center", gap: 8, fontSize: "1.2rem", color: "#1d4ed8" }}>
                         <i className="fas fa-lock" /> Funds held in UMP escrow — released when delivery is confirmed
+                      </div>
+                    )}
+
+                    {/* BlackBox dispatch — shown for delivery orders that are confirmed and not yet shipped */}
+                    {o.deliveryMethod === "delivery" && status === "confirmed" && o.paymentStatus === "paid" && (
+                      <div style={{ padding: "14px 16px", borderBottom: "1px solid var(--line)", background: "rgba(249,115,22,.04)" }}>
+                        {o.blackboxTrackingId ? (
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: "1.25rem" }}>
+                            <i className="fas fa-motorcycle" style={{ color: "var(--accent)" }} />
+                            <span>Dispatch booked · <strong>Tracking: {o.blackboxTrackingId}</strong></span>
+                          </div>
+                        ) : (
+                          <>
+                            <div style={{ fontSize: "1.25rem", fontWeight: 700, marginBottom: 6 }}>
+                              <i className="fas fa-motorcycle" style={{ marginRight: 6, color: "var(--accent)" }} />Ready to dispatch?
+                            </div>
+                            <div style={{ fontSize: "1.15rem", color: "var(--ink-3)", marginBottom: 10 }}>
+                              When the order is packed and ready, book a BlackBox rider to deliver it.
+                            </div>
+                            <button
+                              className="btn btn-primary btn-sm"
+                              disabled={deliverySubmitting[oid]}
+                              onClick={async () => {
+                                setDeliverySubmitting((s) => ({ ...s, [oid]: true }));
+                                try {
+                                  const d = await apiFetch(`/api/orders/${oid}/book-dispatch`, { method: "POST" });
+                                  setOrders((prev) => prev.map((ord) =>
+                                    (ord._id || ord.id) === oid
+                                      ? { ...ord, blackboxTrackingId: d.trackingId, status: "shipped" }
+                                      : ord
+                                  ));
+                                  showToast(`Dispatch booked! Tracking: ${d.trackingId}`, "success");
+                                } catch (err) {
+                                  showToast(err?.message || "Failed to book dispatch", "error");
+                                } finally {
+                                  setDeliverySubmitting((s) => { const n = { ...s }; delete n[oid]; return n; });
+                                }
+                              }}
+                            >
+                              {deliverySubmitting[oid] ? <i className="fas fa-spinner fa-spin" /> : <><i className="fas fa-motorcycle" /> Book BlackBox Dispatch</>}
+                            </button>
+                          </>
+                        )}
                       </div>
                     )}
 
@@ -2153,9 +2198,19 @@ export default function SellerDashboard() {
               <label style={lSty}>Store Name</label>
               <input style={iSty} value={dashStore.storeName} onChange={(e) => setDashStore((s) => ({ ...s, storeName: e.target.value }))} placeholder="Your store name" />
             </div>
-            <div style={{ marginBottom: 16 }}>
+            <div style={{ marginBottom: 12 }}>
               <label style={lSty}>Store Description</label>
               <textarea style={{ ...iSty, height: 80, resize: "vertical" }} value={dashStore.desc} onChange={(e) => setDashStore((s) => ({ ...s, desc: e.target.value }))} placeholder="Tell buyers about your store..." />
+            </div>
+            <div style={{ marginBottom: 16 }}>
+              <label style={lSty}>Store / Pickup Address</label>
+              <input style={iSty} value={dashStore.address} onChange={(e) => setDashStore((s) => ({ ...s, address: e.target.value }))} placeholder="e.g. Block C Shop 12, Moremi Road, UNILAG" />
+              <div style={{ marginTop: 6, padding: "8px 10px", background: "rgba(249,115,22,.07)", border: "1px solid rgba(249,115,22,.22)", borderRadius: "var(--r-md)", display: "flex", gap: 7, alignItems: "flex-start" }}>
+                <i className="fas fa-circle-info" style={{ color: "var(--accent)", flexShrink: 0, marginTop: 1, fontSize: "1rem" }} />
+                <span style={{ fontSize: "1.1rem", color: "var(--ink-2)", lineHeight: 1.5 }}>
+                  Use your <strong>actual pickup address</strong> — buyers who choose self-pickup will see this and use it to collect their orders.
+                </span>
+              </div>
             </div>
             <button className="btn btn-primary btn-sm" disabled={storeSaving || storeAvatarUploading || storeBannerUploading} onClick={saveStoreProfile}>
               {storeSaving ? <i className="fas fa-spinner fa-spin" /> : <><i className="fas fa-save" /> Save Store Profile</>}

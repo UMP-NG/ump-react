@@ -234,7 +234,7 @@ export default function Home() {
         <div style={{ display: "flex", gap: 12, overflowX: "auto", scrollbarWidth: "none", paddingBottom: 4 }}>
           {[
             { bg: "linear-gradient(135deg,#ea580c,#7c2d12)", icon: "tag", t: "Student Exclusive Deals", s: "Discounts on services & products every week", cta: "Explore", path: "/market" },
-            { bg: "linear-gradient(135deg,#1e40af,#312e81)", icon: "badge-check", t: "Become a verified seller", s: "Get the orange tick and build buyer trust", cta: "Apply now", path: "/partner" },
+            { bg: "linear-gradient(135deg,#92400e,#78350f)", icon: "crown", t: "Subscribe your store", s: "Get the crown badge and stand out to buyers", cta: "Learn more", path: "/partner" },
           ].map((b, i) => (
             <div key={i} style={{ minWidth: "85%", borderRadius: "var(--r-xl)", padding: 22, color: "#fff", background: b.bg, flexShrink: 0 }}>
               <span className="chip" style={{ background: "rgba(255,255,255,.18)", color: "#fff", marginBottom: 10 }}>

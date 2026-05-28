@@ -329,13 +329,14 @@ export const getProductById = async (req, res) => {
     }
 
     // Fetch Seller profile for address, sellerProfileId, and correct follower count
+    // Select followers array only when needed for isFollowing check; followersCount for display
     const sellerProfile = await Seller.findOne({ user: product.seller._id })
-      .select("_id storeName address location logo followers followersCount")
+      .select(userId ? "_id storeName address location logo followers followersCount" : "_id storeName address location logo followersCount")
       .lean();
 
-    const isUserFollowing = sellerProfile
+    const isUserFollowing = userId && sellerProfile
       ? sellerProfile.followers?.some((f) => f.toString?.() === userId || f === userId)
-      : product.seller?.followers?.some((f) => f.toString?.() === userId || f === userId);
+      : false;
 
     const normalized = {
       ...product,
@@ -355,7 +356,7 @@ export const getProductById = async (req, res) => {
           product.seller.bio ||
           "No seller story yet",
         logo: sellerProfile?.logo?.url || product.seller.avatar || "../images/guy.png",
-        followerCount: sellerProfile?.followers?.length || product.seller.followers?.length || 0,
+        followerCount: sellerProfile?.followersCount ?? sellerProfile?.followers?.length ?? product.seller.followers?.length ?? 0,
         bio: product.seller.bio || "No bio available",
         address: sellerProfile?.address || sellerProfile?.location || "",
         isFollowing: isUserFollowing,

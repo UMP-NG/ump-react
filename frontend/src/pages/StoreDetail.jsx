@@ -126,10 +126,16 @@ export default function StoreDetail() {
           <div>
             <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
               <h1 style={{ margin: 0, fontSize: "2rem", fontWeight: 800, letterSpacing: "-0.02em" }}>{seller.storeName || seller.name}</h1>
-              {seller.isVerified && <i className="fas fa-circle-check" style={{ color: "var(--accent)", fontSize: "1.4rem" }} title="Verified by UMP" />}
+              {seller.isSubscribed && <i className="fas fa-crown" style={{ color: "#f59e0b", fontSize: "1.3rem" }} title="UMP Subscribed" />}
             </div>
             {seller.category?.length > 0 && (
               <p style={{ margin: "2px 0 0", fontSize: "1.2rem", color: "var(--ink-3)" }}>{seller.category.join(" · ")}</p>
+            )}
+            {(seller.address || seller.location) && (
+              <p style={{ margin: "4px 0 0", fontSize: "1.2rem", color: "var(--ink-3)", display: "flex", alignItems: "center", gap: 5 }}>
+                <i className="fas fa-location-dot" style={{ color: "var(--accent)", fontSize: "1rem" }} />
+                {seller.address || seller.location}
+              </p>
             )}
           </div>
           <button

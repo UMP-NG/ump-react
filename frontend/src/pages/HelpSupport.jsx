@@ -25,8 +25,8 @@ const FAQS = [
     a: "Buyers can pay via card, bank transfer, or USSD through our integrated payment gateway. Funds are held securely and released once the order is confirmed.",
   },
   {
-    q: "How do I get verified?",
-    a: "From your Seller Dashboard or Provider Analytics page, tap 'Get Verified'. The UMP team reviews your profile and notifies you once approved. A verified badge increases buyer trust significantly.",
+    q: "How do I get the crown badge?",
+    a: "From your Seller Dashboard, tap 'Subscribe'. The UMP team activates your subscription and you'll be notified. Subscribed stores get a gold crown badge that signals to buyers you're a serious, committed seller.",
   },
   {
     q: "Can I cancel an order?",

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
@@ -20,6 +20,11 @@ export default function Cart() {
   const [promoCode, setPromoCode] = useState("");
   const [provider, setProvider] = useState("flutterwave");
   const [showDeliveryConfirm, setShowDeliveryConfirm] = useState(false);
+  const [deliveryMethod, setDeliveryMethod] = useState("pickup"); // "pickup" | "delivery"
+  const [bbxFee, setBbxFee] = useState(0);
+  const [bbxDropoffArea, setBbxDropoffArea] = useState("");
+  const [pickupAddresses, setPickupAddresses] = useState({}); // { userId: { storeName, address } }
+  const bbxRef = useRef(null);
 
   useEffect(() => {
     apiFetch("/api/cart")
@@ -37,17 +42,52 @@ export default function Cart() {
     return () => window.removeEventListener("pageshow", handlePageShow);
   }, []);
 
+  // Load BlackBox widget script once when delivery method is selected
+  useEffect(() => {
+    if (deliveryMethod !== "delivery") return;
+    if (!document.getElementById("bbx-script")) {
+      const s = document.createElement("script");
+      s.id = "bbx-script";
+      s.src = "https://app.blackboxng.com/blackbox-delivery.js";
+      s.async = true;
+      document.body.appendChild(s);
+    }
+  }, [deliveryMethod]);
+
+  // Listen for BlackBox rate selection
+  useEffect(() => {
+    const el = bbxRef.current;
+    if (!el) return;
+    const handler = (e) => {
+      setBbxFee(Number(e.detail?.fee) || 0);
+      setBbxDropoffArea(e.detail?.dropoff_area || "");
+    };
+    el.addEventListener("bbx:rate", handler);
+    return () => el.removeEventListener("bbx:rate", handler);
+  }, [deliveryMethod]);
+
+  // Fetch seller pickup addresses when pickup is selected
+  useEffect(() => {
+    if (deliveryMethod !== "pickup" || items.length === 0) return;
+    const sellerIds = [...new Set(items.map((it) => {
+      const s = it.product?.seller;
+      return typeof s === "object" ? s?._id : s;
+    }).filter(Boolean))];
+    if (sellerIds.length === 0) return;
+    Promise.all(sellerIds.map((sid) =>
+      apiFetch(`/api/sellers/${sid}`).then((d) => {
+        const s = d.seller || d;
+        return { userId: sid, storeName: s.storeName || s.name || "Seller", address: s.address || "" };
+      }).catch(() => ({ userId: sid, storeName: "Seller", address: "" }))
+    )).then((results) => {
+      const map = {};
+      results.forEach(({ userId, storeName, address }) => { map[userId] = { storeName, address }; });
+      setPickupAddresses(map);
+    });
+  }, [deliveryMethod, items]);
+
   const sub = items.reduce((s, i) => s + (i.product?.price || i.price || 0) * (i.quantity || i.qty || 1), 0);
-  const deliveryFeeTotal = (() => {
-    const seen = new Set();
-    return items.reduce((s, i) => {
-      const pid = (typeof i.product === "object" ? i.product?._id : i.product)?.toString();
-      if (pid && seen.has(pid)) return s;
-      if (pid) seen.add(pid);
-      return s + (i.product?.deliveryFee || 0);
-    }, 0);
-  })();
-  const orderTotal = sub + deliveryFeeTotal;
+  const orderTotal = sub; // delivery is paid in cash to the rider — not part of in-app payment
 
   function getProductId(it) {
     return typeof it.product === "object" ? it.product?._id : it.product;
@@ -93,6 +133,9 @@ export default function Cart() {
             landmark: delivery.landmark,
           },
           notes: delivery.notes,
+          deliveryMethod,
+          blackboxFee: deliveryMethod === "delivery" ? bbxFee : 0,
+          dropoffArea: bbxDropoffArea || "",
         },
       });
       const createdOrders = orderRes.orders || (orderRes.order ? [orderRes.order] : [orderRes]);
@@ -224,9 +267,10 @@ export default function Cart() {
                     <div style={{ display: "flex", justifyContent: "space-between", fontSize: "1.3rem", marginBottom: 6 }}>
                       <span style={{ opacity: 0.75 }}>Subtotal</span><span>{naira(sub)}</span>
                     </div>
-                    {deliveryFeeTotal > 0 && (
+                    {deliveryMethod === "delivery" && bbxFee > 0 && (
                       <div style={{ display: "flex", justifyContent: "space-between", fontSize: "1.3rem", marginBottom: 6 }}>
-                        <span style={{ opacity: 0.75 }}>Delivery fee</span><span>{naira(deliveryFeeTotal)}</span>
+                        <span style={{ opacity: 0.75 }}>Delivery (pay to rider)</span>
+                        <span style={{ color: "#f59e0b" }}>{naira(bbxFee)}</span>
                       </div>
                     )}
                     <div style={{ height: 1, background: "rgba(255,255,255,.15)", margin: "8px 0" }} />
@@ -264,6 +308,83 @@ export default function Cart() {
                 <textarea className="textarea" value={delivery.notes} onChange={(e) => setDelivery({ ...delivery, notes: e.target.value })} placeholder="Leave at the gate, call on arrival, etc." />
               </div>
 
+              {/* Delivery method */}
+              <div className="card" style={{ padding: 16, marginBottom: 16 }}>
+                <div style={{ fontWeight: 700, fontSize: "1.4rem", marginBottom: 12 }}>How do you want to receive this?</div>
+                <div style={{ display: "flex", gap: 10 }}>
+                  {[
+                    { value: "pickup", icon: "fa-person-walking", label: "Self Pickup", sub: "Collect from the seller directly" },
+                    { value: "delivery", icon: "fa-motorcycle", label: "Doorstep Delivery", sub: "BlackBox dispatch rider" },
+                  ].map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => { setDeliveryMethod(opt.value); if (opt.value === "pickup") setBbxFee(0); }}
+                      style={{
+                        flex: 1, padding: "12px 10px", border: `2px solid ${deliveryMethod === opt.value ? "var(--accent)" : "var(--line)"}`,
+                        borderRadius: "var(--r-md)", background: deliveryMethod === opt.value ? "rgba(249,115,22,.05)" : "var(--paper)",
+                        cursor: "pointer", textAlign: "center", transition: "border-color .15s",
+                      }}
+                    >
+                      <i className={`fas ${opt.icon}`} style={{ fontSize: "1.6rem", color: deliveryMethod === opt.value ? "var(--accent)" : "var(--ink-3)", marginBottom: 6, display: "block" }} />
+                      <div style={{ fontWeight: 700, fontSize: "1.25rem" }}>{opt.label}</div>
+                      <div style={{ fontSize: "1.1rem", color: "var(--ink-3)", marginTop: 2 }}>{opt.sub}</div>
+                    </button>
+                  ))}
+                </div>
+
+                {/* Pickup address cards */}
+                {deliveryMethod === "pickup" && Object.keys(pickupAddresses).length > 0 && (
+                  <div style={{ marginTop: 12 }}>
+                    {Object.entries(pickupAddresses).map(([uid, info]) => (
+                      <div key={uid} style={{ marginBottom: 8, padding: "10px 14px", background: "rgba(249,115,22,.06)", border: "1px solid rgba(249,115,22,.25)", borderRadius: "var(--r-md)", display: "flex", gap: 10, alignItems: "flex-start" }}>
+                        <i className="fas fa-location-dot" style={{ color: "var(--accent)", flexShrink: 0, marginTop: 2 }} />
+                        <div>
+                          <div style={{ fontWeight: 700, fontSize: "1.2rem" }}>{info.storeName}</div>
+                          {info.address
+                            ? <div style={{ fontSize: "1.2rem", color: "var(--ink-2)", marginTop: 2 }}>{info.address}</div>
+                            : <div style={{ fontSize: "1.2rem", color: "var(--ink-3)", fontStyle: "italic", marginTop: 2 }}>Address not set — contact seller to arrange pickup</div>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Delivery notice */}
+                {deliveryMethod === "delivery" && (
+                  <div style={{ marginTop: 12, padding: "12px 14px", background: "rgba(245,158,11,.09)", border: "1px solid rgba(245,158,11,.35)", borderRadius: "var(--r-md)", display: "flex", gap: 10, alignItems: "flex-start" }}>
+                    <i className="fas fa-motorcycle" style={{ color: "#d97706", flexShrink: 0, marginTop: 2 }} />
+                    <div style={{ fontSize: "1.2rem", color: "#92400e", lineHeight: 1.55 }}>
+                      The delivery fee is <strong>paid directly to the dispatch rider via transfer</strong> — it is <strong>not</strong> included in your UMP payment.
+                    </div>
+                  </div>
+                )}
+
+                {/* BlackBox rate widget */}
+                {deliveryMethod === "delivery" && (
+                  <div style={{ marginTop: 14 }}>
+                    <div
+                      ref={bbxRef}
+                      id="blackbox-delivery"
+                      data-pickup-area="Yaba"
+                      data-theme="light"
+                      data-show-express="true"
+                    />
+                    {bbxFee > 0 && (
+                      <div style={{ marginTop: 10, display: "flex", justifyContent: "space-between", padding: "10px 14px", background: "rgba(34,197,94,.07)", border: "1px solid rgba(34,197,94,.25)", borderRadius: "var(--r-md)", fontSize: "1.3rem" }}>
+                        <span style={{ color: "var(--ink-2)" }}><i className="fas fa-motorcycle" style={{ marginRight: 6 }} />Delivery fee</span>
+                        <strong style={{ color: "#16a34a" }}>{naira(bbxFee)}</strong>
+                      </div>
+                    )}
+                    {bbxFee === 0 && (
+                      <p style={{ margin: "10px 0 0", fontSize: "1.2rem", color: "var(--ink-3)", textAlign: "center" }}>
+                        <i className="fas fa-circle-info" style={{ marginRight: 5 }} />Select your area above to see the delivery rate
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+
               {stepError && (
                 <div style={{ marginBottom: 14, padding: "10px 14px", background: "#fef2f2", color: "#dc2626", borderRadius: "var(--r-md)", fontSize: "1.3rem", display: "flex", alignItems: "center", gap: 8 }}>
                   <i className="fas fa-circle-exclamation" /> {stepError}
@@ -283,7 +404,7 @@ export default function Cart() {
           {step === 3 && (
             <div style={{ paddingBottom: 24 }}>
               {/* Order summary — hidden on desktop (sidebar shows it) */}
-              <MobileOrderSummary items={items} sub={sub} deliveryFeeTotal={deliveryFeeTotal} orderTotal={orderTotal} />
+              <MobileOrderSummary items={items} sub={sub} deliveryFeeTotal={0} orderTotal={orderTotal} />
 
               {/* Delivery recap */}
               <div className="card" style={{ padding: "12px 16px", marginBottom: 12, fontSize: "1.2rem", color: "var(--ink-2)" }}>
@@ -409,9 +530,10 @@ export default function Cart() {
                 );
               })}
               <div style={{ height: 1, background: "var(--line)", margin: "10px 0" }} />
-              {deliveryFeeTotal > 0 && (
+              {deliveryMethod === "delivery" && bbxFee > 0 && (
                 <div style={{ display: "flex", justifyContent: "space-between", fontSize: "1.3rem", marginBottom: 4 }}>
-                  <span style={{ color: "var(--ink-3)" }}>Delivery fee</span><span>{naira(deliveryFeeTotal)}</span>
+                  <span style={{ color: "var(--ink-3)" }}>Delivery (pay to rider)</span>
+                  <span style={{ color: "#f59e0b" }}>{naira(bbxFee)}</span>
                 </div>
               )}
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>

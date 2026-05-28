@@ -6,12 +6,12 @@ import { LineChart } from '../components/charts';
 import { apiFetch } from '../../utils/api';
 
 const TABS = [
-  { label: 'All',       filter: '' },
-  { label: 'Pending',   filter: 'pending' },
-  { label: 'Verified',  filter: 'verified' },
-  { label: 'Suspended', filter: 'suspended' },
+  { label: 'All',        filter: '' },
+  { label: 'Pending',    filter: 'pending' },
+  { label: 'Subscribed', filter: 'subscribed' },
+  { label: 'Suspended',  filter: 'suspended' },
 ];
-const STATUS_COLOR = { verified: 'green', pending: 'amber', suspended: 'red' };
+const STATUS_COLOR = { subscribed: 'green', pending: 'amber', suspended: 'red' };
 
 export default function Sellers() {
   const navigate = useNavigate();
@@ -219,12 +219,12 @@ function SellerDrawer({ seller, onClose, onApprove, onReject, onMessage }) {
             <div>
               <div style={{ fontSize: '1.6rem', fontWeight: 700, lineHeight: 1.2 }}>
                 {seller.storeName || '—'}
-                {status === 'verified' && (
-                  <i className="fa-solid fa-circle-check" style={{ color: '#f59e0b', fontSize: '1.2rem', marginLeft: 6 }}></i>
+                {status === 'subscribed' && (
+                  <i className="fa-solid fa-crown" style={{ color: '#f59e0b', fontSize: '1.2rem', marginLeft: 6 }}></i>
                 )}
               </div>
               <div className="muted" style={{ fontSize: '1.2rem', marginTop: 2 }}>
-                {status === 'pending' ? 'Awaiting verification' : `Status: ${status}`}
+                {status === 'pending' ? 'Subscription pending' : `Status: ${status}`}
               </div>
               {seller.location && (
                 <div style={{ fontSize: '1.2rem', color: 'var(--ink-3)', marginTop: 2 }}>

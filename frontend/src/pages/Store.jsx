@@ -35,7 +35,7 @@ import Ph from "../components/Ph";
 import { apiFetch } from "../utils/api";
 import Skel from "../components/Skel";
 
-const FILTERS = ["All", "★ 4.5+", "Verified", "Tech", "Fashion", "Books"];
+const FILTERS = ["All", "★ 4.5+", "Subscribed", "Tech", "Fashion", "Books"];
 
 const CAT_KEYWORDS = {
   "Tech":    ["tech", "electronics", "technology", "gadget", "computer", "phone"],
@@ -46,7 +46,7 @@ const CAT_KEYWORDS = {
 function applyFilter(sellers, filter) {
   if (filter === "All") return sellers;
   if (filter === "★ 4.5+") return sellers.filter((s) => (s.rating || 0) >= 4.5);
-  if (filter === "Verified") return sellers.filter((s) => s.isVerified === true);
+  if (filter === "Subscribed") return sellers.filter((s) => s.isSubscribed === true);
   const keywords = CAT_KEYWORDS[filter];
   if (keywords) {
     return sellers.filter((s) =>
@@ -186,11 +186,11 @@ export default function Store() {
                           : <Ph kind="portrait-3" label={(s.storeName || s.name || "S")[0]} />
                         }
                       </div>
-                      {/* Name + verified badge (only if isVerified) */}
+                      {/* Name + subscribed badge */}
                       <div style={{ fontWeight: 700, fontSize: "1.3rem", display: "flex", alignItems: "center", justifyContent: "center", gap: 4 }}>
                         {s.storeName || s.name}
-                        {s.isVerified && (
-                          <i className="fas fa-circle-check" style={{ color: "var(--accent)", fontSize: "1rem" }} title="Verified by UMP" />
+                        {s.isSubscribed && (
+                          <i className="fas fa-crown" style={{ color: "#f59e0b", fontSize: "0.9rem" }} title="UMP Subscribed" />
                         )}
                       </div>
 

@@ -101,6 +101,9 @@ export const checkoutCart = async (req, res) => {
     let { paymentMethod, shippingAddress, deliveryMethod, blackboxFee, dropoffArea } = req.body;
     deliveryMethod = deliveryMethod === "delivery" ? "delivery" : "pickup";
     blackboxFee = deliveryMethod === "delivery" ? Math.max(0, Number(blackboxFee) || 0) : 0;
+    if (deliveryMethod === "delivery" && blackboxFee === 0) {
+      return res.status(400).json({ message: "Please select a delivery rate from the BlackBox widget before checking out." });
+    }
     paymentMethod = paymentMethod?.toLowerCase().trim();
 
     const PAYMENT_MAP = {
@@ -821,12 +824,16 @@ export const bookDispatch = async (req, res) => {
     if (order.deliveryMethod !== "delivery")
       return res.status(400).json({ message: "This order is for pickup — no dispatch needed" });
 
+    if (order.paymentStatus !== "paid")
+      return res.status(400).json({ message: "Cannot book dispatch — payment not confirmed" });
+
     if (order.blackboxTrackingId)
       return res.status(400).json({ message: "Dispatch already booked", trackingId: order.blackboxTrackingId });
 
-    // Confirm the requesting user owns this order's seller account
+    // Confirm the requesting user owns this order's seller account (admins bypass this check)
     const sellerUserId = order.seller?.toString();
-    if (sellerUserId && sellerUserId !== req.user._id.toString()) {
+    const isAdmin = req.user.roles?.includes("admin");
+    if (!isAdmin && sellerUserId && sellerUserId !== req.user._id.toString()) {
       return res.status(403).json({ message: "Not authorised" });
     }
 
@@ -854,9 +861,23 @@ export const bookDispatch = async (req, res) => {
     );
 
     const trackingId = bbxRes.data?.tracking_id || bbxRes.data?.data?.tracking_id;
+    if (!trackingId) {
+      return res.status(502).json({ message: "BlackBox did not return a tracking ID — dispatch may still have been created. Contact support." });
+    }
+
+    // Save tracking ID first; if save fails, return the tracking ID so it's not lost
     order.blackboxTrackingId = trackingId;
     order.status = "shipped";
-    await order.save();
+    try {
+      await order.save();
+    } catch (saveErr) {
+      console.error("bookDispatch: API succeeded but DB save failed", saveErr.message);
+      return res.status(207).json({
+        success: false,
+        trackingId,
+        message: "Dispatch was booked with BlackBox but we failed to save it. Please record this tracking ID and contact support.",
+      });
+    }
 
     notify(order.buyer, {
       type: "order",
