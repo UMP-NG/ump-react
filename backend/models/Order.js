@@ -84,6 +84,12 @@ const orderSchema = new mongoose.Schema(
       },
       initiatedAt: Date,
     },
+    // BlackBox delivery
+    deliveryMethod:      { type: String, enum: ["pickup", "delivery"], default: "pickup" },
+    blackboxFee:         { type: Number, default: 0 },
+    blackboxTrackingId:  { type: String },
+    dropoffArea:         { type: String },
+
     paymentProof: { type: String },
     deliveryCode: { type: String },
     deliveryCodeUsed: { type: Boolean, default: false },

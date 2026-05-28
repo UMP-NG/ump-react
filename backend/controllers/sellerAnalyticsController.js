@@ -201,7 +201,7 @@ export const updateSellerSettings = async (req, res) => {
   try {
     const userId = req.user._id;
 
-    const { storeName, storeBio, description, instagram, tiktok, logoUrl, logoPublicId, bannerUrl, bannerPublicId } = req.body;
+    const { storeName, storeBio, description, address, instagram, tiktok, logoUrl, logoPublicId, bannerUrl, bannerPublicId } = req.body;
     const logo = req.file
       ? { url: req.file.path, publicId: req.file.filename }
       : logoUrl
@@ -216,6 +216,7 @@ export const updateSellerSettings = async (req, res) => {
     if (storeName) seller.storeName = storeName;
     if (storeBio) seller.bio = storeBio;
     if (description) seller.description = description;
+    if (address !== undefined) seller.address = address;
     if (instagram || tiktok) {
       seller.socials = {
         ...seller.socials,

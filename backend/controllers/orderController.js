@@ -7,6 +7,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import PDFDocument from "pdfkit";
 import cloudinary from "../config/cloudinary.js";
+import axios from "axios";
 import { audit } from "../utils/auditLog.js";
 import { notify } from "../utils/notify.js";
 
@@ -97,7 +98,9 @@ export const checkoutCart = async (req, res) => {
       return res.status(400).json({ message: "Cart is empty" });
     }
 
-    let { paymentMethod, shippingAddress } = req.body;
+    let { paymentMethod, shippingAddress, deliveryMethod, blackboxFee, dropoffArea } = req.body;
+    deliveryMethod = deliveryMethod === "delivery" ? "delivery" : "pickup";
+    blackboxFee = deliveryMethod === "delivery" ? Math.max(0, Number(blackboxFee) || 0) : 0;
     paymentMethod = paymentMethod?.toLowerCase().trim();
 
     const PAYMENT_MAP = {
@@ -132,6 +135,7 @@ export const checkoutCart = async (req, res) => {
       return res.status(400).json({ message: "No valid items to order" });
 
     const createdOrders = [];
+    let isFirstOrder = true;
     for (const [sid, sellerItems] of sellerGroups) {
       const orderItems = sellerItems.map((i) => ({
         product: i.product._id,
@@ -141,28 +145,25 @@ export const checkoutCart = async (req, res) => {
       }));
 
       const subtotal = orderItems.reduce((s, i) => s + i.price * i.quantity, 0);
-      const seenPids = new Set();
-      const deliveryFee = sellerItems.reduce((s, i) => {
-        const pid = i.product._id?.toString();
-        if (pid && seenPids.has(pid)) return s;
-        if (pid) seenPids.add(pid);
-        return s + Math.max(0, i.product.deliveryFee || 0);
-      }, 0);
-
+      // Delivery fee is always 0 — buyer pays the rider directly in cash, not through UMP
       const order = new Order({
         buyer: userId,
         seller: new mongoose.Types.ObjectId(sid),
         items: orderItems,
         subtotal,
-        deliveryFee,
-        totalAmount: subtotal + deliveryFee,
+        deliveryFee: 0,
+        totalAmount: subtotal,
         shippingAddress: shippingAddress || {},
         paymentMethod,
+        deliveryMethod,
+        blackboxFee: isFirstOrder ? blackboxFee : 0, // stored for display on orders page
+        dropoffArea: dropoffArea || "",
         status: "pending",
         deliveryCode: generateDeliveryCode(),
       });
       await order.save();
       createdOrders.push(order);
+      isFirstOrder = false;
     }
 
     cart.items = [];
@@ -807,6 +808,67 @@ export const getCurrentOrder = async (req, res) => {
   } catch (err) {
     console.error("💥 getCurrentOrder error:", err);
     res.status(500).json({ message: "Failed to fetch current order" });
+  }
+};
+
+// POST /api/orders/:orderId/book-dispatch
+// Called by SELLER — books a BlackBox delivery ride for this order.
+export const bookDispatch = async (req, res) => {
+  try {
+    const order = await Order.findById(req.params.orderId).populate("items.product", "name");
+    if (!order) return res.status(404).json({ message: "Order not found" });
+
+    if (order.deliveryMethod !== "delivery")
+      return res.status(400).json({ message: "This order is for pickup — no dispatch needed" });
+
+    if (order.blackboxTrackingId)
+      return res.status(400).json({ message: "Dispatch already booked", trackingId: order.blackboxTrackingId });
+
+    // Confirm the requesting user owns this order's seller account
+    const sellerUserId = order.seller?.toString();
+    if (sellerUserId && sellerUserId !== req.user._id.toString()) {
+      return res.status(403).json({ message: "Not authorised" });
+    }
+
+    const packageDescription = order.items
+      .map((i) => `${i.product?.name || "Item"} ×${i.quantity}`)
+      .join(", ");
+
+    const bbxRes = await axios.post(
+      "https://app.blackboxng.com/api/public/import-delivery",
+      {
+        platform: "ump",
+        platform_order_id: order._id.toString(),
+        recipient_name: order.shippingAddress?.name || "",
+        recipient_phone: order.shippingAddress?.phone || "",
+        dropoff_area: order.dropoffArea || "Yaba",
+        dropoff_address: order.shippingAddress?.address || "",
+        package_description: packageDescription,
+        payment_method: "sender_pays",
+        is_express: false,
+      },
+      {
+        headers: { Authorization: `Bearer ${process.env.BLACKBOX_API_KEY}`, "Content-Type": "application/json" },
+        timeout: 15000,
+      }
+    );
+
+    const trackingId = bbxRes.data?.tracking_id || bbxRes.data?.data?.tracking_id;
+    order.blackboxTrackingId = trackingId;
+    order.status = "shipped";
+    await order.save();
+
+    notify(order.buyer, {
+      type: "order",
+      title: "Your order is on the way!",
+      message: `Your order is being dispatched. BlackBox tracking ID: ${trackingId}`,
+      link: "/orders",
+    });
+
+    return res.json({ success: true, trackingId, message: "Dispatch booked successfully" });
+  } catch (err) {
+    console.error("bookDispatch error:", err.response?.data || err.message);
+    return res.status(500).json({ message: err.response?.data?.message || "Failed to book dispatch" });
   }
 };
 

@@ -35,10 +35,14 @@ const sellerSchema = new mongoose.Schema(
     description: { type: String, trim: true },
     location: { type: String, trim: true },
 
-    // ✅ Store Verification
+    // ✅ Store Verification (school-mail auth — do NOT use for badge display)
     isVerified: { type: Boolean, default: false },
     verificationRequested: { type: Boolean, default: false },
     isSuspended: { type: Boolean, default: false },
+
+    // ✅ Paid subscription — controls the crown badge on store/product pages
+    isSubscribed: { type: Boolean, default: false },
+    subscriptionRequested: { type: Boolean, default: false },
 
     // ✅ Relationship with products
     products: [{ type: mongoose.Schema.Types.ObjectId, ref: "Product" }],

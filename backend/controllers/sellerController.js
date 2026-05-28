@@ -59,11 +59,11 @@ export const requestSellerVerification = async (req, res) => {
   try {
     const seller = await Seller.findOneAndUpdate(
       { user: req.user._id },
-      { verificationRequested: true },
+      { subscriptionRequested: true },
       { new: true }
     );
     if (!seller) return res.status(404).json({ message: "Seller profile not found" });
-    res.json({ success: true, message: "Verification request submitted", seller });
+    res.json({ success: true, message: "Subscription request submitted", seller });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -165,7 +165,8 @@ export const followSeller = async (req, res) => {
       return res.status(400).json({ message: "You cannot follow yourself" });
     }
 
-    const seller = await Seller.findById(sellerId);
+    // Accept both Seller _id and the seller's User _id
+    const seller = await Seller.findOne({ $or: [{ _id: sellerId }, { user: sellerId }] });
     if (!seller) return res.status(404).json({ message: "Seller not found" });
 
     const alreadyFollowing = seller.followers.includes(userId);
@@ -191,7 +192,7 @@ export const followSeller = async (req, res) => {
 
 export const unfollowSeller = async (req, res) => {
   try {
-    const seller = await Seller.findById(req.params.id);
+    const seller = await Seller.findOne({ $or: [{ _id: req.params.id }, { user: req.params.id }] });
     const user = await User.findById(req.user._id);
 
     if (!seller) return res.status(404).json({ message: "Seller not found" });

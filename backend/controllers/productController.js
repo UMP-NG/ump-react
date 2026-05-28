@@ -328,19 +328,25 @@ export const getProductById = async (req, res) => {
       })();
     }
 
-    // Normalize seller info for frontend
-    const isUserFollowing = product.seller?.followers?.some(
-      (followerId) => followerId.toString?.() === userId || followerId === userId
-    );
+    // Fetch Seller profile for address, sellerProfileId, and correct follower count
+    const sellerProfile = await Seller.findOne({ user: product.seller._id })
+      .select("_id storeName address location logo followers followersCount")
+      .lean();
+
+    const isUserFollowing = sellerProfile
+      ? sellerProfile.followers?.some((f) => f.toString?.() === userId || f === userId)
+      : product.seller?.followers?.some((f) => f.toString?.() === userId || f === userId);
 
     const normalized = {
       ...product,
       reviews: [],
       seller: {
         _id: product.seller._id,
+        sellerProfileId: sellerProfile?._id || null,
         name: product.seller.name,
         email: product.seller.email,
         storeName:
+          sellerProfile?.storeName ||
           product.seller.sellerInfo?.storeName ||
           product.seller.name ||
           "Unknown Seller",
@@ -348,9 +354,10 @@ export const getProductById = async (req, res) => {
           product.seller.sellerInfo?.description ||
           product.seller.bio ||
           "No seller story yet",
-        logo: product.seller.avatar || "../images/guy.png",
-        followerCount: product.seller.followers?.length || 0,
+        logo: sellerProfile?.logo?.url || product.seller.avatar || "../images/guy.png",
+        followerCount: sellerProfile?.followers?.length || product.seller.followers?.length || 0,
         bio: product.seller.bio || "No bio available",
+        address: sellerProfile?.address || sellerProfile?.location || "",
         isFollowing: isUserFollowing,
       },
     };

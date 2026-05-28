@@ -12,6 +12,7 @@ import {
   getIncomingOrders,
   checkoutCart,
   confirmDelivery,
+  bookDispatch,
   confirmTransfer,
   getEscrowDetails,
   getCurrentOrder,
@@ -90,6 +91,14 @@ router.put(
   requireRole("user", "seller", "admin"),
   verifyToken,
   confirmDelivery
+);
+
+// ✅ Book BlackBox dispatch (seller only)
+router.post(
+  "/:orderId/book-dispatch",
+  protect,
+  requireRole("seller", "admin"),
+  bookDispatch
 );
 
 router.get(

@@ -49,8 +49,8 @@ const startOf = (daysAgo) => {
 
 // Derive a readable seller verification status from boolean fields
 const sellerStatus = (s) => {
-  if (s.isSuspended) return "suspended";
-  if (s.isVerified)  return "verified";
+  if (s.isSuspended)   return "suspended";
+  if (s.isSubscribed)  return "subscribed";
   return "pending";
 };
 
@@ -80,7 +80,7 @@ export const getAdminStats = async (req, res) => {
       User.countDocuments(),
       Seller.countDocuments({ createdAt: { $gte: since } }),
       Seller.countDocuments(),
-      Seller.countDocuments({ isVerified: false, verificationRequested: true }),
+      Seller.countDocuments({ isSubscribed: false, subscriptionRequested: true }),
 
       Order.aggregate([
         {
@@ -239,7 +239,7 @@ export const getRecentOrders = async (req, res) => {
 export const getPendingVerifications = async (req, res) => {
   try {
     const limit = Math.min(parseInt(req.query.limit) || 4, 20);
-    const sellers = await Seller.find({ isVerified: false, verificationRequested: true })
+    const sellers = await Seller.find({ isSubscribed: false, subscriptionRequested: true })
       .sort({ createdAt: -1 })
       .limit(limit)
       .populate("user", "name email")
@@ -339,8 +339,8 @@ export const getAdminSellers = async (req, res) => {
     const skip  = (page - 1) * limit;
 
     const filter = {};
-    if (status === "verified")  { filter.isVerified = true; filter.isSuspended = { $ne: true }; }
-    if (status === "pending")   { filter.isVerified = false; filter.isSuspended = { $ne: true }; }
+    if (status === "subscribed") { filter.isSubscribed = true; filter.isSuspended = { $ne: true }; }
+    if (status === "pending")   { filter.isSubscribed = false; filter.isSuspended = { $ne: true }; }
     if (status === "suspended") { filter.isSuspended = true; }
     if (q) {
       const safe = q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -429,9 +429,9 @@ export const approveSeller = async (req, res) => {
   try {
     const seller = await Seller.findById(req.params.sellerId);
     if (!seller) return res.status(404).json({ message: "Seller not found" });
-    seller.isVerified            = true;
-    seller.verificationRequested = false;
-    seller.isSuspended           = false;
+    seller.isSubscribed           = true;
+    seller.subscriptionRequested  = false;
+    seller.isSuspended            = false;
     await seller.save();
     res.json({ success: true });
   } catch (err) {
@@ -443,13 +443,13 @@ export const rejectSeller = async (req, res) => {
   try {
     const seller = await Seller.findById(req.params.sellerId);
     if (!seller) return res.status(404).json({ message: "Seller not found" });
-    // If currently verified → suspend, otherwise → reject application
-    if (seller.isVerified) {
+    // If currently subscribed → suspend, otherwise → reject subscription request
+    if (seller.isSubscribed) {
       seller.isSuspended = true;
     } else {
-      seller.verificationRequested = false;
+      seller.subscriptionRequested = false;
     }
-    seller.isVerified = false;
+    seller.isSubscribed = false;
     await seller.save();
     res.json({ success: true });
   } catch (err) {
