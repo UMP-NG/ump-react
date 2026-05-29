@@ -62,7 +62,7 @@ export default function Bookings() {
         </div>
       </div>
 
-      <div className="adm-stats" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
+      <div className="adm-stats adm-stats-4">
         <MiniStat label="Pending"   value={summary?.pending   ?? '—'} icon="fa-hourglass-half" color="#eab308" />
         <MiniStat label="Confirmed" value={summary?.confirmed  ?? '—'} icon="fa-calendar-check" color="#3b82f6" />
         <MiniStat label="Completed" value={summary?.completed  ?? '—'} icon="fa-circle-check"   color="#22c55e" />

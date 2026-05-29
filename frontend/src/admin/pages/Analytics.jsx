@@ -82,7 +82,7 @@ export default function Analytics() {
       </div>
 
       {/* KPI row */}
-      <div className="adm-stats" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
+      <div className="adm-stats adm-stats-4">
         <MiniStat label="GMV (90d)"         value={data?.gmv90d    || '₦0'} icon="fa-naira-sign"    color="#f97316" />
         <MiniStat label="Platform fees"     value={data?.fees90d   || '₦0'} icon="fa-percent"       color="#22c55e" />
         <MiniStat label="Avg order value"   value={data?.avgOrder  || '₦0'} icon="fa-cart-shopping" color="#3b82f6" />
@@ -138,11 +138,13 @@ export default function Analytics() {
               <p>No category data yet</p>
             </div>
           ) : (
-            <div className="adm-card-body" style={{ display: 'flex', gap: 24, alignItems: 'center' }}>
-              <PieChart
-                data={categoryMix.map((c, i) => ({ v: c.v || c.pct || 1, c: PIE_COLORS[i % PIE_COLORS.length] }))}
-                size={180}
-              />
+            <div className="adm-card-body pie-body" style={{ display: 'flex', gap: 24, alignItems: 'center' }}>
+              <div className="pie-chart-wrap">
+                <PieChart
+                  data={categoryMix.map((c, i) => ({ v: c.v || c.pct || 1, c: PIE_COLORS[i % PIE_COLORS.length] }))}
+                  size={180}
+                />
+              </div>
               <div className="pie-legend" style={{ flex: 1 }}>
                 {categoryMix.map((c, i) => (
                   <div className="row" key={c.label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
@@ -163,6 +165,7 @@ export default function Analytics() {
 
         <div className="adm-card">
           <div className="adm-card-head"><h3>Top sellers (90d)</h3></div>
+
           <div className="adm-scroll-x">
             <table className="adm-table">
               <thead>

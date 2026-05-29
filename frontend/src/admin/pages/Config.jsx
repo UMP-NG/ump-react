@@ -212,13 +212,13 @@ export default function Config() {
             )}
             {slides.map((s, i) => (
               <div key={i} style={{ border: '1px solid #e3e5eb', borderRadius: 10, padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {/* Row 1: drag + thumb + title + toggle + delete */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <div className="hero-drag"><i className="fa-solid fa-grip-vertical"></i></div>
+                {/* Row 1: drag + thumb + title + toggle + delete — wraps on mobile */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <div className="hero-drag" style={{ flexShrink: 0 }}><i className="fa-solid fa-grip-vertical"></i></div>
                   <div
                     className="hero-thumb"
                     title="Click to upload slide image"
-                    style={{ cursor: 'pointer', position: 'relative', flexShrink: 0 }}
+                    style={{ cursor: 'pointer', position: 'relative', flexShrink: 0, width: 80, height: 50 }}
                     onClick={() => !slideUploading.has(i) && slideInputRefs.current[i]?.click()}
                   >
                     {slideUploading.has(i)
@@ -229,7 +229,7 @@ export default function Config() {
                     }
                     {s.image?.url
                       ? <img src={s.image.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 6 }} />
-                      : <div className="img-ph ph-electronics" style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem', color: '#94a3b8', gap: 4 }}>
+                      : <div style={{ width: '100%', height: '100%', background: '#f5f6f8', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem', color: '#94a3b8', gap: 4 }}>
                           <i className="fa-solid fa-image" /> {i + 1}
                         </div>
                     }
@@ -241,14 +241,16 @@ export default function Config() {
                       onChange={e => handleSlideImageUpload(e, i)}
                     />
                   </div>
+                  {/* Title input takes remaining space; on mobile this wraps to its own line */}
                   <input
-                    style={{ flex: 1, border: 'none', fontWeight: 600, fontSize: '1.3rem', background: 'transparent', fontFamily: 'inherit', color: 'var(--ink-1)', outline: 'none' }}
+                    style={{ flex: '1 1 140px', border: 'none', fontWeight: 600, fontSize: '1.3rem', background: 'transparent', fontFamily: 'inherit', color: 'var(--ink-1)', outline: 'none', minWidth: 0 }}
                     value={s.title || ''}
                     onChange={e => setSlides(prev => prev.map((sl, j) => j === i ? { ...sl, title: e.target.value } : sl))}
                     placeholder="Slide title"
                   />
                   <span
                     className={`adm-toggle${s.on ? ' on' : ''}`}
+                    style={{ flexShrink: 0 }}
                     onClick={() => setSlides(prev => prev.map((sl, j) => j === i ? { ...sl, on: !sl.on } : sl))}
                   ></span>
                   <button
@@ -266,19 +268,19 @@ export default function Config() {
                   placeholder="Subtitle / description (optional)"
                   style={{ fontSize: '1.2rem', borderRadius: 6, border: '1px solid #e3e5eb', padding: '6px 10px', fontFamily: 'inherit', color: 'var(--ink-2)', background: 'var(--surface)' }}
                 />
-                {/* Row 3: link + CTA label */}
-                <div style={{ display: 'flex', gap: 8 }}>
+                {/* Row 3: link + CTA label — stacks on small screens */}
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   <input
                     value={s.url || ''}
                     onChange={e => setSlides(prev => prev.map((sl, j) => j === i ? { ...sl, url: e.target.value } : sl))}
                     placeholder="Link (e.g. /market or https://…)"
-                    style={{ flex: 2, fontSize: '1.2rem', borderRadius: 6, border: '1px solid #e3e5eb', padding: '6px 10px', fontFamily: 'inherit', color: 'var(--ink-2)', background: 'var(--surface)' }}
+                    style={{ flex: '2 1 160px', fontSize: '1.2rem', borderRadius: 6, border: '1px solid #e3e5eb', padding: '6px 10px', fontFamily: 'inherit', color: 'var(--ink-2)', background: 'var(--surface)' }}
                   />
                   <input
                     value={s.ctaLabel || ''}
                     onChange={e => setSlides(prev => prev.map((sl, j) => j === i ? { ...sl, ctaLabel: e.target.value } : sl))}
                     placeholder="Button label (e.g. Explore)"
-                    style={{ flex: 1, fontSize: '1.2rem', borderRadius: 6, border: '1px solid #e3e5eb', padding: '6px 10px', fontFamily: 'inherit', color: 'var(--ink-2)', background: 'var(--surface)' }}
+                    style={{ flex: '1 1 120px', fontSize: '1.2rem', borderRadius: 6, border: '1px solid #e3e5eb', padding: '6px 10px', fontFamily: 'inherit', color: 'var(--ink-2)', background: 'var(--surface)' }}
                   />
                 </div>
               </div>

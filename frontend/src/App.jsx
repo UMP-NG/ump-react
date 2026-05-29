@@ -10,6 +10,7 @@ import { useUser } from "./context/UserContext";
 
 import Home from "./pages/Home";
 import Market from "./pages/Market";
+import Hustle from "./pages/Hustle";
 import ProductDetail from "./pages/ProductDetail";
 import Cart from "./pages/Cart";
 import CheckoutSuccess from "./pages/CheckoutSuccess";
@@ -77,7 +78,8 @@ export default function App() {
     <Routes>
       {/* Core */}
       <Route path="/" element={<Home />} />
-      <Route path="/market" element={<Market />} />
+      <Route path="/market"  element={<Market />} />
+      <Route path="/hustle" element={<Hustle />} />
       <Route path="/search" element={<Search />} />
       <Route path="/products/:id" element={<ProductDetail />} />
       <Route path="/category/:slug" element={<Category />} />

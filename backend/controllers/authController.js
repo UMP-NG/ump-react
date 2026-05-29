@@ -372,7 +372,10 @@ export const getMe = (req, res) => {
       schoolEmailVerified: u.schoolEmailVerified,
       status:          u.status,
       createdAt:       u.createdAt,
-      isLimitedAccount: !!(u.googleAccount && !u.isVerified),
+      isLimitedAccount:         !!(u.googleAccount && !u.isVerified),
+      notificationPreferences:  u.notificationPreferences || {},
+      serviceProviderInfo:      u.serviceProviderInfo,
+      fcmToken:                 u.fcmToken ? true : undefined, // presence only, not the actual token
     },
   });
 };

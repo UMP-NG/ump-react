@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { apiFetch } from '../../utils/api';
+import { subscribeToPush } from '../../utils/push';
 
 const AUDIENCES = [
   { id: 'all',      icon: 'fa-users',         label: 'All users' },
@@ -46,6 +47,8 @@ export default function Broadcast() {
     setTesting(true);
     setSendError('');
     setSendSuccess('');
+    // Always re-subscribe before testing to ensure the subscription is fresh
+    await subscribeToPush().catch(() => {});
     try {
       const res = await apiFetch('/api/push/test', { method: 'POST' });
       setSendSuccess(`Test push sent to ${res.devices} device(s). Check your OS notifications.`);

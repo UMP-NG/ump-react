@@ -205,9 +205,9 @@ export default function Dashboard() {
             <h3>Activity over time</h3>
             <div className="muted" style={{ fontSize: '1.2rem', marginTop: 2 }}>{periodLabel}</div>
           </div>
-          <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
             <div className="chart-toggle">
-              {[['orders', 'Orders'], ['revenue', 'Revenue'], ['users', 'New users']].map(([k, lbl]) => (
+              {[['orders', 'Orders'], ['revenue', 'Revenue'], ['users', 'Users']].map(([k, lbl]) => (
                 <button key={k} className={metric === k ? 'active' : ''} onClick={() => setMetric(k)}>
                   {lbl}
                 </button>

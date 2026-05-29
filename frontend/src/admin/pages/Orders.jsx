@@ -109,7 +109,7 @@ export default function Orders() {
         </div>
       </div>
 
-      <div className="adm-stats" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
+      <div className="adm-stats adm-stats-4">
         <MiniStat label="Pending"              value={summary?.pending ?? '—'}    icon="fa-clock"        color="#eab308" />
         <MiniStat label="Shipped"              value={summary?.shipped ?? '—'}    icon="fa-truck"        color="#3b82f6" />
         <MiniStat label="Completed"            value={summary?.completed ?? '—'}  icon="fa-circle-check" color="#22c55e" />

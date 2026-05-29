@@ -38,8 +38,24 @@ export async function subscribeToPush() {
     const perm = await Notification.requestPermission();
     if (perm !== "granted") return "denied";
 
-    // 4. Subscribe (or get existing subscription)
+    // 4. Subscribe (or refresh if the stored subscription belongs to a different VAPID key)
     let sub = await reg.pushManager.getSubscription();
+    if (sub) {
+      // Compare stored key against current VAPID key — mismatch means the backend
+      // regenerated its keys and this subscription will always 401 on delivery
+      const storedKey = sub.options?.applicationServerKey;
+      const currentKey = urlBase64ToUint8Array(key);
+      let keyMismatch = false;
+      if (storedKey) {
+        const stored = new Uint8Array(storedKey);
+        keyMismatch = stored.length !== currentKey.length ||
+          stored.some((b, i) => b !== currentKey[i]);
+      }
+      if (keyMismatch) {
+        await sub.unsubscribe();
+        sub = null;
+      }
+    }
     if (!sub) {
       sub = await reg.pushManager.subscribe({
         userVisibleOnly: true,

@@ -96,7 +96,7 @@ export default function Payouts() {
         </div>
       </div>
 
-      <div className="adm-stats" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
+      <div className="adm-stats adm-stats-4">
         <MiniStat label="Pending value"  value={summary?.pendingValue  ?? '₦—'} icon="fa-hourglass"           color="#eab308" />
         <MiniStat label="Approved today" value={summary?.approvedToday ?? '₦—'} icon="fa-check"               color="#22c55e" />
         <MiniStat label="Paid this month" value={summary?.paidThisMonth ?? '₦—'} icon="fa-money-bill-transfer" color="#3b82f6" />

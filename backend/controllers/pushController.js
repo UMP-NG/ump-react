@@ -57,14 +57,17 @@ export const subscribe = async (req, res) => {
 export const sendTestPush = async (req, res) => {
   if (!_pushReady) return res.status(503).json({ message: "Push not configured on this server" });
   const subs = await PushSub.find({ user: req.user._id });
-  if (!subs.length) return res.status(404).json({ message: "No push subscription found. Make sure you have granted notification permission in this browser." });
-  await sendPushToSubs(subs, {
+  if (!subs.length) return res.status(404).json({ message: "No push subscription found. Open the site in your browser, grant notification permission, then try again." });
+  const delivered = await sendPushToSubs(subs, {
     title: "UMP push test",
     body:  "Push notifications are working correctly.",
     url:   "/admin/broadcast",
     icon:  "/icon-192.png",
   });
-  res.json({ success: true, devices: subs.length });
+  if (delivered === 0) {
+    return res.status(502).json({ message: `Push subscription found but delivery failed for all ${subs.length} device(s). The subscription may be stale — try revoking and re-granting notification permission, then test again.` });
+  }
+  res.json({ success: true, devices: delivered });
 };
 
 // POST /api/push/open/:broadcastId  — called by service worker on notification click
@@ -146,10 +149,17 @@ export async function sendPushToSubs(subs, payload) {
         );
         delivered++;
       } catch (err) {
-        if (err.statusCode === 410 || err.statusCode === 404) {
+        const code = err.statusCode;
+        if (code === 410 || code === 404) {
           dead.push(sub.endpoint);   // subscription expired — remove it
+        } else if (code === 401 || code === 403) {
+          // VAPID key mismatch — subscription was created with a different key;
+          // treat as dead so the browser re-subscribes on next login
+          dead.push(sub.endpoint);
+          console.error(`Push VAPID auth error (${code}) for endpoint ${sub.endpoint.slice(-20)} — removing stale subscription`);
+        } else {
+          console.error(`Push delivery error (${code ?? err.message}) for endpoint ${sub.endpoint.slice(-20)}`);
         }
-        // Other errors (502 etc.) are transient — don't remove
       }
     })
   );

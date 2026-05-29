@@ -3,20 +3,20 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { useUser } from "../context/UserContext";
 
 const MAIN = [
-  { id: "home",      path: "/",          icon: "house",              label: "Home" },
-  { id: "market",    path: "/market",    icon: "store",              label: "Market" },
-  { id: "services",  path: "/services",  icon: "hand-holding-heart", label: "Services" },
-  { id: "providers", path: "/providers", icon: "people-group",       label: "Providers" },
+  { id: "home",     path: "/",         icon: "house",              label: "Home" },
+  { id: "market",   path: "/market",   icon: "store",              label: "Market" },
+  { id: "services", path: "/services", icon: "hand-holding-heart", label: "Services" },
+  { id: "hostel",   path: "/hostel",   icon: "bed",                label: "Hostel Hub" },
 ];
 
 const MORE_ITEMS = [
-  { id: "hostel",   path: "/hostel",   icon: "bed",           label: "Hostel Hub" },
-  { id: "messages", path: "/messages", icon: "comment-dots",  label: "Chats" },
-  { id: "orders",   path: "/orders",   icon: "box-open",      label: "My Orders" },
-  { id: "wishlist", path: "/wishlist", icon: "heart",         label: "Wishlist",  authOnly: true },
-  { id: "partner",  path: "/partner",  icon: "circle-plus",   label: "Become a Partner", authOnly: true },
+  { id: "hustle",   path: "/hustle",   icon: "bolt",             label: "The Hustle" },
+  { id: "messages", path: "/messages", icon: "comment-dots",     label: "Chats" },
+  { id: "orders",   path: "/orders",   icon: "box-open",         label: "My Orders" },
   { id: "search",   path: "/search",   icon: "magnifying-glass", label: "Search" },
-  { id: "cart",     path: "/cart",     icon: "bag-shopping",  label: "Cart" },
+  { id: "cart",     path: "/cart",     icon: "bag-shopping",     label: "Cart" },
+  { id: "wishlist", path: "/wishlist", icon: "heart",            label: "Wishlist",  authOnly: true },
+  { id: "partner",  path: "/partner",  icon: "circle-plus",      label: "Become a Partner", authOnly: true },
 ];
 
 export default function BottomNav() {

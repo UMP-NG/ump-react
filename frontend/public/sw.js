@@ -8,8 +8,8 @@ self.addEventListener("push", (event) => {
   const title   = data.title || "UMP";
   const options = {
     body:    data.body  || "",
-    icon:    data.icon  || "/images/ump-icon.svg",
-    badge:   data.badge || "/images/ump-icon.svg",
+    icon:    data.icon  || "/icon-192.png",
+    badge:   data.badge || "/badge-72.png",
     tag:     data.tag   || "ump-broadcast",
     renotify: true,
     data:    { url: data.url || "/" },
