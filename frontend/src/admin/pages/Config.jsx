@@ -2,6 +2,11 @@ import { useState, useEffect, useRef } from 'react';
 import { apiFetch } from '../../utils/api';
 import { useAppConfig } from '../../context/AppConfigContext';
 
+const DEFAULT_SUBS = {
+  seller:   { monthly: { price: 3000, label: 'Monthly' }, annual: { price: 25000, label: 'Annual', badge: 'Save 31%' } },
+  provider: { monthly: { price: 3000, label: 'Monthly' }, annual: { price: 25000, label: 'Annual', badge: 'Save 31%' } },
+};
+
 const DEFAULT_FLAGS = [
   { key: 'hostelListings',        label: 'Hostel listings',         sub: 'Off-campus rental hub',         on: true },
   { key: 'serviceMarketplace',    label: 'Service marketplace',     sub: 'Peer-to-peer freelance gigs',   on: true },
@@ -19,10 +24,6 @@ export default function Config() {
   const [flags, setFlags] = useState(DEFAULT_FLAGS);
   const [slides, setSlides] = useState([]);
   const [logo, setLogo] = useState({ url: '', publicId: '' });
-  const DEFAULT_SUBS = {
-    seller:   { monthly: { price: 3000, label: 'Monthly' }, annual: { price: 25000, label: 'Annual', badge: 'Save 31%' } },
-    provider: { monthly: { price: 3000, label: 'Monthly' }, annual: { price: 25000, label: 'Annual', badge: 'Save 31%' } },
-  };
   const [subs, setSubs] = useState(DEFAULT_SUBS);
   const [logoUploading, setLogoUploading] = useState(false);
   const logoInputRef = useRef();
@@ -39,10 +40,16 @@ export default function Config() {
       if (d?.slides) setSlides(d.slides);
       else setSlides([]);
       if (d?.logo?.url) setLogo(d.logo);
-      if (d?.subscriptions) setSubs(s => ({
-        seller:   { ...s.seller,   ...d.subscriptions.seller },
-        provider: { ...s.provider, ...d.subscriptions.provider },
-      }));
+      if (d?.subscriptions) setSubs(s => {
+        const deepMerge = (def, srv) => ({
+          monthly: { ...def.monthly, ...(srv?.monthly || {}) },
+          annual:  { ...def.annual,  ...(srv?.annual  || {}) },
+        });
+        return {
+          seller:   deepMerge(s.seller,   d.subscriptions.seller),
+          provider: deepMerge(s.provider, d.subscriptions.provider),
+        };
+      });
     }).catch(() => {});
   }, []);
 

@@ -21,8 +21,13 @@ async function getSubscriptionPrice(type, plan) {
 
 function subscriptionExpiresAt(plan) {
   const d = new Date();
-  if (plan === "annual") d.setFullYear(d.getFullYear() + 1);
-  else d.setMonth(d.getMonth() + 1);
+  if (plan === "annual") {
+    d.setFullYear(d.getFullYear() + 1);
+  } else {
+    // Add 30 days instead of setMonth(+1) to avoid month-end overflow
+    // (e.g. Jan 31 + 1 month via setMonth would roll over to Mar 3)
+    d.setDate(d.getDate() + 30);
+  }
   return d;
 }
 
@@ -48,6 +53,9 @@ async function activateSubscription(payment) {
 export const initializeSubscriptionPayment = async (req, res) => {
   try {
     const { plan, type } = req.body;
+    // Validate both fields before hitting the DB to give accurate error messages
+    if (!["seller", "provider"].includes(type))
+      return res.status(400).json({ success: false, message: "Invalid subscription type. Choose seller or provider." });
     if (!["monthly", "annual"].includes(plan))
       return res.status(400).json({ success: false, message: "Invalid plan. Choose monthly or annual." });
     const amount = await getSubscriptionPrice(type, plan);

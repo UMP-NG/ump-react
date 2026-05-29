@@ -73,8 +73,11 @@ export default function SubscribePage() {
         method: "POST",
         body: { plan: selected, type: isSeller ? "seller" : "provider" },
       });
-      // Redirect to Paystack checkout
-      window.location.href = res.authorization_url;
+      const url = res.authorization_url;
+      if (!url || !url.startsWith("https://")) {
+        throw new Error("Invalid payment URL received. Please try again.");
+      }
+      window.location.href = url;
     } catch (err) {
       showToast(err?.message || "Failed to start payment. Please try again.", "error");
       setRequesting(false);

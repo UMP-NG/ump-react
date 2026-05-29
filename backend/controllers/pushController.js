@@ -46,7 +46,10 @@ export const subscribe = async (req, res) => {
 
     const user = await User.findById(req.user._id).select("roles").lean();
     const roles = user?.roles || ["user"];
-    const origin = req.headers.origin || req.headers.referer?.replace(/\/$/, "") || "";
+    let origin = req.headers.origin || "";
+    if (!origin && req.headers.referer) {
+      try { origin = new URL(req.headers.referer).origin; } catch { origin = ""; }
+    }
 
     // Upsert — same endpoint might re-subscribe after browser restart
     await PushSub.findOneAndUpdate(

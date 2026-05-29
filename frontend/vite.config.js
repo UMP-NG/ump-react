@@ -7,7 +7,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['images/ump-icon.svg', 'images/ump-banner.svg', 'images/ump-logo.jpeg', 'images/market.png', 'images/hostel-hub.png'],
+      includeAssets: ['images/ump-icon.svg', 'images/ump-banner.svg', 'images/ump-logo.png', 'images/market.png', 'images/hostel-hub.png'],
       manifest: {
         name: 'UMP – University Marketplace',
         short_name: 'UMP',
@@ -28,15 +28,19 @@ export default defineConfig({
             purpose: 'any maskable',
           },
           {
-            // JPEG fallback for platforms that do not support SVG icons
-            src: 'images/ump-logo.jpeg',
+            // PNG fallback for platforms that do not support SVG icons
+            // purpose is intentionally "any" only — maskable requires a guaranteed
+            // safe zone which a single-size PNG cannot reliably provide
+            src: 'images/ump-logo.png',
             sizes: '192x192',
-            type: 'image/jpeg',
+            type: 'image/png',
+            purpose: 'any',
           },
           {
-            src: 'images/ump-logo.jpeg',
+            src: 'images/ump-logo.png',
             sizes: '512x512',
-            type: 'image/jpeg',
+            type: 'image/png',
+            purpose: 'any',
           },
         ],
         shortcuts: [

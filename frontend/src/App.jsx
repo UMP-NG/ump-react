@@ -1,4 +1,4 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, Component } from "react";
 import { Routes, Route, useLocation } from "react-router-dom";
 import FloatingChat from "./components/FloatingChat";
 import PrivateRoute from "./components/PrivateRoute";
@@ -46,6 +46,25 @@ const NotFound         = lazy(() => import("./pages/NotFound"));
 const Terms            = lazy(() => import("./pages/Terms"));
 const Privacy          = lazy(() => import("./pages/Privacy"));
 
+// Catches chunk-load errors (e.g. network failure while lazy-loading a route)
+// and shows a simple reload prompt instead of a blank screen.
+class ChunkErrorBoundary extends Component {
+  constructor(props) { super(props); this.state = { failed: false }; }
+  static getDerivedStateFromError() { return { failed: true }; }
+  render() {
+    if (this.state.failed) {
+      return (
+        <div style={{ minHeight: "60vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16, padding: "40px 24px", textAlign: "center" }}>
+          <i className="fas fa-wifi" style={{ fontSize: "3rem", color: "var(--ink-3)" }} />
+          <p style={{ fontSize: "1.5rem", color: "var(--ink-2)", margin: 0 }}>Something didn't load. Check your connection and try again.</p>
+          <button className="btn btn-primary" onClick={() => window.location.reload()}>Reload page</button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 // Minimal fallback shown while a route chunk is downloading
 function PageLoader() {
   return (
@@ -84,6 +103,7 @@ export default function App() {
     <LimitedAccountBanner />
     <FloatingChat />
     <InstallPrompt />
+    <ChunkErrorBoundary>
     <Suspense fallback={<PageLoader />}>
     <Routes>
       {/* Core */}
@@ -145,6 +165,7 @@ export default function App() {
       <Route path="*" element={<NotFound />} />
     </Routes>
     </Suspense>
+    </ChunkErrorBoundary>
     </MaintenanceGate>
     </AppConfigProvider>
   );

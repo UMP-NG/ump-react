@@ -219,7 +219,7 @@ export default function HostelDetail() {
                 <div key={r._id} className="card" style={{ padding: 12, display: "flex", gap: 12, cursor: "pointer" }} onClick={() => navigate(`/hostel/${r._id}`)}>
                   <div style={{ width: 72, height: 72, borderRadius: 10, overflow: "hidden", flexShrink: 0, background: "var(--surface)" }}>
                     {r.images?.[0]?.url
-                      ? <img src={r.images[0].url} alt={r.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                      ? <img src={cloudImg(r.images[0].url, { w: 144 })} alt={r.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                       : <Ph kind="hostel-2" />}
                   </div>
                   <div style={{ flex: 1 }}>

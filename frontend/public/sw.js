@@ -5,7 +5,7 @@ const API_CACHE    = "ump-api-v1";
 const STATIC_CACHE = "ump-static-v1";
 
 // App-shell resources cached on install (always available offline)
-const SHELL_URLS = ["/", "/index.html", "/images/ump-logo.jpeg"];
+const SHELL_URLS = ["/", "/index.html", "/images/ump-logo.png"];
 
 // API routes to cache with stale-while-revalidate (show cached, refresh in bg)
 const SWR_API_PATTERNS = [
@@ -123,8 +123,8 @@ self.addEventListener("push", (event) => {
   const title   = data.title || "UMP";
   const options = {
     body:     data.body  || "",
-    icon:     data.icon  || "/images/ump-logo.jpeg",
-    badge:    data.badge || "/images/ump-logo.jpeg",
+    icon:     data.icon  || "/images/ump-logo.png",
+    badge:    data.badge || "/images/ump-logo.png",
     tag:      data.tag   || "ump-broadcast",
     renotify: true,
     data:     { url: data.url || "/", broadcastId: data.tag || null },

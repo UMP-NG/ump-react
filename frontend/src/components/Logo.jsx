@@ -17,7 +17,15 @@ export default function Logo() {
       style={{ cursor: "pointer" }}
       aria-label="UMP – go to home"
     >
-      <img src={logoUrl || "/images/ump-logo.jpeg"} alt="UMP" style={{ height: 36, width: 36, borderRadius: 8, display: "block", objectFit: "cover" }} onError={(e) => { e.currentTarget.src = "/images/ump-logo.jpeg"; }} />
+      <img
+        src={logoUrl || "/images/ump-logo.png"}
+        alt="UMP"
+        style={{ height: 36, width: 36, borderRadius: 8, display: "block", objectFit: "cover" }}
+        onError={(e) => {
+          if (e.currentTarget.src.endsWith("/images/ump-logo.png")) return; // already on fallback — stop
+          e.currentTarget.src = "/images/ump-logo.png";
+        }}
+      />
     </div>
   );
 }

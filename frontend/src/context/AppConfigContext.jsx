@@ -32,10 +32,16 @@ export function AppConfigProvider({ children }) {
         if (d?.slides) setSlides(d.slides);
         if (d?.flags) setFlags(d.flags);
         if (d?.fees) setFees(f => ({ ...DEFAULT_FEES, ...f, ...d.fees }));
-        if (d?.subscriptions) setSubscriptions(s => ({
-          seller:   { ...DEFAULT_SUBS.seller,   ...d.subscriptions.seller },
-          provider: { ...DEFAULT_SUBS.provider, ...d.subscriptions.provider },
-        }));
+        if (d?.subscriptions) setSubscriptions(s => {
+          const deepMerge = (def, srv) => ({
+            monthly: { ...def.monthly, ...(srv?.monthly || {}) },
+            annual:  { ...def.annual,  ...(srv?.annual  || {}) },
+          });
+          return {
+            seller:   deepMerge(s.seller,   d.subscriptions.seller),
+            provider: deepMerge(s.provider, d.subscriptions.provider),
+          };
+        });
       })
       .catch(() => {});
   }, []);
