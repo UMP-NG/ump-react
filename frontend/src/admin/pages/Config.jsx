@@ -19,6 +19,11 @@ export default function Config() {
   const [flags, setFlags] = useState(DEFAULT_FLAGS);
   const [slides, setSlides] = useState([]);
   const [logo, setLogo] = useState({ url: '', publicId: '' });
+  const DEFAULT_SUBS = {
+    seller:   { monthly: { price: 3000, label: 'Monthly' }, annual: { price: 25000, label: 'Annual', badge: 'Save 31%' } },
+    provider: { monthly: { price: 3000, label: 'Monthly' }, annual: { price: 25000, label: 'Annual', badge: 'Save 31%' } },
+  };
+  const [subs, setSubs] = useState(DEFAULT_SUBS);
   const [logoUploading, setLogoUploading] = useState(false);
   const logoInputRef = useRef();
   const slideInputRefs = useRef([]);
@@ -34,6 +39,10 @@ export default function Config() {
       if (d?.slides) setSlides(d.slides);
       else setSlides([]);
       if (d?.logo?.url) setLogo(d.logo);
+      if (d?.subscriptions) setSubs(s => ({
+        seller:   { ...s.seller,   ...d.subscriptions.seller },
+        provider: { ...s.provider, ...d.subscriptions.provider },
+      }));
     }).catch(() => {});
   }, []);
 
@@ -59,7 +68,7 @@ export default function Config() {
     try {
       await apiFetch('/api/admins/config', {
         method: 'PUT',
-        body: { fees: { ...fees, platformFee, serviceFee, minPayout }, flags: flagsObj, slides, logo },
+        body: { fees: { ...fees, platformFee, serviceFee, minPayout }, flags: flagsObj, slides, logo, subscriptions: subs },
       });
       refreshConfig();
       setSaved(true);
@@ -271,6 +280,71 @@ export default function Config() {
                     onChange={e => setSlides(prev => prev.map((sl, j) => j === i ? { ...sl, ctaLabel: e.target.value } : sl))}
                     placeholder="Button label (e.g. Explore)"
                   />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* ── Subscription plans ── */}
+        <div className="adm-card" style={{ gridColumn: '1 / -1' }}>
+          <div className="adm-card-head"><h3>Subscription plans</h3></div>
+          <div className="adm-card-body">
+            {[
+              { key: 'seller',   label: 'Seller / Store' },
+              { key: 'provider', label: 'Service Provider' },
+            ].map(({ key, label }) => (
+              <div key={key} style={{ marginBottom: 24 }}>
+                <div className="adm-section-h" style={{ marginTop: 0 }}>{label}</div>
+                <div className="adm-form-grid">
+                  <div className="adm-field">
+                    <label className="lbl">Monthly price (₦)</label>
+                    <input
+                      type="number" min="0"
+                      value={subs[key].monthly.price}
+                      onChange={e => setSubs(s => ({ ...s, [key]: { ...s[key], monthly: { ...s[key].monthly, price: Number(e.target.value) } } }))}
+                    />
+                  </div>
+                  <div className="adm-field">
+                    <label className="lbl">Monthly label</label>
+                    <input
+                      value={subs[key].monthly.label}
+                      onChange={e => setSubs(s => ({ ...s, [key]: { ...s[key], monthly: { ...s[key].monthly, label: e.target.value } } }))}
+                    />
+                  </div>
+                  <div className="adm-field">
+                    <label className="lbl">Annual price (₦)</label>
+                    <input
+                      type="number" min="0"
+                      value={subs[key].annual.price}
+                      onChange={e => setSubs(s => ({ ...s, [key]: { ...s[key], annual: { ...s[key].annual, price: Number(e.target.value) } } }))}
+                    />
+                  </div>
+                  <div className="adm-field">
+                    <label className="lbl">Annual label</label>
+                    <input
+                      value={subs[key].annual.label}
+                      onChange={e => setSubs(s => ({ ...s, [key]: { ...s[key], annual: { ...s[key].annual, label: e.target.value } } }))}
+                    />
+                  </div>
+                  <div className="adm-field">
+                    <label className="lbl">Annual badge text (e.g. "Save 31%")</label>
+                    <input
+                      value={subs[key].annual.badge}
+                      onChange={e => setSubs(s => ({ ...s, [key]: { ...s[key], annual: { ...s[key].annual, badge: e.target.value } } }))}
+                      placeholder="Leave blank to hide"
+                    />
+                  </div>
+                  <div className="adm-field" style={{ display: 'flex', alignItems: 'flex-end', paddingBottom: 2 }}>
+                    <div style={{ fontSize: '1.2rem', color: 'var(--ink-3)', lineHeight: 1.5 }}>
+                      Monthly: <strong>₦{subs[key].monthly.price.toLocaleString()}/mo</strong>
+                      <br />
+                      Annual: <strong>₦{subs[key].annual.price.toLocaleString()}/yr</strong>
+                      {subs[key].annual.price > 0 && subs[key].monthly.price > 0 && (
+                        <> · saves {Math.round((1 - subs[key].annual.price / (subs[key].monthly.price * 12)) * 100)}%</>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
             ))}

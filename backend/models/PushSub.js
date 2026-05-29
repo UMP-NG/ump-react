@@ -9,6 +9,9 @@ const pushSubSchema = new mongoose.Schema(
     keys:         { p256dh: String, auth: String },
     // Mirror of User.roles so we can filter by audience without joining
     roles:        [{ type: String }],
+    // Origin the subscription was created from (e.g. https://myump.com.ng)
+    // Used in production to exclude stale localhost subscriptions
+    origin:       { type: String },
   },
   { timestamps: true }
 );

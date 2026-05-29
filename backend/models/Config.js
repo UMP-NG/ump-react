@@ -32,6 +32,16 @@ const configSchema = new mongoose.Schema(
       url:       { type: String, default: "" },
       publicId:  { type: String, default: "" },
     },
+    subscriptions: {
+      seller: {
+        monthly: { price: { type: Number, default: 3000 }, label: { type: String, default: "Monthly" } },
+        annual:  { price: { type: Number, default: 25000 }, label: { type: String, default: "Annual" }, badge: { type: String, default: "Save 31%" } },
+      },
+      provider: {
+        monthly: { price: { type: Number, default: 3000 }, label: { type: String, default: "Monthly" } },
+        annual:  { price: { type: Number, default: 25000 }, label: { type: String, default: "Annual" }, badge: { type: String, default: "Save 31%" } },
+      },
+    },
     updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
   },
   { timestamps: true }

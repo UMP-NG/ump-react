@@ -13,6 +13,7 @@ function fmtPrice(s) {
 }
 import { apiFetch } from "../utils/api";
 import Skel from "../components/Skel";
+import { cloudImg } from "../utils/cloudinary";
 
 const CATS = ["All", "Tutoring", "Design", "Fitness", "Music", "Photo", "Coding"];
 const SORTS = [
@@ -133,7 +134,7 @@ export default function Services() {
           ) : (
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 14 }}>
               {visible.map((s) => {
-                const imgUrl = s.images?.[0]?.url || null;
+                const imgUrl = cloudImg(s.images?.[0]?.url || null, { w: 400 });
                 const providerName = s.provider?.serviceProviderInfo?.businessName || s.provider?.storeName || s.provider?.businessName || s.provider?.name || "Provider";
                 const price = fmtPrice(s);
 

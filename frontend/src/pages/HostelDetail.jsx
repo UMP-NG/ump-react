@@ -6,6 +6,7 @@ import Ph from "../components/Ph";
 import { naira } from "../components/ProductCard";
 import { apiFetch } from "../utils/api";
 import { useToast } from "../context/ToastContext";
+import { cloudImg } from "../utils/cloudinary";
 import Skel from "../components/Skel";
 import ReportModal from "../components/ReportModal";
 
@@ -102,7 +103,7 @@ export default function HostelDetail() {
       {/* Gallery */}
       <div style={{ position: "relative", margin: "0 16px", borderRadius: "var(--r-2xl)", overflow: "hidden", height: 260, background: "var(--surface)" }}>
         {listing.images?.length > 0
-          ? <img src={listing.images[activeImg].url} alt={listing.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+          ? <img src={cloudImg(listing.images[activeImg].url, { w: 800 })} alt={listing.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
           : <Ph kind="hostel-1" label="hostel" />
         }
         <span className="product-tag" style={{ background: "rgba(15,23,42,.85)" }}>{listing.type || "Room"}</span>

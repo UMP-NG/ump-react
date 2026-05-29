@@ -1538,7 +1538,12 @@ export const createBroadcast = async (req, res) => {
         audience === "buyers"    ? "user"             :
         audience === "providers" ? "service_provider" :
         null;
-      const pushFilter = audienceRole ? { roles: audienceRole } : {};
+      const prodSubFilter = process.env.NODE_ENV === "production"
+        ? { origin: { $exists: true, $not: /localhost|127\.0\.0\.1|::1/ } }
+        : {};
+      const pushFilter = audienceRole
+        ? { roles: audienceRole, ...prodSubFilter }
+        : { ...prodSubFilter };
 
       const subs = await PushSub.find(pushFilter).lean();
       const pushPayload = {
@@ -1567,9 +1572,9 @@ export const createBroadcast = async (req, res) => {
 export const getConfig = async (req, res) => {
   try {
     const config = await Config.findOne().lean();
-    if (!config) return res.json({ fees: {}, flags: {}, slides: [], logo: {} });
-    const { fees, flags, slides, logo } = config;
-    res.json({ fees, flags, slides, logo });
+    if (!config) return res.json({ fees: {}, flags: {}, slides: [], logo: {}, subscriptions: {} });
+    const { fees, flags, slides, logo, subscriptions } = config;
+    res.json({ fees, flags, slides, logo, subscriptions: subscriptions || {} });
   } catch (err) {
     console.error("getConfig:", err);
     res.status(500).json({ message: "Server error" });
@@ -1578,9 +1583,10 @@ export const getConfig = async (req, res) => {
 
 export const saveConfig = async (req, res) => {
   try {
-    const { fees, flags, slides, logo } = req.body;
+    const { fees, flags, slides, logo, subscriptions } = req.body;
     const update = { fees, flags, slides, updatedBy: req.user._id };
     if (logo !== undefined) update.logo = logo;
+    if (subscriptions !== undefined) update.subscriptions = subscriptions;
     await Config.findOneAndUpdate(
       {},
       { $set: update },

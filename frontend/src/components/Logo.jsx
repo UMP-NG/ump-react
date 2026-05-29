@@ -17,7 +17,7 @@ export default function Logo() {
       style={{ cursor: "pointer" }}
       aria-label="UMP – go to home"
     >
-      <img src={logoUrl} alt="" style={{ height: 36, width: 36, borderRadius: 8, display: "block" }} onError={(e) => { e.currentTarget.src = "/images/ump-icon.svg"; }} />
+      <img src={logoUrl || "/images/ump-logo.jpeg"} alt="UMP" style={{ height: 36, width: 36, borderRadius: 8, display: "block", objectFit: "cover" }} onError={(e) => { e.currentTarget.src = "/images/ump-logo.jpeg"; }} />
     </div>
   );
 }

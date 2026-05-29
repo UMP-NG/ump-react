@@ -5,6 +5,7 @@ import { apiFetch } from "../utils/api";
 import { useToast } from "../context/ToastContext";
 import { useWishlist } from "../context/WishlistContext";
 import QuickViewModal from "./QuickViewModal";
+import { cloudImg } from "../utils/cloudinary";
 
 export function getImageUrl(imageData, fallback = null) {
   if (!imageData) return fallback;
@@ -25,7 +26,7 @@ export default function ProductCard({ product, variant = "always", onAddToCart }
   const [adding, setAdding] = useState(false);
   const [wishlistLoading, setWishlistLoading] = useState(false);
   const wishlisted = wishlistIds.has(product?._id?.toString());
-  const imgSrc = getImageUrl(product?.images?.[0]);
+  const imgSrc = cloudImg(getImageUrl(product?.images?.[0]), { w: 400 });
 
   async function handleAddToCart(e) {
     e.stopPropagation();

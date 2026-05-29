@@ -16,6 +16,11 @@ export const signup = async (req, res) => {
   try {
     const { email, password, name } = req.body;
 
+    // Fix #11: enforce minimum password length at the backend
+    if (!password || password.length < 8) {
+      return res.status(400).json({ message: "Password must be at least 8 characters." });
+    }
+
     // Enforce UNILAG email at application level (regular signup only)
     if (!UNILAG_EMAIL.test(email)) {
       return res.status(400).json({
@@ -93,7 +98,7 @@ export const signup = async (req, res) => {
     });
   } catch (error) {
     console.error("❌ [SIGNUP] Server error:", error.message);
-    res.status(500).json({ message: "Server error: " + error.message });
+    res.status(500).json({ message: "Server error. Please try again." });
   }
 };
 
@@ -117,9 +122,17 @@ export const signupProvider = async (req, res) => {
 
     // Basic validation
     if (!email || !password) {
-      return res
-        .status(400)
-        .json({ message: "Email and password are required" });
+      return res.status(400).json({ message: "Email and password are required" });
+    }
+
+    // Fix #2: enforce UNILAG email on provider signup the same as regular signup
+    if (!UNILAG_EMAIL.test(email)) {
+      return res.status(400).json({ message: "Only UNILAG student emails (@live.unilag.edu.ng) are allowed." });
+    }
+
+    // Fix #11: minimum password length
+    if (password.length < 8) {
+      return res.status(400).json({ message: "Password must be at least 8 characters." });
     }
 
     const existing = await User.findOne({ email });
@@ -170,11 +183,22 @@ export const signupProvider = async (req, res) => {
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     });
 
-    res
-      .status(201)
-      .json({ message: "Provider account created", user, service });
+    // Fix #5: return only safe fields, not the full Mongoose document
+    res.status(201).json({
+      message: "Provider account created",
+      user: {
+        _id:       user._id,
+        name:      user.name,
+        email:     user.email,
+        roles:     user.roles,
+        isVerified: user.isVerified,
+        createdAt: user.createdAt,
+      },
+      service: { _id: service._id, title: service.title },
+    });
   } catch (error) {
-    res.status(500).json({ message: "Server error", error: error.message });
+    console.error("❌ [SIGNUP_PROVIDER] Server error:", error.message);
+    res.status(500).json({ message: "Server error. Please try again." }); // Fix #7
   }
 };
 
@@ -190,7 +214,14 @@ export const verifyOTP = async (req, res) => {
     if (user.isVerified)
       return res.status(400).json({ message: "User already verified" });
 
-    if (!user.otp || user.otp !== otp || user.otpExpire < Date.now()) {
+    // Fix #9: check expiry first, then use constant-time comparison to prevent timing attacks
+    if (!user.otp || user.otpExpire < Date.now()) {
+      return res.status(400).json({ message: "Invalid or expired OTP" });
+    }
+    const otpBuf = Buffer.from(String(user.otp));
+    const inBuf  = Buffer.from(String(otp));
+    const otpMatch = otpBuf.length === inBuf.length && crypto.timingSafeEqual(otpBuf, inBuf);
+    if (!otpMatch) {
       return res.status(400).json({ message: "Invalid or expired OTP" });
     }
 
@@ -209,9 +240,10 @@ export const verifyOTP = async (req, res) => {
       path: "/",
     });
 
+    // Fix #3: do not return the raw token in the body — the httpOnly cookie is enough.
+    // Returning the token in JSON exposes it to JavaScript and defeats the cookie's security.
     res.status(200).json({
       message: "Email verified successfully",
-      token,
       user: {
         _id: user._id,
         name: user.name,

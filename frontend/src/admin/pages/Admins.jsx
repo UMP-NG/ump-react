@@ -77,31 +77,31 @@ export default function Admins() {
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {supportAdmins.map((a, i) => (
-                <div key={a._id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: i < supportAdmins.length - 1 ? '1px solid var(--line)' : 'none' }}>
-                  <div className={`adm-av ${AV_COLORS[i % AV_COLORS.length]}`} style={{ width: 38, height: 38, fontSize: '1.3rem' }}>
+                <div key={a._id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: i < supportAdmins.length - 1 ? '1px solid var(--line)' : 'none', flexWrap: 'wrap' }}>
+                  <div className={`adm-av ${AV_COLORS[i % AV_COLORS.length]}`} style={{ width: 38, height: 38, fontSize: '1.3rem', flexShrink: 0 }}>
                     {a.name ? a.name.split(' ').map(n => n[0]).slice(0, 2).join('') : 'AD'}
                   </div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 600, fontSize: '1.3rem', color: 'var(--ink-1)' }}>{a.name || '—'}</div>
-                    <div style={{ fontSize: '1.1rem', color: 'var(--ink-3)' }}>{a.email}</div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 600, fontSize: '1.3rem', color: 'var(--ink-1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.name || '—'}</div>
+                    <div style={{ fontSize: '1.1rem', color: 'var(--ink-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.email}</div>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
                     {a.supportRole && (
-                      <span className={`pill dot ${a.supportRole === 'technical' ? 'blue' : 'amber'}`}>
+                      <span className={`pill dot ${a.supportRole === 'technical' ? 'blue' : 'amber'}`} style={{ whiteSpace: 'nowrap' }}>
                         {SUPPORT_ROLE_LABELS[a.supportRole]}
                       </span>
                     )}
                     <select
-                      style={{ height: 34, border: '1px solid #e3e5eb', borderRadius: 8, padding: '0 10px', fontSize: '1.2rem', fontFamily: 'inherit', cursor: 'pointer', background: 'var(--paper)', color: 'var(--ink-1)', outline: 'none' }}
+                      style={{ height: 34, border: '1px solid #e3e5eb', borderRadius: 8, padding: '0 10px', fontSize: '1.2rem', fontFamily: 'inherit', cursor: 'pointer', background: 'var(--paper)', color: 'var(--ink-1)', outline: 'none', maxWidth: 180 }}
                       value={a.supportRole || ''}
                       disabled={updatingRole === a._id}
                       onChange={e => setSupportRole(a._id, e.target.value)}
                     >
-                      <option value="">No support role</option>
+                      <option value="">No role</option>
                       <option value="technical">Technical Support</option>
                       <option value="administrative">Administrative</option>
                     </select>
-                    {updatingRole === a._id && <i className="fa-solid fa-circle-notch fa-spin" style={{ color: 'var(--ink-3)', fontSize: '1.2rem' }}></i>}
+                    {updatingRole === a._id && <i className="fa-solid fa-circle-notch fa-spin" style={{ color: 'var(--ink-3)', fontSize: '1.2rem', flexShrink: 0 }}></i>}
                   </div>
                 </div>
               ))}

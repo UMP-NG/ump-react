@@ -47,7 +47,9 @@ export default function Broadcast() {
     setTesting(true);
     setSendError('');
     setSendSuccess('');
-    // Always re-subscribe before testing to ensure the subscription is fresh
+    // 1. Wipe any stale localhost subscriptions for this account
+    await apiFetch('/api/push/cleanup-localhost', { method: 'DELETE' }).catch(() => {});
+    // 2. Re-subscribe this device so a fresh production subscription exists
     await subscribeToPush().catch(() => {});
     try {
       const res = await apiFetch('/api/push/test', { method: 'POST' });

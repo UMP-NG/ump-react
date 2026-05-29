@@ -3,9 +3,155 @@ import paystack from "../utils/paystack.js";
 import Payment from "../models/Payment.js";
 import Order from "../models/Order.js";
 import Seller from "../models/Seller.js";
+import User from "../models/User.js";
+import Config from "../models/Config.js";
 import crypto from "crypto";
 import { audit } from "../utils/auditLog.js";
 import { confirmAllOrders } from "../utils/confirmOrders.js";
+
+// ─── Subscription helpers ─────────────────────────────────────────────────────
+// Prices come from the Config document so admins can edit them without a deploy
+async function getSubscriptionPrice(type, plan) {
+  const config = await Config.findOne().select("subscriptions").lean();
+  const price = config?.subscriptions?.[type]?.[plan]?.price;
+  // Fall back to hardcoded defaults if config hasn't been saved yet
+  const defaults = { monthly: 3000, annual: 25000 };
+  return price ?? defaults[plan];
+}
+
+function subscriptionExpiresAt(plan) {
+  const d = new Date();
+  if (plan === "annual") d.setFullYear(d.getFullYear() + 1);
+  else d.setMonth(d.getMonth() + 1);
+  return d;
+}
+
+async function activateSubscription(payment) {
+  const { subscriptionPlan: plan, subscriptionType: type } = payment.metadata || {};
+  if (!plan || !type) return;
+  const expiresAt = subscriptionExpiresAt(plan);
+  if (type === "seller") {
+    await Seller.findOneAndUpdate(
+      { user: payment.user },
+      { isSubscribed: true, subscriptionRequested: false, subscriptionPlan: plan, subscriptionExpiresAt: expiresAt }
+    );
+  } else if (type === "provider") {
+    await User.findByIdAndUpdate(payment.user, {
+      "serviceProviderInfo.isSubscribed":          true,
+      "serviceProviderInfo.subscriptionPlan":      plan,
+      "serviceProviderInfo.subscriptionExpiresAt": expiresAt,
+    });
+  }
+}
+
+// ─── Initialize subscription payment ─────────────────────────────────────────
+export const initializeSubscriptionPayment = async (req, res) => {
+  try {
+    const { plan, type } = req.body;
+    if (!["monthly", "annual"].includes(plan))
+      return res.status(400).json({ success: false, message: "Invalid plan. Choose monthly or annual." });
+    const amount = await getSubscriptionPrice(type, plan);
+    if (!amount)
+      return res.status(400).json({ success: false, message: "Subscription pricing not configured. Contact support." });
+    if (!["seller", "provider"].includes(type))
+      return res.status(400).json({ success: false, message: "Invalid subscription type." });
+
+    const reference = `UMP_SUB_${Date.now()}_${req.user._id.toString().slice(-6)}`;
+    const clientUrl = process.env.NODE_ENV === "production"
+      ? (process.env.CLIENT_URL || "https://myump.com.ng")
+      : "http://localhost:5173";
+
+    const response = await paystack.post("/transaction/initialize", {
+      email:        req.user.email,
+      amount:       amount * 100,
+      reference,
+      callback_url: `${clientUrl}/payment-success?type=subscription`,
+      metadata: {
+        subscriptionPlan: plan,
+        subscriptionType: type,
+        userId: req.user._id.toString(),
+      },
+    });
+
+    await Payment.create({
+      user:      req.user._id,
+      orders:    [],
+      provider:  "Paystack",
+      amount,
+      reference,
+      status:    "pending",
+      metadata:  { subscriptionPlan: plan, subscriptionType: type },
+    });
+
+    return res.json({
+      success:           true,
+      authorization_url: response.data.data.authorization_url,
+      reference,
+    });
+  } catch (err) {
+    console.error("Subscription init error:", err.response?.data || err.message);
+    return res.status(500).json({ success: false, message: "Failed to initialize payment. Please try again." });
+  }
+};
+
+// ─── Verify subscription payment (called by frontend after Paystack redirect) ─
+export const verifySubscriptionPayment = async (req, res) => {
+  try {
+    const { reference } = req.query;
+    if (!reference) return res.status(400).json({ success: false, message: "Reference required" });
+
+    const response = await paystack.get(`/transaction/verify/${reference}`);
+    const data = response.data.data;
+
+    // Atomically claim to prevent duplicate processing
+    const payment = await Payment.findOneAndUpdate(
+      { reference, status: "pending" },
+      { $set: { status: "processing" } },
+      { new: false }
+    );
+
+    if (!payment) {
+      const existing = await Payment.findOne({ reference });
+      if (!existing) return res.status(404).json({ success: false, message: "Payment not found" });
+      return res.json({
+        success: true,
+        status:  existing.status,
+        plan:    existing.metadata?.subscriptionPlan,
+        type:    existing.metadata?.subscriptionType,
+      });
+    }
+
+    const amountMatch = data.amount === Math.round(payment.amount * 100);
+    const finalStatus = (data.status === "success" && amountMatch) ? "success" : "failed";
+
+    await Payment.findOneAndUpdate(
+      { reference },
+      { $set: { status: finalStatus, paidAt: finalStatus === "success" ? new Date() : null } }
+    );
+
+    if (finalStatus === "success") {
+      await activateSubscription(payment);
+      audit("SUBSCRIPTION_ACTIVATED", {
+        actor:    req.user?._id,
+        entity:   "Payment",
+        entityId: payment._id,
+        amount:   payment.amount,
+        meta:     { reference, plan: payment.metadata?.subscriptionPlan, type: payment.metadata?.subscriptionType },
+        req,
+      });
+    }
+
+    return res.json({
+      success: finalStatus === "success",
+      status:  finalStatus,
+      plan:    payment.metadata?.subscriptionPlan,
+      type:    payment.metadata?.subscriptionType,
+    });
+  } catch (err) {
+    console.error("Subscription verify error:", err.response?.data || err.message);
+    return res.status(500).json({ success: false, message: "Verification failed. Please contact support." });
+  }
+};
 
 // ----------------------------
 // 1️⃣ Initialize Payment (Card or Transfer)
@@ -327,7 +473,18 @@ export const paystackWebhook = async (req, res) => {
           { reference: data.reference },
           { $set: { status: "success", paidAt: new Date(), metadata: data } }
         );
-        await confirmAllOrders(payment);
+        // Route to subscription activation or order confirmation based on payment type
+        if (payment.metadata?.subscriptionPlan) {
+          await activateSubscription(payment);
+          audit("WEBHOOK_SUBSCRIPTION_ACTIVATED", {
+            entity: "Payment", entityId: payment._id,
+            amount: data.amount / 100,
+            meta: { reference: data.reference, plan: payment.metadata.subscriptionPlan, type: payment.metadata.subscriptionType },
+            req,
+          });
+        } else {
+          await confirmAllOrders(payment);
+        }
         audit("WEBHOOK_PAYMENT_CONFIRMED", {
           entity: "Payment",
           entityId: payment._id,

@@ -41,8 +41,10 @@ const sellerSchema = new mongoose.Schema(
     isSuspended: { type: Boolean, default: false },
 
     // ✅ Paid subscription — controls the crown badge on store/product pages
-    isSubscribed: { type: Boolean, default: false },
+    isSubscribed:          { type: Boolean, default: false },
     subscriptionRequested: { type: Boolean, default: false },
+    subscriptionPlan:      { type: String, enum: ["monthly", "annual"], default: null },
+    subscriptionExpiresAt: { type: Date, default: null },
 
     // ✅ Relationship with products
     products: [{ type: mongoose.Schema.Types.ObjectId, ref: "Product" }],

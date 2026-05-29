@@ -73,20 +73,23 @@ const app = express();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Fix #8: trust Render's reverse proxy so req.ip is the real client IP,
+// making rate limiting work per-user instead of per-proxy-IP.
+app.set("trust proxy", 1);
+
 // ----------------------------
 // ⚙️ MIDDLEWARE
 // ----------------------------
 const allowedOrigins = [
-  // Local development
+  // Local development only
   "http://127.0.0.1:5000",
   "http://localhost:5000",
   "http://127.0.0.1:5500",
   "http://localhost:5500",
   "http://localhost:3000",
-  // Vite dev server (React)
   "http://localhost:5173",
   "http://127.0.0.1:5173",
-  // Production / staging
+  // Production — HTTPS only (#4: removed file://, #6: removed http:// prod URLs)
   "https://ump-ng.github.io",
   "https://ump-html-1.onrender.com",
   "https://ump-react.onrender.com",
@@ -95,9 +98,6 @@ const allowedOrigins = [
   "https://cool-malabi-39da0c.netlify.app",
   "https://www.myump.com.ng",
   "https://myump.com.ng",
-  "http://www.myump.com.ng",
-  "http://myump.com.ng",
-  "file://",
 ];
 
 // Allow all Vercel preview + production deployments for this project
@@ -132,7 +132,7 @@ app.use(
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     credentials: true,
     allowedHeaders: ["Content-Type", "Authorization", "Accept"],
-    exposedHeaders: ["Content-Length", "X-JSON-Response-Header", "Authorization"],
+    exposedHeaders: ["Content-Length", "X-JSON-Response-Header"],  // Fix #12: removed Authorization
     maxAge: 86400, // 24 hours for preflight caching
     optionsSuccessStatus: 200, // for compatibility with proxies and edge cases
   })
@@ -185,9 +185,10 @@ app.use(
       useDefaults: false,
       directives: {
         defaultSrc: ["'self'"],
+        // Fix #10: removed 'unsafe-inline' — Vite production builds use external
+        // module scripts only, so inline scripts are not needed in production.
         scriptSrc: [
           "'self'",
-          "'unsafe-inline'",
           "https://maps.googleapis.com",
           "https://maps.gstatic.com",
           "https://cdn.jsdelivr.net",
@@ -196,7 +197,6 @@ app.use(
         ],
         scriptSrcElem: [
           "'self'",
-          "'unsafe-inline'",
           "https://maps.googleapis.com",
           "https://maps.gstatic.com",
           "https://cdn.jsdelivr.net",

@@ -32,6 +32,7 @@ function formatPrice(service) {
 }
 import { apiFetch } from "../utils/api";
 import Skel from "../components/Skel";
+import { cloudImg } from "../utils/cloudinary";
 import ReportModal from "../components/ReportModal";
 
 export default function ServiceDetail() {
@@ -128,7 +129,7 @@ export default function ServiceDetail() {
   );
 
   const images = service.images || [];
-  const imgUrl = images[activeImg]?.url || images[0]?.url || null;
+  const imgUrl = cloudImg(images[activeImg]?.url || images[0]?.url || null, { w: 800 });
   const providerName = service.provider?.serviceProviderInfo?.businessName || service.provider?.storeName || service.provider?.businessName || service.provider?.name || "Provider";
   const providerAvatar = service.provider?.avatar?.url || null;
   const slots = service.timeSlots?.length > 0 ? service.timeSlots.map(slotLabel) : [];

@@ -4,6 +4,14 @@ import PushSub from "../models/PushSub.js";
 import User from "../models/User.js";
 import Broadcast from "../models/Broadcast.js";
 
+// In production, only use subscriptions that have a recorded origin AND
+// are NOT from localhost — filters out stale dev subscriptions that
+// would show "localhost" as the notification sender on the OS.
+const _isProd = process.env.NODE_ENV === "production";
+const PROD_SUB_FILTER = _isProd
+  ? { origin: { $exists: true, $not: /localhost|127\.0\.0\.1|::1/ } }
+  : {};
+
 // Configure VAPID once at module load, not on every send
 let _pushReady = false;
 try {
@@ -38,11 +46,12 @@ export const subscribe = async (req, res) => {
 
     const user = await User.findById(req.user._id).select("roles").lean();
     const roles = user?.roles || ["user"];
+    const origin = req.headers.origin || req.headers.referer?.replace(/\/$/, "") || "";
 
     // Upsert — same endpoint might re-subscribe after browser restart
     await PushSub.findOneAndUpdate(
       { endpoint },
-      { user: req.user._id, endpoint, keys, roles },
+      { user: req.user._id, endpoint, keys, roles, origin },
       { upsert: true, new: true }
     );
 
@@ -56,8 +65,8 @@ export const subscribe = async (req, res) => {
 // POST /api/push/test  — sends a real push to the requesting user's registered devices
 export const sendTestPush = async (req, res) => {
   if (!_pushReady) return res.status(503).json({ message: "Push not configured on this server" });
-  const subs = await PushSub.find({ user: req.user._id });
-  if (!subs.length) return res.status(404).json({ message: "No push subscription found. Open the site in your browser, grant notification permission, then try again." });
+  const subs = await PushSub.find({ user: req.user._id, ...PROD_SUB_FILTER });
+  if (!subs.length) return res.status(404).json({ message: "No push subscription found for this device. Open the production site, grant notification permission, then try again." });
   const delivered = await sendPushToSubs(subs, {
     title: "UMP push test",
     body:  "Push notifications are working correctly.",
@@ -91,6 +100,23 @@ export const trackOpen = async (req, res) => {
   }
 };
 
+// DELETE /api/push/cleanup-localhost — removes stale dev subscriptions for the current user
+export const cleanupLocalhostSubs = async (req, res) => {
+  try {
+    const result = await PushSub.deleteMany({
+      user: req.user._id,
+      $or: [
+        { origin: { $exists: false } },
+        { origin: /localhost|127\.0\.0\.1|::1/ },
+      ],
+    });
+    res.json({ success: true, removed: result.deletedCount });
+  } catch (err) {
+    console.error("cleanupLocalhostSubs:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
 // DELETE /api/push/unsubscribe
 export const unsubscribe = async (req, res) => {
   try {
@@ -118,7 +144,7 @@ export const unsubscribe = async (req, res) => {
 export async function sendPushToUser(userId, payload) {
   if (!_pushReady) return;
   try {
-    const subs = await PushSub.find({ user: userId });
+    const subs = await PushSub.find({ user: userId, ...PROD_SUB_FILTER });
     if (subs.length) await sendPushToSubs(subs, payload);
   } catch (err) {
     console.error("sendPushToUser:", err.message);

@@ -96,8 +96,14 @@ io.on("connection", (socket) => {
       const { sender, receiver, text, attachments = [] } = data;
       if (!sender || !receiver || (!text && !attachments.length)) return;
 
+      // Fix #1: reject if the client claims to be a different user
+      if (verifiedUserId && sender.toString() !== verifiedUserId) return;
+
+      // Fix #13: cap text length so the socket can't bypass the HTTP body-size limit
+      if (text && text.length > 5000) return;
+
       const message = await Message.create({
-        sender,
+        sender: verifiedUserId || sender, // always use the server-verified identity
         receiver,
         text,
         attachments,

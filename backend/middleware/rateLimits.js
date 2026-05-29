@@ -10,8 +10,8 @@ const make = (windowMs, max, message) =>
     skip: () => process.env.NODE_ENV === "test",
   });
 
-// 300 req / 15 min — applied globally
-export const globalLimiter = make(15 * 60 * 1000, 300, "Too many requests, please slow down.");
+// Fix #14: tightened from 300 to 150 req / 15 min for a student-only platform
+export const globalLimiter = make(15 * 60 * 1000, 150, "Too many requests, please slow down.");
 
 // 15 req / 15 min — login, signup
 export const authLimiter = make(15 * 60 * 1000, 15, "Too many auth attempts. Try again in 15 minutes.");

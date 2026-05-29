@@ -69,7 +69,10 @@ const userSchema = new mongoose.Schema(
         enum: ["available", "busy", "offline"],
         default: "available",
       },
-      verified: { type: Boolean, default: false },
+      verified:              { type: Boolean, default: false },
+      isSubscribed:          { type: Boolean, default: false },
+      subscriptionPlan:      { type: String, enum: ["monthly", "annual"], default: null },
+      subscriptionExpiresAt: { type: Date, default: null },
     },
 
     // Services owned by this provider

@@ -7,6 +7,8 @@ import {
   verifyAccount,
   saveBankDetails,
   paystackWebhook,
+  initializeSubscriptionPayment,
+  verifySubscriptionPayment,
 } from "../controllers/paymentController.js";
 import {
   initializeFlwPayment,
@@ -26,6 +28,10 @@ router.post("/webhook/paystack", paystackWebhook);
 router.post("/flw/initialize", protect, paymentLimiter, initializeFlwPayment);
 router.get("/flw/verify", protect, paymentLimiter, verifyFlwPayment);
 router.post("/webhook/flutterwave", flutterwaveWebhook);
+
+// Subscription
+router.post("/subscription/initialize", protect, paymentLimiter, initializeSubscriptionPayment);
+router.get("/subscription/verify",      protect, paymentLimiter, verifySubscriptionPayment);
 
 // Seller bank setup
 router.get("/banks", protect, getBanks);

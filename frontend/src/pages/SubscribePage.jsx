@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { useUser } from "../context/UserContext";
 import { apiFetch } from "../utils/api";
 import { useToast } from "../context/ToastContext";
+import { useAppConfig } from "../context/AppConfigContext";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
 
@@ -24,32 +25,36 @@ const PROVIDER_PERKS = [
   { icon: "users",            text: "Featured in UMP's 'Top Providers' curated list" },
 ];
 
-const PLANS = [
-  {
-    id: "monthly",
-    label: "Monthly",
-    price: 3000,
-    period: "/month",
-    badge: null,
-    desc: "Cancel any time. Renews monthly.",
-  },
-  {
-    id: "annual",
-    label: "Annual",
-    price: 25000,
-    period: "/year",
-    badge: "Save 31%",
-    desc: "Pay once, subscribed for a full year.",
-  },
-];
+// Plans are built dynamically from AppConfigContext so admin price edits apply immediately
 
 export default function SubscribePage() {
-  const navigate      = useNavigate();
-  const [params]      = useSearchParams();
-  const { user }      = useUser();
-  const showToast     = useToast();
-  const type          = params.get("type") || "seller"; // "seller" | "provider"
-  const isSeller      = type === "seller";
+  const navigate         = useNavigate();
+  const [params]         = useSearchParams();
+  const { user }         = useUser();
+  const showToast        = useToast();
+  const { subscriptions } = useAppConfig();
+  const type             = params.get("type") || "seller"; // "seller" | "provider"
+  const isSeller         = type === "seller";
+
+  const subConfig = isSeller ? subscriptions.seller : subscriptions.provider;
+  const PLANS = [
+    {
+      id:     "monthly",
+      label:  subConfig.monthly.label,
+      price:  subConfig.monthly.price,
+      period: "/month",
+      badge:  null,
+      desc:   "Cancel any time. Renews monthly.",
+    },
+    {
+      id:     "annual",
+      label:  subConfig.annual.label,
+      price:  subConfig.annual.price,
+      period: "/year",
+      badge:  subConfig.annual.badge || null,
+      desc:   "Pay once, subscribed for a full year.",
+    },
+  ];
 
   const perks         = isSeller ? SELLER_PERKS : PROVIDER_PERKS;
   const title         = isSeller ? "Subscribe your store" : "Subscribe your provider account";
@@ -57,27 +62,25 @@ export default function SubscribePage() {
     ? "Stand out to thousands of UNILAG buyers with the UMP crown badge."
     : "Build client trust and get more bookings with the verified badge.";
 
-  const [selected, setSelected] = useState("annual");
-  const [requesting, setRequesting]  = useState(false);
-  const [requested, setRequested]    = useState(
-    isSeller ? !!user?.sellerSubscriptionRequested : !!user?.providerSubscriptionRequested
-  );
+  const [selected, setSelected]     = useState("annual");
+  const [requesting, setRequesting] = useState(false);
 
   async function handleSubscribe() {
     if (!user) { navigate("/login"); return; }
     setRequesting(true);
     try {
-      const endpoint = isSeller
-        ? "/api/sellers/request-verification"
-        : "/api/services/request-verification";
-      await apiFetch(endpoint, { method: "POST", body: { plan: selected } });
-      setRequested(true);
-      showToast("Subscription request sent! Our team will activate it shortly.", "success");
+      const res = await apiFetch("/api/payments/subscription/initialize", {
+        method: "POST",
+        body: { plan: selected, type: isSeller ? "seller" : "provider" },
+      });
+      // Redirect to Paystack checkout
+      window.location.href = res.authorization_url;
     } catch (err) {
-      showToast(err?.message || "Failed to submit request. Please try again.", "error");
-    } finally {
+      showToast(err?.message || "Failed to start payment. Please try again.", "error");
       setRequesting(false);
     }
+    // Note: setRequesting(false) intentionally omitted on success —
+    // the page navigates away so the button stays in loading state until Paystack loads
   }
 
   const plan = PLANS.find((p) => p.id === selected);
@@ -153,28 +156,21 @@ export default function SubscribePage() {
         </div>
 
         {/* CTA */}
-        {requested ? (
-          <div style={{ padding: "18px 20px", borderRadius: "var(--r-lg)", background: "rgba(59,130,246,.08)", border: "1px solid rgba(59,130,246,.25)", display: "flex", alignItems: "center", gap: 14 }}>
-            <i className="fas fa-clock" style={{ fontSize: "1.8rem", color: "#3b82f6", flexShrink: 0 }} />
-            <div>
-              <div style={{ fontSize: "1.5rem", fontWeight: 700, color: "#1d4ed8" }}>Subscription request received</div>
-              <div style={{ fontSize: "1.3rem", color: "var(--ink-3)", marginTop: 4 }}>
-                Our team will review and activate your subscription within 24 hours. You'll receive a notification once it's live.
-              </div>
-            </div>
-          </div>
-        ) : (
-          <button
-            className="btn btn-primary btn-lg"
-            style={{ width: "100%", borderRadius: "var(--r-pill)", fontSize: "1.5rem" }}
-            disabled={requesting}
-            onClick={handleSubscribe}
-          >
-            {requesting
-              ? <><i className="fas fa-spinner fa-spin" /> Processing…</>
-              : <><i className={`fas fa-${isSeller ? "crown" : "certificate"}`} /> Subscribe — ₦{plan?.price.toLocaleString()}{plan?.period}</>}
-          </button>
-        )}
+        <button
+          className="btn btn-primary btn-lg"
+          style={{ width: "100%", borderRadius: "var(--r-pill)", fontSize: "1.5rem" }}
+          disabled={requesting}
+          onClick={handleSubscribe}
+        >
+          {requesting
+            ? <><i className="fas fa-spinner fa-spin" /> Redirecting to payment…</>
+            : <><i className={`fas fa-${isSeller ? "crown" : "certificate"}`} /> Pay ₦{plan?.price.toLocaleString()}{plan?.period} — Activate now</>}
+        </button>
+
+        <p style={{ textAlign: "center", fontSize: "1.15rem", color: "var(--ink-4)", marginTop: 10 }}>
+          <i className="fas fa-lock" style={{ marginRight: 5 }} />
+          Secured by Paystack · Instant activation after payment
+        </p>
 
         <p style={{ textAlign: "center", fontSize: "1.2rem", color: "var(--ink-4)", marginTop: 16 }}>
           Questions? <button onClick={() => navigate("/messages?advertise=1")} style={{ border: "none", background: "none", color: "var(--accent)", cursor: "pointer", fontSize: "inherit", textDecoration: "underline" }}>Contact our team</button>
