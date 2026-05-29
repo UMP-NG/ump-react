@@ -255,7 +255,7 @@ function ServiceModal({ service, onClose, onSave, showToast }) {
         portfolio:   form.portfolioLinks,
         policies:    form.policies,
         timeSlots:   JSON.stringify(timeSlots),
-        images:      uploadedImages.map((i) => i.url),
+        images:      uploadedImages,
         ...(videoData && { videoUrl: videoData.url, videoPublicId: videoData.publicId }),
       };
 

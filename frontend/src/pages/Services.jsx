@@ -4,8 +4,6 @@ import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
 import BottomNav from "../components/BottomNav";
 import Ph from "../components/Ph";
-import { naira } from "../components/ProductCard";
-
 const PRICE_SUFFIX = { hourly: "/hr", per_project: "/project", starting_from: " from", fixed: "" };
 function fmtPrice(s) {
   if (s.pricingType === "negotiable") return { label: "Negotiable", accent: false };

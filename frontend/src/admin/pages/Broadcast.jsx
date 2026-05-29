@@ -190,7 +190,7 @@ export default function Broadcast() {
             <div className="adm-card-head"><h3>Recent broadcasts</h3></div>
             <div className="adm-scroll-x">
               <table className="adm-table">
-                <thead><tr><th>Title</th><th>Sent</th><th>Reach</th><th>Open</th><th></th></tr></thead>
+                <thead><tr><th>Title</th><th>Sent</th><th>Reach</th><th>Opens</th><th></th></tr></thead>
                 <tbody>
                   {recent.length > 0 ? recent.map(b => (
                     <tr key={b._id}>

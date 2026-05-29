@@ -1,4 +1,5 @@
 import webpush from "web-push";
+import mongoose from "mongoose";
 import PushSub from "../models/PushSub.js";
 import User from "../models/User.js";
 import Broadcast from "../models/Broadcast.js";
@@ -70,8 +71,10 @@ export const sendTestPush = async (req, res) => {
 export const trackOpen = async (req, res) => {
   try {
     const { broadcastId } = req.params;
-    const bc = await Broadcast.findByIdAndUpdate(
-      broadcastId,
+    if (!mongoose.isValidObjectId(broadcastId)) return res.json({ success: false });
+
+    const bc = await Broadcast.findOneAndUpdate(
+      { _id: broadcastId, status: "sent" },   // only track real sent broadcasts
       { $inc: { opens: 1 } },
       { new: true, select: "opens reach" }
     );

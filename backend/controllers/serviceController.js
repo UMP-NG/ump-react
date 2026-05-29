@@ -29,6 +29,11 @@ export const becomeServiceProvider = async (req, res) => {
       return res.status(403).json({ message: "Please link your UNILAG email before registering as a service provider." });
     }
 
+    const { businessName } = req.body;
+    if (!businessName?.trim()) {
+      return res.status(400).json({ message: "Your name or business name is required." });
+    }
+
     if (!user.roles) user.roles = [];
     if (!user.roles.includes("service_provider")) user.roles.push("service_provider");
 
@@ -47,7 +52,7 @@ export const becomeServiceProvider = async (req, res) => {
     if (portfolioUrl)    user.serviceProviderInfo.portfolioUrl    = portfolioUrl.trim();
     if (instagram)       user.serviceProviderInfo.instagram       = instagram.trim();
     if (twitter)         user.serviceProviderInfo.twitter         = twitter.trim();
-    if (yearsExperience !== undefined) user.serviceProviderInfo.yearsExperience = Number(yearsExperience) || 0;
+    if (yearsExperience !== undefined) user.serviceProviderInfo.yearsExperience = Math.max(0, Number(yearsExperience) || 0);
     if (categories) {
       user.serviceProviderInfo.categories = Array.isArray(categories)
         ? categories : categories.split(",").map((c) => c.trim()).filter(Boolean);
@@ -136,18 +141,16 @@ export const createService = async (req, res) => {
       ...(video && { video }),
     });
 
-    // Link service id to user's services array for easy lookup
+    // Link service to user and ensure role in one save
     try {
       if (!user.services) user.services = [];
       user.services.push(service._id);
+      if (!user.roles?.includes("service_provider")) {
+        user.roles = [...new Set([...(user.roles || []), "service_provider"])];
+      }
       await user.save();
     } catch (linkErr) {
-      console.warn("⚠️ Could not link service to user.services:", linkErr);
-    }
-    // Update user roles to include service_provider if not already
-    if (!user.roles?.includes("service_provider")) {
-      user.roles = [...new Set([...(user.roles || []), "service_provider"])];
-      await user.save();
+      console.warn("⚠️ Could not update user after service creation:", linkErr);
     }
 
     res.status(201).json({
@@ -287,7 +290,7 @@ export const getAllServices = async (req, res) => {
 
     const services = await Service.find(query).populate(
       "provider",
-      "name email role businessName brandName storeName"
+      "name email roles avatar serviceProviderInfo"
     );
 
     res.json({ success: true, count: services.length, services });
@@ -303,7 +306,7 @@ export const getAllServices = async (req, res) => {
 export const getServiceById = async (req, res) => {
   try {
     const service = await Service.findById(req.params.id)
-      .populate("provider", "name email role avatar")
+      .populate("provider", "name email roles avatar serviceProviderInfo")
       .populate({
         path: "reviews",
         // Review schema uses `author` as the user reference
@@ -360,6 +363,11 @@ export const updateService = async (req, res) => {
         url: file.path,
         publicId: file.filename,
       }));
+    } else if (Array.isArray(updates.images)) {
+      // Normalize: accept [{url, publicId}] objects or plain URL strings
+      updates.images = updates.images.map((img) =>
+        typeof img === "string" ? { url: img, publicId: "" } : { url: img.url, publicId: img.publicId || "" }
+      );
     }
 
     const updatedService = await Service.findByIdAndUpdate(

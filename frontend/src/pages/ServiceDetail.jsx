@@ -3,8 +3,6 @@ import { useParams, useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
 import Ph from "../components/Ph";
-import { naira } from "../components/ProductCard";
-
 function fmt12h(t) {
   if (!t) return t;
   const [h, m] = t.split(":").map(Number);
@@ -25,12 +23,12 @@ const PRICING_SUFFIX = {
 };
 
 function formatPrice(service) {
-  if (service.pricingType === "negotiable") return { label: "Negotiable", sub: "" };
-  if (service.pricingType === "free")       return { label: "Free",       sub: "" };
+  if (service.pricingType === "negotiable") return { label: "Negotiable", sub: "", accent: false };
+  if (service.pricingType === "free")       return { label: "Free",       sub: "", accent: false };
   const cur = service.currency === "USD" ? "$" : "₦";
   const amt = `${cur}${Number(service.rate || 0).toLocaleString()}`;
   const sub = PRICING_SUFFIX[service.pricingType] || "";
-  return { label: amt, sub };
+  return { label: amt, sub, accent: true };
 }
 import { apiFetch } from "../utils/api";
 import Skel from "../components/Skel";

@@ -362,10 +362,10 @@ function ListingModal({ listing, onClose, onSave, showToast }) {
     furnished: listing?.furnished || false,
     available: listing?.available ?? true,
     amenities: listing?.amenities || [],
-    agreementFee:  listing?.agreementFee  || "",
-    commissionFee: listing?.commissionFee || "",
-    agentFee:      listing?.agentFee      || "",
-    cautionFee:    listing?.cautionFee    || "",
+    agreementFee:  listing?.agreementFee  ?? "",
+    commissionFee: listing?.commissionFee ?? "",
+    agentFee:      listing?.agentFee      ?? "",
+    cautionFee:    listing?.cautionFee    ?? "",
   });
   const [imageFiles, setImageFiles] = useState([]);
   const [imagePreviews, setImagePreviews] = useState([]);
@@ -1114,7 +1114,7 @@ export default function SellerDashboard() {
     }).finally(() => { setLoading(false); setRefreshing(false); });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => { loadDashboard(false); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (user?._id) loadDashboard(false); }, [user?._id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Load banks when Payouts tab opens ───────────────────────────────────────
   useEffect(() => {

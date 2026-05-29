@@ -359,6 +359,10 @@ export const uploadSingleMedia = (req, res, cb) => {
 
   multerUpload(req, res, async (err) => {
     if (err) return cb(err);
+    // Enforce 5 MB limit on images (multer ceiling is 50 MB to accommodate videos)
+    if (req.file && !req.file.mimetype.startsWith("video/") && req.file.size > 5 * 1024 * 1024) {
+      return cb(new Error(`Image "${req.file.originalname}" exceeds 5 MB. Please compress it before uploading.`));
+    }
     try {
       if (req.file) {
         const isVideo = req.file.mimetype.startsWith("video/");

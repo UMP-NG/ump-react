@@ -35,7 +35,7 @@ export default function ProviderDetail() {
         setProvider(d.provider);
         setServices(d.services || []);
       })
-      .catch(() => {})
+      .catch((err) => console.error("ProviderDetail fetch:", err))
       .finally(() => setLoading(false));
   }, [id]);
 
@@ -154,7 +154,7 @@ export default function ProviderDetail() {
           >
             <i className="fas fa-comment" /> Message
           </button>
-          {provider.whatsapp && (
+          {typeof provider.whatsapp === "string" && provider.whatsapp && (
             <a
               href={`https://wa.me/${provider.whatsapp.replace(/\D/g, "")}`}
               target="_blank"

@@ -36,7 +36,7 @@ export default function HostelDetail() {
     ]).then(([detail, all]) => {
       setListing(detail.listing || detail || null);
       setRelated((all.listings || all || []).filter((l) => l._id !== id).slice(0, 3));
-    }).catch(() => {})
+    }).catch((err) => console.error("HostelDetail fetch:", err))
     .finally(() => setLoading(false));
   }, [id]);
 
@@ -133,7 +133,7 @@ export default function HostelDetail() {
       <div style={{ padding: "20px 16px 0" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
           <h1 style={{ fontSize: "2.2rem", fontWeight: 800, letterSpacing: "-0.02em", margin: "0 0 6px", flex: 1 }}>{listing.name}</h1>
-          <span style={{ fontSize: "2.4rem", fontWeight: 800, color: "var(--accent)", flexShrink: 0, marginLeft: 12 }}>{naira(listing.price)}<span style={{ fontSize: "1.2rem", color: "var(--ink-3)", fontWeight: 500 }}> {listing.rate || "/ yr"}</span></span>
+          <span style={{ fontSize: "2.4rem", fontWeight: 800, color: "var(--accent)", flexShrink: 0, marginLeft: 12 }}>{naira(listing.price || 0)}<span style={{ fontSize: "1.2rem", color: "var(--ink-3)", fontWeight: 500 }}> {listing.rate || "/ yr"}</span></span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--ink-3)", fontSize: "1.3rem", marginBottom: 16 }}>
           <i className="fas fa-location-dot" /> {listing.location || listing.address}
@@ -157,7 +157,6 @@ export default function HostelDetail() {
 
         {/* Move-in cost breakdown — only shown if any extra fees are set */}
         {(listing.agreementFee > 0 || listing.commissionFee > 0 || listing.agentFee > 0 || listing.cautionFee > 0) && (() => {
-          const naira = (n) => `₦${Number(n).toLocaleString()}`;
           const fees = [
             { label: "Rent", amount: listing.price },
             listing.agreementFee  > 0 && { label: "Agreement fee",  amount: listing.agreementFee },
@@ -248,7 +247,7 @@ export default function HostelDetail() {
       {/* sticky book bar */}
       <div style={{ position: "fixed", left: 16, right: 16, bottom: 16, background: "var(--white)", border: "1px solid var(--line)", borderRadius: "var(--r-pill)", padding: "10px 16px", display: "flex", alignItems: "center", gap: 12, boxShadow: "var(--shadow-pop)", zIndex: 40 }}>
         <div style={{ flex: 1 }}>
-          <div style={{ fontSize: "1.8rem", fontWeight: 800, color: "var(--accent)" }}>{naira(listing.price)}<span style={{ fontSize: "1.1rem", color: "var(--ink-3)", fontWeight: 500 }}> {listing.rate || "/ year"}</span></div>
+          <div style={{ fontSize: "1.8rem", fontWeight: 800, color: "var(--accent)" }}>{naira(listing.price || 0)}<span style={{ fontSize: "1.1rem", color: "var(--ink-3)", fontWeight: 500 }}> {listing.rate || "/ yr"}</span></div>
         </div>
         <button className="btn btn-primary" onClick={() => setBookingOpen(true)}>
           <i className="fas fa-calendar-check" /> Schedule viewing
