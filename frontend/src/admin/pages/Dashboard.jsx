@@ -170,7 +170,7 @@ export default function Dashboard() {
           badge={stats?.pendingSellers ? <span className="pill-warn">{stats.pendingSellers} pending</span> : null}
         />
         <StatCard
-          label={`Orders placed (${periodShort})`}
+          label={`Order value (${periodShort})`}
           value={val(stats?.periodOrdersValue)}
           delta={stats?.periodOrderCount != null ? `${stats.periodOrderCount} orders` : '—'}
           icon="fa-receipt"

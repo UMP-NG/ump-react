@@ -141,8 +141,8 @@ export default function Config() {
         <div className="adm-card">
           <div className="adm-card-head"><h3>Branding</h3></div>
           <div className="adm-card-body">
-            <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 16 }}>
-              <div style={{ width: 72, height: 72, borderRadius: 16, overflow: 'hidden', background: '#f1f5f9', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid #e2e8f0' }}>
+            <div className="cfg-logo-row">
+              <div className="cfg-logo-preview">
                 {logoUploading
                   ? <i className="fa-solid fa-circle-notch fa-spin" style={{ fontSize: '1.8rem', color: '#94a3b8' }} />
                   : <img src={logo.url || DEFAULT_LOGO} alt="App logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
@@ -151,19 +151,15 @@ export default function Config() {
               <div>
                 <div style={{ fontWeight: 600, marginBottom: 4 }}>App logo</div>
                 <div className="muted" style={{ fontSize: '1.2rem', marginBottom: 8 }}>Shown in navbar, footer and install prompt.</div>
-                <button
-                  className="abtn ghost sm"
-                  onClick={() => logoInputRef.current?.click()}
-                  disabled={logoUploading}
-                >
+                <button className="abtn ghost sm" onClick={() => logoInputRef.current?.click()} disabled={logoUploading}>
                   <i className="fa-solid fa-upload"></i> {logoUploading ? 'Uploading…' : 'Upload new logo'}
                 </button>
                 <input ref={logoInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={handleLogoUpload} />
               </div>
             </div>
             {logo.url && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <div className="mono muted" style={{ fontSize: '1.15rem', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{logo.url}</div>
+              <div className="cfg-logo-url-row">
+                <div className="mono muted">{logo.url}</div>
                 <button className="abtn ghost sm" onClick={() => setLogo({ url: '', publicId: '' })}>
                   <i className="fa-solid fa-trash"></i>
                 </button>
@@ -211,39 +207,34 @@ export default function Config() {
               <div className="muted" style={{ textAlign: 'center', padding: '20px 0', fontSize: '1.3rem' }}>No slides yet — click "Add slide" to get started.</div>
             )}
             {slides.map((s, i) => (
-              <div key={i} style={{ border: '1px solid #e3e5eb', borderRadius: 10, padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {/* Row 1: drag + thumb + title + toggle + delete — wraps on mobile */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                  <div className="hero-drag" style={{ flexShrink: 0 }}><i className="fa-solid fa-grip-vertical"></i></div>
+              <div key={i} className="cfg-slide-item">
+                <div className="cfg-slide-header">
+                  <div className="hero-drag"><i className="fa-solid fa-grip-vertical"></i></div>
                   <div
-                    className="hero-thumb"
+                    className="cfg-slide-thumb"
                     title="Click to upload slide image"
-                    style={{ cursor: 'pointer', position: 'relative', flexShrink: 0, width: 80, height: 50 }}
                     onClick={() => !slideUploading.has(i) && slideInputRefs.current[i]?.click()}
                   >
-                    {slideUploading.has(i)
-                      ? <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,.7)', borderRadius: 6 }}>
-                          <i className="fa-solid fa-circle-notch fa-spin" style={{ fontSize: '1.4rem', color: '#64748b' }} />
-                        </div>
-                      : null
-                    }
+                    {slideUploading.has(i) && (
+                      <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,.7)', borderRadius: 6 }}>
+                        <i className="fa-solid fa-circle-notch fa-spin" style={{ fontSize: '1.4rem', color: '#64748b' }} />
+                      </div>
+                    )}
                     {s.image?.url
-                      ? <img src={s.image.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: 6 }} />
-                      : <div style={{ width: '100%', height: '100%', background: '#f5f6f8', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem', color: '#94a3b8', gap: 4 }}>
+                      ? <img src={s.image.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      : <div style={{ width: '100%', height: '100%', background: '#f5f6f8', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem', color: '#94a3b8', gap: 4 }}>
                           <i className="fa-solid fa-image" /> {i + 1}
                         </div>
                     }
                     <input
                       ref={el => slideInputRefs.current[i] = el}
-                      type="file"
-                      accept="image/*"
+                      type="file" accept="image/*"
                       style={{ display: 'none' }}
                       onChange={e => handleSlideImageUpload(e, i)}
                     />
                   </div>
-                  {/* Title input takes remaining space; on mobile this wraps to its own line */}
                   <input
-                    style={{ flex: '1 1 140px', border: 'none', fontWeight: 600, fontSize: '1.3rem', background: 'transparent', fontFamily: 'inherit', color: 'var(--ink-1)', outline: 'none', minWidth: 0 }}
+                    className="cfg-slide-title"
                     value={s.title || ''}
                     onChange={e => setSlides(prev => prev.map((sl, j) => j === i ? { ...sl, title: e.target.value } : sl))}
                     placeholder="Slide title"
@@ -252,35 +243,33 @@ export default function Config() {
                     className={`adm-toggle${s.on ? ' on' : ''}`}
                     style={{ flexShrink: 0 }}
                     onClick={() => setSlides(prev => prev.map((sl, j) => j === i ? { ...sl, on: !sl.on } : sl))}
-                  ></span>
+                  />
                   <button
+                    className="abtn danger sm"
                     title="Delete slide"
                     onClick={() => { if (window.confirm('Delete this slide?')) setSlides(prev => prev.filter((_, j) => j !== i)); }}
-                    style={{ flexShrink: 0, padding: '5px 10px', borderRadius: 7, border: '1px solid #fca5a5', background: '#fff1f2', color: '#dc2626', cursor: 'pointer', fontSize: '1.15rem', display: 'flex', alignItems: 'center', gap: 5, fontFamily: 'inherit', fontWeight: 600 }}
                   >
                     <i className="fa-solid fa-trash" /> Delete
                   </button>
                 </div>
-                {/* Row 2: subtitle */}
                 <input
+                  className="cfg-slide-input"
                   value={s.subtitle || ''}
                   onChange={e => setSlides(prev => prev.map((sl, j) => j === i ? { ...sl, subtitle: e.target.value } : sl))}
                   placeholder="Subtitle / description (optional)"
-                  style={{ fontSize: '1.2rem', borderRadius: 6, border: '1px solid #e3e5eb', padding: '6px 10px', fontFamily: 'inherit', color: 'var(--ink-2)', background: 'var(--surface)' }}
                 />
-                {/* Row 3: link + CTA label — stacks on small screens */}
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <div className="cfg-slide-url-row">
                   <input
+                    className="cfg-slide-input"
                     value={s.url || ''}
                     onChange={e => setSlides(prev => prev.map((sl, j) => j === i ? { ...sl, url: e.target.value } : sl))}
                     placeholder="Link (e.g. /market or https://…)"
-                    style={{ flex: '2 1 160px', fontSize: '1.2rem', borderRadius: 6, border: '1px solid #e3e5eb', padding: '6px 10px', fontFamily: 'inherit', color: 'var(--ink-2)', background: 'var(--surface)' }}
                   />
                   <input
+                    className="cfg-slide-input"
                     value={s.ctaLabel || ''}
                     onChange={e => setSlides(prev => prev.map((sl, j) => j === i ? { ...sl, ctaLabel: e.target.value } : sl))}
                     placeholder="Button label (e.g. Explore)"
-                    style={{ flex: '1 1 120px', fontSize: '1.2rem', borderRadius: 6, border: '1px solid #e3e5eb', padding: '6px 10px', fontFamily: 'inherit', color: 'var(--ink-2)', background: 'var(--surface)' }}
                   />
                 </div>
               </div>
@@ -291,16 +280,13 @@ export default function Config() {
         <div className="adm-card">
           <div className="adm-card-head"><h3>Feature flags</h3></div>
           <div className="adm-card-body">
-            {flags.map((f, i) => (
-              <div
-                key={f.key}
-                style={{ display: 'flex', alignItems: 'center', padding: '12px 0', borderBottom: i < flags.length - 1 ? '1px solid #f0f2f5' : 'none' }}
-              >
-                <div style={{ flex: 1 }}>
+            {flags.map((f) => (
+              <div key={f.key} className="cfg-flag-row">
+                <div className="cfg-flag-info">
                   <div style={{ fontWeight: 600 }}>{f.label}</div>
                   <div className="muted" style={{ fontSize: '1.2rem' }}>{f.sub}</div>
                 </div>
-                <span className={`adm-toggle${f.on ? ' on' : ''}`} onClick={() => toggleFlag(f.key)}></span>
+                <span className={`adm-toggle${f.on ? ' on' : ''}`} onClick={() => toggleFlag(f.key)} />
               </div>
             ))}
           </div>

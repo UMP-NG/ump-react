@@ -7,6 +7,11 @@ import Ph from "../components/Ph";
 import Skel from "../components/Skel";
 import { apiFetch } from "../utils/api";
 
+/** Extracts a URL from either {url, publicId} objects or plain URL strings. */
+function getImgUrl(obj) {
+  return obj?.url || (typeof obj === "string" ? obj : null);
+}
+
 const STORE_FILTERS   = ["All", "★ 4.5+", "Subscribed", "Tech", "Fashion", "Books"];
 const PROVIDER_CATS   = ["All", "Design", "Writing", "Tech / Coding", "Tutoring", "Photography", "Fitness", "Music", "Other"];
 
@@ -145,8 +150,8 @@ function StoresTab({ search, navigate }) {
       ) : (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(156px,1fr))", gap: 14 }}>
           {visible.map(s => {
-            const logoUrl   = s.logo?.url  || s.avatar?.url  || null;
-            const bannerUrl = s.banner?.url || null;
+            const logoUrl   = getImgUrl(s.logo) || getImgUrl(s.avatar);
+            const bannerUrl = getImgUrl(s.banner);
             const name = s.storeName || s.businessName || s.name || "Store";
             return (
               <div key={s._id} className="card" style={{ overflow: "hidden", cursor: "pointer" }} onClick={() => navigate(`/store/${s._id}`)}>
@@ -232,7 +237,7 @@ function ProvidersTab({ search, navigate }) {
       ) : (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(156px,1fr))", gap: 14 }}>
           {visible.map(p => {
-            const avatarUrl   = p.avatar?.url || (typeof p.avatar === "string" ? p.avatar : null);
+            const avatarUrl   = getImgUrl(p.avatar);
             const displayName = p.businessName || p.name || "Provider";
             return (
               <div key={p._id} className="card" style={{ padding: 16, cursor: "pointer", textAlign: "center" }} onClick={() => navigate(`/providers/${p._id}`)}>
