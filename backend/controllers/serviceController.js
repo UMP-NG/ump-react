@@ -29,11 +29,6 @@ export const becomeServiceProvider = async (req, res) => {
       return res.status(403).json({ message: "Please link your UNILAG email before registering as a service provider." });
     }
 
-    const { businessName } = req.body;
-    if (!businessName?.trim()) {
-      return res.status(400).json({ message: "Your name or business name is required." });
-    }
-
     if (!user.roles) user.roles = [];
     if (!user.roles.includes("service_provider")) user.roles.push("service_provider");
 
@@ -42,6 +37,10 @@ export const becomeServiceProvider = async (req, res) => {
       businessName, headline, bio, categories, yearsExperience,
       location, whatsapp, portfolioUrl, instagram, twitter, avatarUrl,
     } = req.body;
+
+    if (!businessName?.trim()) {
+      return res.status(400).json({ message: "Your name or business name is required." });
+    }
 
     if (!user.serviceProviderInfo) user.serviceProviderInfo = {};
     if (businessName)    user.serviceProviderInfo.businessName    = businessName.trim();
