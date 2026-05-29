@@ -25,6 +25,12 @@ const listingSchema = new mongoose.Schema(
         publicId: String,
       },
     ],
+    // Lagos-specific agent fees — optional, shown as move-in cost breakdown
+    agreementFee:  { type: Number, default: 0 },
+    commissionFee: { type: Number, default: 0 },
+    agentFee:      { type: Number, default: 0 },
+    cautionFee:    { type: Number, default: 0 },
+
     available: { type: Boolean, default: true },
     furnished: { type: Boolean, default: false },
     owner: { type: mongoose.Schema.Types.ObjectId, ref: "User" }, // owner of the listing

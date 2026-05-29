@@ -262,21 +262,27 @@ export default function Cart() {
                     >Apply</button>
                   </div>
 
-                  {/* Total — hidden on desktop (sidebar shows it) */}
-                  <div className="mob-only" style={{ padding: 16, background: "var(--navy-800)", color: "#fff", borderRadius: "var(--r-lg)", marginBottom: 12 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: "1.3rem", marginBottom: 6 }}>
-                      <span style={{ opacity: 0.75 }}>Subtotal</span><span>{naira(sub)}</span>
+                  {/* Order total — hidden on desktop (sidebar shows it) */}
+                  <div className="mob-only" style={{ border: "1px solid var(--line)", borderRadius: "var(--r-lg)", overflow: "hidden", marginBottom: 12 }}>
+                    <div style={{ padding: "10px 14px", background: "var(--surface)", borderBottom: "1px solid var(--line)", fontSize: "1.15rem", fontWeight: 600, color: "var(--ink-3)", letterSpacing: ".04em" }}>
+                      ORDER SUMMARY · {items.length} item{items.length !== 1 ? "s" : ""}
                     </div>
-                    {deliveryMethod === "delivery" && bbxFee > 0 && (
-                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: "1.3rem", marginBottom: 6 }}>
-                        <span style={{ opacity: 0.75 }}>Delivery (pay to rider)</span>
-                        <span style={{ color: "#f59e0b" }}>{naira(bbxFee)}</span>
+                    <div style={{ padding: "12px 14px" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                        <span style={{ fontSize: "1.3rem", color: "var(--ink-2)" }}>Subtotal</span>
+                        <span style={{ fontSize: "1.3rem", fontWeight: 600 }}>{naira(sub)}</span>
                       </div>
-                    )}
-                    <div style={{ height: 1, background: "rgba(255,255,255,.15)", margin: "8px 0" }} />
-                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: "1.4rem", fontWeight: 700 }}>
-                      <span>Total</span>
-                      <span style={{ color: "var(--accent)", fontSize: "2rem", fontWeight: 800 }}>{naira(orderTotal)}</span>
+                      {deliveryMethod === "delivery" && bbxFee > 0 && (
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                          <span style={{ fontSize: "1.3rem", color: "var(--ink-2)" }}>Delivery (BlackBox)</span>
+                          <span style={{ fontSize: "1.3rem", fontWeight: 600, color: "#f59e0b" }}>{naira(bbxFee)}<span style={{ fontSize: "1rem", fontWeight: 400, color: "var(--ink-3)" }}> rider</span></span>
+                        </div>
+                      )}
+                      <div style={{ height: 1, background: "var(--line)", margin: "8px 0" }} />
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <span style={{ fontSize: "1.4rem", fontWeight: 700 }}>Total</span>
+                        <span style={{ fontSize: "2rem", fontWeight: 800, color: "var(--accent)" }}>{naira(orderTotal)}</span>
+                      </div>
                     </div>
                   </div>
 

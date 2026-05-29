@@ -156,9 +156,12 @@ export default function Hostel() {
                     </button>
                   </div>
                   <div style={{ padding: 14 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                      <h3 style={{ margin: 0, fontSize: "1.6rem", fontWeight: 700 }}>{h.name}</h3>
-                      <span style={{ fontSize: "1.6rem", fontWeight: 800, color: "var(--accent)" }}>{naira(h.price)}</span>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+                      <h3 style={{ margin: 0, fontSize: "1.6rem", fontWeight: 700, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{h.name}</h3>
+                      <div style={{ flexShrink: 0, textAlign: "right" }}>
+                        <div style={{ fontSize: "1.6rem", fontWeight: 800, color: "var(--accent)" }}>{naira(h.price)}</div>
+                        <div style={{ fontSize: "1.05rem", color: "var(--ink-3)", marginTop: -2 }}>{h.rate || "per year"}</div>
+                      </div>
                     </div>
                     <div style={{ fontSize: "1.2rem", color: "var(--ink-3)", marginTop: 4 }}>
                       <i className="fas fa-location-dot" /> {h.location}
@@ -169,7 +172,6 @@ export default function Hostel() {
                           <i className={`fas fa-${AMENITY_ICONS[a] || "check"}`} />
                         </span>
                       ))}
-                      <span style={{ fontSize: "1.1rem", color: "var(--ink-3)" }}>{h.rate || "per year"}</span>
                       <button className="btn btn-sm btn-dark" style={{ marginLeft: "auto" }} onClick={(e) => { e.stopPropagation(); navigate(`/hostel/${h._id}`); }}>View</button>
                     </div>
                   </div>

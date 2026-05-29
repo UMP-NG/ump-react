@@ -13,6 +13,9 @@ export default function Broadcast() {
   const [channels, setChannels] = useState({ inapp: true, push: true, email: false });
   const [form, setForm] = useState({ title: '', body: '', ctaLabel: '', ctaLink: '', sendAt: '', expires: '' });
   const [sending, setSending] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [sendError, setSendError] = useState('');
+  const [sendSuccess, setSendSuccess] = useState('');
   const [recent, setRecent] = useState([]);
 
   useEffect(() => {
@@ -22,13 +25,35 @@ export default function Broadcast() {
   async function sendBroadcast() {
     if (!form.title || !form.body) return;
     setSending(true);
-    await apiFetch('/api/admins/broadcasts', {
-      method: 'POST',
-      body: { audience, channels, ...form },
-    }).catch(() => null);
-    setSending(false);
-    setForm({ title: '', body: '', ctaLabel: '', ctaLink: '', sendAt: '', expires: '' });
-    apiFetch('/api/admins/broadcasts?limit=5').then(d => setRecent(d?.broadcasts || [])).catch(() => {});
+    setSendError('');
+    setSendSuccess('');
+    try {
+      const res = await apiFetch('/api/admins/broadcasts', {
+        method: 'POST',
+        body: { audience, channels, ...form },
+      });
+      setSendSuccess(`Broadcast sent — reached ${res?.broadcast?.reach ?? 0} user(s).`);
+      setForm({ title: '', body: '', ctaLabel: '', ctaLink: '', sendAt: '', expires: '' });
+      apiFetch('/api/admins/broadcasts?limit=5').then(d => setRecent(d?.broadcasts || [])).catch(() => {});
+    } catch (err) {
+      setSendError(err?.message || 'Failed to send broadcast. Please try again.');
+    } finally {
+      setSending(false);
+    }
+  }
+
+  async function sendTestToMe() {
+    setTesting(true);
+    setSendError('');
+    setSendSuccess('');
+    try {
+      const res = await apiFetch('/api/push/test', { method: 'POST' });
+      setSendSuccess(`Test push sent to ${res.devices} device(s). Check your OS notifications.`);
+    } catch (err) {
+      setSendError(err?.message || 'Test failed. Make sure you have granted notification permission in this browser.');
+    } finally {
+      setTesting(false);
+    }
   }
 
   async function deleteBroadcast(id) {
@@ -71,7 +96,7 @@ export default function Broadcast() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {[
                 { key: 'inapp', icon: 'fa-bell',          title: 'In-app',           sub: 'Bell drawer + activity badge' },
-                { key: 'push',  icon: 'fa-mobile-screen',  title: 'Push notification', sub: 'FCM · iOS + Android' },
+                { key: 'push',  icon: 'fa-mobile-screen',  title: 'Push notification', sub: 'Web Push · all browsers (requires permission)' },
                 { key: 'email', icon: 'fa-envelope',       title: 'Email',            sub: 'Transactional template' },
               ].map(ch => (
                 <label
@@ -117,10 +142,21 @@ export default function Broadcast() {
               </div>
             </div>
 
+            {sendError && (
+              <div style={{ marginTop: 12, padding: '10px 14px', borderRadius: 8, background: '#fef2f2', color: '#dc2626', fontSize: '1.25rem', border: '1px solid #fca5a5' }}>
+                <i className="fa-solid fa-circle-exclamation" style={{ marginRight: 6 }} />{sendError}
+              </div>
+            )}
+            {sendSuccess && (
+              <div style={{ marginTop: 12, padding: '10px 14px', borderRadius: 8, background: '#f0fdf4', color: '#16a34a', fontSize: '1.25rem', border: '1px solid #86efac' }}>
+                <i className="fa-solid fa-circle-check" style={{ marginRight: 6 }} />{sendSuccess}
+              </div>
+            )}
             <div style={{ display: 'flex', gap: 8, marginTop: 18 }}>
-              <button className="abtn ghost"><i className="fa-solid fa-paper-plane"></i> Send test to me</button>
+              <button className="abtn ghost" disabled={testing} onClick={sendTestToMe}>
+                {testing ? <i className="fa-solid fa-circle-notch fa-spin" /> : <><i className="fa-solid fa-paper-plane"></i> Send test to me</>}
+              </button>
               <div style={{ flex: 1 }}></div>
-              <button className="abtn ghost">Save draft</button>
               <button className="abtn primary" disabled={sending || !form.title || !form.body} onClick={sendBroadcast}>
                 {sending
                   ? <i className="fa-solid fa-circle-notch fa-spin"></i>
@@ -161,7 +197,7 @@ export default function Broadcast() {
                       <td>{b.title}</td>
                       <td className="muted">{b.sentAt ? new Date(b.sentAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : '—'}</td>
                       <td className="amount">{(b.reach || 0).toLocaleString()}</td>
-                      <td className="amount">{b.openRate ? `${b.openRate}%` : '—'}</td>
+                      <td className="amount">{b.opens > 0 ? b.opens : '—'}</td>
                       <td>
                         <button
                           onClick={() => deleteBroadcast(b._id)}

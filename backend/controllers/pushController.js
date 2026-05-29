@@ -1,6 +1,7 @@
 import webpush from "web-push";
 import PushSub from "../models/PushSub.js";
 import User from "../models/User.js";
+import Broadcast from "../models/Broadcast.js";
 
 // Configure VAPID once at module load, not on every send
 let _pushReady = false;
@@ -48,6 +49,39 @@ export const subscribe = async (req, res) => {
   } catch (err) {
     console.error("subscribe:", err);
     res.status(500).json({ message: "Server error" });
+  }
+};
+
+// POST /api/push/test  — sends a real push to the requesting user's registered devices
+export const sendTestPush = async (req, res) => {
+  if (!_pushReady) return res.status(503).json({ message: "Push not configured on this server" });
+  const subs = await PushSub.find({ user: req.user._id });
+  if (!subs.length) return res.status(404).json({ message: "No push subscription found. Make sure you have granted notification permission in this browser." });
+  await sendPushToSubs(subs, {
+    title: "UMP push test",
+    body:  "Push notifications are working correctly.",
+    url:   "/admin/broadcast",
+    icon:  "/icon-192.png",
+  });
+  res.json({ success: true, devices: subs.length });
+};
+
+// POST /api/push/open/:broadcastId  — called by service worker on notification click
+export const trackOpen = async (req, res) => {
+  try {
+    const { broadcastId } = req.params;
+    const bc = await Broadcast.findByIdAndUpdate(
+      broadcastId,
+      { $inc: { opens: 1 } },
+      { new: true, select: "opens reach" }
+    );
+    if (bc && bc.reach > 0) {
+      bc.openRate = Math.round((bc.opens / bc.reach) * 100);
+      await bc.save();
+    }
+    res.json({ success: true });
+  } catch {
+    res.json({ success: false });
   }
 };
 

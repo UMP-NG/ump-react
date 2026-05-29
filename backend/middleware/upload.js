@@ -353,6 +353,30 @@ export const uploadSingle = (req, res, cb) => {
   });
 };
 
+// Accepts a single file that can be an image OR a video (e.g. service video)
+export const uploadSingleMedia = (req, res, cb) => {
+  const multerUpload = uploadMediaMulter.single("file");
+
+  multerUpload(req, res, async (err) => {
+    if (err) return cb(err);
+    try {
+      if (req.file) {
+        const isVideo = req.file.mimetype.startsWith("video/");
+        const uploaded = await uploadToCloudinary(
+          req.file.buffer,
+          `media-${Date.now()}`,
+          isVideo ? "service-videos" : "uploads",
+          isVideo
+        );
+        req.file = { ...req.file, filename: uploaded.filename, path: uploaded.path, isVideo };
+      }
+      cb(null);
+    } catch (error) {
+      cb(error);
+    }
+  });
+};
+
 export const uploadAttachments = (req, res, cb) => {
   const multerUpload = upload.array("attachments", 5);
 

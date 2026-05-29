@@ -23,11 +23,14 @@ import ResetPassword from "./pages/ResetPassword";
 import Messages from "./pages/Messages";
 import Services from "./pages/Services";
 import ServiceDetail from "./pages/ServiceDetail";
+import Providers from "./pages/Providers";
+import ProviderDetail from "./pages/ProviderDetail";
 import Hostel from "./pages/Hostel";
 import HostelDetail from "./pages/HostelDetail";
 import Store from "./pages/Store";
 import StoreDetail from "./pages/StoreDetail";
 import Provider from "./pages/Provider";
+import SubscribePage from "./pages/SubscribePage";
 
 import Orders from "./pages/Orders";
 import Wishlist from "./pages/Wishlist";
@@ -94,9 +97,11 @@ export default function App() {
       <Route path="/messages" element={<PrivateRoute><Messages /></PrivateRoute>} />
       <Route path="/messages/:threadId" element={<PrivateRoute><Messages /></PrivateRoute>} />
 
-      {/* Services */}
-      <Route path="/services" element={<Services />} />
-      <Route path="/services/:id" element={<ServiceDetail />} />
+      {/* Services & Providers */}
+      <Route path="/services"        element={<Services />} />
+      <Route path="/services/:id"    element={<ServiceDetail />} />
+      <Route path="/providers"       element={<Providers />} />
+      <Route path="/providers/:id"   element={<ProviderDetail />} />
 
       {/* Hostel */}
       <Route path="/hostel" element={<Hostel />} />
@@ -106,6 +111,7 @@ export default function App() {
       <Route path="/store" element={<Store />} />
       <Route path="/store/:id" element={<StoreDetail />} />
       <Route path="/partner" element={<PrivateRoute><Provider /></PrivateRoute>} />
+      <Route path="/subscribe" element={<PrivateRoute><SubscribePage /></PrivateRoute>} />
 
       {/* User account — protected */}
       <Route path="/orders" element={<PrivateRoute><Orders /></PrivateRoute>} />

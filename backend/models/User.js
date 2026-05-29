@@ -54,10 +54,16 @@ const userSchema = new mongoose.Schema(
     // SERVICE PROVIDER INFO (FULL)
     // ===============================
     serviceProviderInfo: {
-      businessName: { type: String, trim: true },
-      skills: [{ type: String, trim: true }],
-      rate: { type: Number },
-      bio: { type: String, trim: true },
+      businessName:    { type: String, trim: true },
+      headline:        { type: String, trim: true }, // short professional tagline
+      bio:             { type: String, trim: true },
+      categories:      [{ type: String, trim: true }],
+      yearsExperience: { type: Number, default: 0 },
+      location:        { type: String, trim: true },
+      whatsapp:        { type: String, trim: true },
+      portfolioUrl:    { type: String, trim: true },
+      instagram:       { type: String, trim: true },
+      twitter:         { type: String, trim: true },
       availability: {
         type: String,
         enum: ["available", "busy", "offline"],

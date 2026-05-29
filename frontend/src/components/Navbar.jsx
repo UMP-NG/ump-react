@@ -10,8 +10,9 @@ const NAV_LINKS = [
   { path: "/", label: "Home" },
   { path: "/market", label: "Marketplace" },
   { path: "/services", label: "Services" },
+  { path: "/providers", label: "Providers" },
   { path: "/hostel", label: "Hostel Hub" },
-  { path: "/store", label: "Store" },
+  { path: "/store", label: "Stores" },
 ];
 
 export default function Navbar({ frosted = false, dark = false }) {

@@ -6,6 +6,7 @@ import { useUser } from "../context/UserContext";
 import { useToast } from "../context/ToastContext";
 import FloatingChat from "../components/FloatingChat";
 import Skel from "../components/Skel";
+import ImageCropModal from "../components/ImageCropModal";
 
 const SERVICE_CATS = ["Design", "Writing", "Tech / Coding", "Tutoring", "Photography", "Fitness", "Music", "Other"];
 const PACKAGES     = ["Basic", "Standard", "Premium"];
@@ -86,59 +87,182 @@ function StatusPill({ status }) {
   );
 }
 
+function fmt12h(time24) {
+  if (!time24) return time24;
+  const [h, m] = time24.split(":").map(Number);
+  const ampm = h < 12 ? "AM" : "PM";
+  const h12  = h % 12 || 12;
+  return `${h12}:${String(m).padStart(2, "0")} ${ampm}`;
+}
+
+const PRICING_TYPES = [
+  { value: "fixed",        label: "Fixed price",    hint: "One set price for the service" },
+  { value: "hourly",       label: "Per hour",        hint: "Billed per hour of work" },
+  { value: "per_project",  label: "Per project",     hint: "Quoted per project scope" },
+  { value: "starting_from",label: "Starting from",   hint: "Minimum price; may increase" },
+  { value: "negotiable",   label: "Negotiable",      hint: "Client and you agree on price" },
+  { value: "free",         label: "Free",            hint: "No charge for this service" },
+];
+const DAYS = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"];
+
+// 24-hour time options in 30-minute steps (00:00 → 23:30)
+const TIME_OPTIONS = Array.from({ length: 48 }, (_, i) => {
+  const h = Math.floor(i / 2);
+  const m = i % 2 === 0 ? "00" : "30";
+  return `${String(h).padStart(2, "0")}:${m}`;
+});
+
 // ─── Add / Edit Service Modal ─────────────────────────────────────────────────
 function ServiceModal({ service, onClose, onSave, showToast }) {
-  const isEdit = !!service;
-  const imageRef = useRef(null);
+  const isEdit    = !!service;
+  const imgInputRef  = useRef(null);
+  const vidInputRef  = useRef(null);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({
-    title:       service?.title || "",
-    category:    service?.category || "",
-    desc:        service?.desc || service?.description || "",
-    rate:        service?.rate || service?.ratePerHour || "",
-    currency:    service?.currency || "NGN",
-    package:     service?.package || "",
-    duration:    service?.duration || "",
-    timeSlots:   service?.timeSlots || "",
-    available:   service?.available ?? true,
-    imageUrl:    service?.serviceImageUrl || "",
-    imageFile:   null,
-  });
-  const [preview, setPreview] = useState(service?.serviceImageUrl || null);
 
-  function pickImage(e) {
-    const file = e.target.files[0];
-    if (!file) return;
-    setPreview(URL.createObjectURL(file));
-    setForm((f) => ({ ...f, imageFile: file }));
+  const [form, setForm] = useState({
+    title:        service?.title || "",
+    category:     service?.major || service?.category || "",
+    desc:         service?.desc  || "",
+    about:        service?.about || "",
+    pricingType:  service?.pricingType || "fixed",
+    rate:         service?.rate  || "",
+    currency:     service?.currency || "NGN",
+    duration:     service?.duration || "",
+    available:    service?.available ?? true,
+    tags:         (service?.tags || []).join(", "),
+    portfolioLinks: service?.portfolio || [],
+    newPortfolioLink: "",
+    policies:     (service?.policies || []).join(", "),
+  });
+
+  // Images — up to 5 with crop + main image selection
+  const existingImages = service?.images || [];
+  const [imagePreviews, setImagePreviews] = useState(existingImages.map((i) => ({ url: i.url, publicId: i.publicId, file: null })));
+  const [mainImageIdx, setMainImageIdx]   = useState(0); // index of the cover image
+  const [cropQueue, setCropQueue] = useState([]); // raw File objects waiting to be cropped
+  const [cropSrc,   setCropSrc]   = useState(null);
+
+  // Video — single
+  const [videoPreview, setVideoPreview] = useState(service?.video?.url || null);
+  const [videoFile,    setVideoFile]    = useState(null);
+
+  // Time slots — structured
+  const [timeSlots, setTimeSlots] = useState(
+    (service?.timeSlots || []).map((s) =>
+      typeof s === "object" ? s : { day: "Monday", startTime: "09:00", endTime: "11:00" }
+    )
+  );
+  const [newSlot, setNewSlot] = useState({ day: "Monday", startTime: "09:00", endTime: "10:00" });
+
+  function queueImages(files) {
+    const remaining = 5 - imagePreviews.length - cropQueue.length;
+    if (remaining <= 0) return;
+    const picked = Array.from(files).slice(0, remaining);
+    if (!picked.length) return;
+    const [first, ...rest] = picked;
+    const reader = new FileReader();
+    reader.onload = () => setCropSrc(reader.result);
+    reader.readAsDataURL(first);
+    setCropQueue(rest);
+  }
+
+  function handleCropConfirm(blob) {
+    const croppedFile = new File([blob], "service-img.jpg", { type: "image/jpeg" });
+    setImagePreviews((p) => [...p, { url: URL.createObjectURL(croppedFile), file: croppedFile, publicId: "" }]);
+    setCropSrc(null);
+    // Process next in queue
+    if (cropQueue.length > 0) {
+      const [next, ...rest] = cropQueue;
+      const reader = new FileReader();
+      reader.onload = () => setCropSrc(reader.result);
+      reader.readAsDataURL(next);
+      setCropQueue(rest);
+    }
+  }
+
+  function removeImage(idx) {
+    setImagePreviews((p) => p.filter((_, i) => i !== idx));
+    setMainImageIdx((m) => {
+      if (idx < m) return m - 1;
+      if (idx === m) return 0;
+      return m;
+    });
+  }
+
+  function addSlot() {
+    if (!newSlot.day || !newSlot.startTime || !newSlot.endTime) return;
+    setTimeSlots((prev) => [...prev, { ...newSlot }]);
+  }
+
+  function removeSlot(i) { setTimeSlots((p) => p.filter((_, idx) => idx !== i)); }
+
+  function addPortfolioLink() {
+    const url = form.newPortfolioLink.trim();
+    if (!url) return;
+    setForm((f) => ({ ...f, portfolioLinks: [...f.portfolioLinks, url], newPortfolioLink: "" }));
+  }
+
+  function removePortfolioLink(i) {
+    setForm((f) => ({ ...f, portfolioLinks: f.portfolioLinks.filter((_, idx) => idx !== i) }));
+  }
+
+  async function uploadFile(file) {
+    const fd = new FormData();
+    fd.append("file", file);
+    const isVideo = file.type.startsWith("video/");
+    const endpoint = isVideo ? "/api/upload/media" : "/api/upload";
+    const res = await apiFetch(endpoint, { method: "POST", body: fd });
+    return { url: res.url, publicId: res.publicId || "" };
   }
 
   async function handleSave() {
-    if (!form.title || !form.rate) { showToast("Title and rate are required", "error"); return; }
+    if (!form.title) { showToast("Service title is required", "error"); return; }
+    if (!["negotiable","free"].includes(form.pricingType) && !form.rate) {
+      showToast("Please enter a price for this pricing type", "error"); return;
+    }
     setSaving(true);
     try {
-      let imageUrl = form.imageUrl;
-      if (form.imageFile) {
-        const fd = new FormData();
-        fd.append("file", form.imageFile);
-        const up = await apiFetch("/api/upload", { method: "POST", body: fd });
-        imageUrl = up.url;
-      }
+      // Upload new images — main image first, then the rest
+      const orderedPreviews = mainImageIdx === 0
+        ? imagePreviews
+        : [imagePreviews[mainImageIdx], ...imagePreviews.filter((_, i) => i !== mainImageIdx)];
+
+      const uploadedImages = await Promise.all(
+        orderedPreviews.map(async (p) => {
+          if (p.file) {
+            const up = await uploadFile(p.file);
+            return up;
+          }
+          return { url: p.url, publicId: p.publicId || "" };
+        })
+      );
+
+      // Upload video if new
+      let videoData = service?.video ? { url: service.video.url, publicId: service.video.publicId } : undefined;
+      if (videoFile) videoData = await uploadFile(videoFile);
+
       const body = {
-        title: form.title,
-        category: form.category,
-        desc: form.desc,
-        rate: Number(form.rate),
-        currency: form.currency,
-        package: form.package,
-        duration: form.duration,
-        timeSlots: form.timeSlots,
-        available: form.available,
-        ...(imageUrl && { serviceImageUrl: imageUrl }),
+        title:       form.title,
+        major:       form.category,
+        desc:        form.desc,
+        about:       form.about,
+        pricingType: form.pricingType,
+        rate:        Number(form.rate) || 0,
+        currency:    form.currency,
+        duration:    form.duration,
+        available:   form.available,
+        tags:        form.tags,
+        portfolio:   form.portfolioLinks,
+        policies:    form.policies,
+        timeSlots:   JSON.stringify(timeSlots),
+        images:      uploadedImages.map((i) => i.url),
+        ...(videoData && { videoUrl: videoData.url, videoPublicId: videoData.publicId }),
       };
+
       const data = isEdit
         ? await apiFetch(`/api/services/${service._id}`, { method: "PUT", body })
         : await apiFetch("/api/services", { method: "POST", body });
+
       onSave(data.service || data);
       showToast(isEdit ? "Service updated" : "Service created", "success");
     } catch (err) {
@@ -146,29 +270,116 @@ function ServiceModal({ service, onClose, onSave, showToast }) {
     } finally { setSaving(false); }
   }
 
+  const showPrice = !["negotiable", "free"].includes(form.pricingType);
+
   return (
-    <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.6)", zIndex: 200, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: 16, overflowY: "auto" }}>
-      <div className="card" style={{ maxWidth: 520, width: "100%", padding: 24, marginTop: 24, marginBottom: 24 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+    <>
+    {/* Crop modal — processes images one at a time */}
+    {cropSrc && (
+      <ImageCropModal
+        src={cropSrc}
+        aspect={16 / 9}
+        title={`Crop image ${imagePreviews.length + 1} of ${imagePreviews.length + 1 + cropQueue.length}`}
+        onConfirm={handleCropConfirm}
+        onCancel={() => { setCropSrc(null); setCropQueue([]); imgInputRef.current && (imgInputRef.current.value = ""); }}
+      />
+    )}
+    <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.65)", zIndex: 200, display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "16px 16px 40px", overflowY: "auto" }}>
+      <div className="card" style={{ maxWidth: 600, width: "100%", padding: 24, marginTop: 24 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 22 }}>
           <h2 style={{ margin: 0, fontSize: "1.8rem", fontWeight: 800 }}>{isEdit ? "Edit Service" : "Add Service"}</h2>
           <button className="icon-btn" onClick={onClose}><i className="fas fa-xmark" /></button>
         </div>
 
-        {/* Image */}
-        <input ref={imageRef} type="file" accept="image/*" style={{ display: "none" }} onChange={pickImage} />
-        <div style={{ marginBottom: 16 }}>
-          <label style={lSty}>Service Image</label>
-          <button type="button" onClick={() => imageRef.current?.click()} style={{ width: "100%", height: 90, borderRadius: "var(--r-md)", border: preview ? "none" : "2px dashed var(--line)", background: preview ? "transparent" : "var(--surface)", overflow: "hidden", cursor: "pointer", position: "relative", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
-            {preview
-              ? <img src={preview} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-              : <><i className="fas fa-camera" style={{ color: "var(--ink-4)", fontSize: "1.6rem" }} /><span style={{ fontSize: "1.2rem", color: "var(--ink-3)" }}>Upload image (optional)</span></>}
-          </button>
+        {/* ── Images (max 5) ── */}
+        <div style={{ marginBottom: 18 }}>
+          <label style={lSty}>
+            Photos <span style={{ color: "var(--ink-4)", fontWeight: 400 }}>({imagePreviews.length}/5)</span>
+          </label>
+          <input
+            ref={imgInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            style={{ display: "none" }}
+            onChange={(e) => { queueImages(Array.from(e.target.files)); e.target.value = ""; }}
+          />
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {imagePreviews.map((p, i) => (
+              <div
+                key={i}
+                onClick={() => setMainImageIdx(i)}
+                title={i === mainImageIdx ? "Cover photo" : "Click to set as cover"}
+                style={{ width: 80, height: 80, borderRadius: "var(--r-md)", overflow: "hidden", position: "relative", flexShrink: 0, cursor: "pointer", outline: i === mainImageIdx ? "2.5px solid var(--accent)" : "none", outlineOffset: 2 }}
+              >
+                <img src={p.url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                {/* Cover badge */}
+                {i === mainImageIdx && (
+                  <span style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "rgba(249,115,22,.85)", color: "#fff", fontSize: "0.9rem", fontWeight: 700, textAlign: "center", padding: "2px 0", lineHeight: 1.4 }}>Cover</span>
+                )}
+                <button type="button" onClick={(e) => { e.stopPropagation(); removeImage(i); }} style={{ position: "absolute", top: 2, right: 2, width: 20, height: 20, borderRadius: "50%", background: "rgba(0,0,0,.65)", border: "none", color: "#fff", fontSize: "0.9rem", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <i className="fas fa-xmark" />
+                </button>
+              </div>
+            ))}
+            {imagePreviews.length < 5 && (
+              <button type="button" onClick={() => imgInputRef.current?.click()} style={{ width: 80, height: 80, borderRadius: "var(--r-md)", border: "2px dashed var(--line)", background: "var(--surface)", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 4, color: "var(--ink-4)" }}>
+                <i className="fas fa-plus" style={{ fontSize: "1.4rem" }} />
+                <span style={{ fontSize: "1rem" }}>Add</span>
+              </button>
+            )}
+          </div>
+          {imagePreviews.length > 1 && (
+            <p style={{ margin: "6px 0 0", fontSize: "1.1rem", color: "var(--ink-3)" }}>
+              <i className="fas fa-circle-info" style={{ marginRight: 4 }} />Tap an image to set it as the cover photo
+            </p>
+          )}
         </div>
 
+        {/* ── Video ── */}
+        <div style={{ marginBottom: 18 }}>
+          <label style={lSty}>Video <span style={{ color: "var(--ink-4)", fontWeight: 400 }}>(optional, max 1)</span></label>
+          <input
+            ref={vidInputRef}
+            type="file"
+            accept="video/*"
+            style={{ display: "none" }}
+            onChange={(e) => {
+              const f = e.target.files[0];
+              if (!f) return;
+              setVideoFile(f);
+              setVideoPreview(URL.createObjectURL(f));
+              e.target.value = "";
+            }}
+          />
+          {videoPreview
+            ? <div style={{ position: "relative", borderRadius: "var(--r-md)", overflow: "hidden", background: "#000" }}>
+                <video
+                  src={videoPreview}
+                  controls
+                  playsInline
+                  preload="metadata"
+                  style={{ width: "100%", maxHeight: 180, display: "block" }}
+                />
+                <button
+                  type="button"
+                  onClick={() => { setVideoFile(null); setVideoPreview(null); vidInputRef.current && (vidInputRef.current.value = ""); }}
+                  style={{ position: "absolute", top: 8, right: 8, padding: "4px 12px", borderRadius: 20, background: "rgba(0,0,0,.7)", border: "none", color: "#fff", fontSize: "1.1rem", cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}
+                >
+                  <i className="fas fa-xmark" /> Remove
+                </button>
+              </div>
+            : <button type="button" onClick={() => vidInputRef.current?.click()} style={{ width: "100%", height: 72, borderRadius: "var(--r-md)", border: "2px dashed var(--line)", background: "var(--surface)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, color: "var(--ink-4)" }}>
+                <i className="fas fa-video" style={{ fontSize: "1.4rem" }} />
+                <span style={{ fontSize: "1.2rem" }}>Upload a service video</span>
+              </button>}
+        </div>
+
+        {/* ── Core details ── */}
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
           <div style={{ gridColumn: "1 / -1" }}>
             <label style={lSty}>Service Title *</label>
-            <input style={iSty} value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} placeholder="e.g. Software Developer" />
+            <input style={iSty} value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} placeholder="e.g. Logo Design, Python Tutoring" />
           </div>
           <div>
             <label style={lSty}>Category</label>
@@ -178,44 +389,103 @@ function ServiceModal({ service, onClose, onSave, showToast }) {
             </select>
           </div>
           <div>
-            <label style={lSty}>Package</label>
-            <select style={iSty} value={form.package} onChange={(e) => setForm((f) => ({ ...f, package: e.target.value }))}>
-              <option value="">Select</option>
-              {PACKAGES.map((p) => <option key={p}>{p}</option>)}
-            </select>
-          </div>
-          <div>
-            <label style={lSty}>Rate *</label>
-            <input style={iSty} type="number" min="0" value={form.rate} onChange={(e) => setForm((f) => ({ ...f, rate: e.target.value }))} placeholder="50000" />
-          </div>
-          <div>
-            <label style={lSty}>Currency</label>
-            <select style={iSty} value={form.currency} onChange={(e) => setForm((f) => ({ ...f, currency: e.target.value }))}>
-              <option value="NGN">NGN</option>
-              <option value="USD">USD</option>
-            </select>
-          </div>
-          <div>
             <label style={lSty}>Duration</label>
-            <input style={iSty} value={form.duration} onChange={(e) => setForm((f) => ({ ...f, duration: e.target.value }))} placeholder="e.g. 2 hours" />
-          </div>
-          <div>
-            <label style={lSty}>Time Slots</label>
-            <input style={iSty} value={form.timeSlots} onChange={(e) => setForm((f) => ({ ...f, timeSlots: e.target.value }))} placeholder="e.g. Mon 9am–11am" />
+            <input style={iSty} value={form.duration} onChange={(e) => setForm((f) => ({ ...f, duration: e.target.value }))} placeholder="e.g. 2 hours, 3 days" />
           </div>
           <div style={{ gridColumn: "1 / -1" }}>
-            <label style={lSty}>Description</label>
-            <textarea style={{ ...iSty, height: 72, resize: "vertical" }} value={form.desc} onChange={(e) => setForm((f) => ({ ...f, desc: e.target.value }))} placeholder="Describe your service..." />
+            <label style={lSty}>Short Description</label>
+            <textarea style={{ ...iSty, height: 64, resize: "vertical" }} value={form.desc} onChange={(e) => setForm((f) => ({ ...f, desc: e.target.value }))} placeholder="One or two sentences shown on the listing card" />
+          </div>
+          <div style={{ gridColumn: "1 / -1" }}>
+            <label style={lSty}>Full Details</label>
+            <textarea style={{ ...iSty, height: 80, resize: "vertical" }} value={form.about} onChange={(e) => setForm((f) => ({ ...f, about: e.target.value }))} placeholder="Describe what's included, your process, deliverables..." />
           </div>
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 0", marginBottom: 16 }}>
+        {/* ── Pricing ── */}
+        <div style={{ marginBottom: 12 }}>
+          <label style={lSty}>Pricing type *</label>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+            {PRICING_TYPES.map((pt) => (
+              <button key={pt.value} type="button" onClick={() => setForm((f) => ({ ...f, pricingType: pt.value }))}
+                style={{ padding: "8px 10px", borderRadius: "var(--r-md)", border: `1.5px solid ${form.pricingType === pt.value ? "var(--accent)" : "var(--line)"}`, background: form.pricingType === pt.value ? "rgba(249,115,22,.07)" : "var(--paper)", cursor: "pointer", textAlign: "left" }}>
+                <div style={{ fontSize: "1.2rem", fontWeight: 700, color: form.pricingType === pt.value ? "var(--accent)" : "var(--ink-1)" }}>{pt.label}</div>
+                <div style={{ fontSize: "1rem", color: "var(--ink-4)", marginTop: 1 }}>{pt.hint}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+        {showPrice && (
+          <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 10, marginBottom: 12 }}>
+            <div>
+              <label style={lSty}>{form.pricingType === "starting_from" ? "Starting from (₦)" : form.pricingType === "hourly" ? "Rate per hour (₦)" : "Price (₦)"}</label>
+              <input style={iSty} type="number" min="0" value={form.rate} onChange={(e) => setForm((f) => ({ ...f, rate: e.target.value }))} placeholder="0" />
+            </div>
+            <div>
+              <label style={lSty}>Currency</label>
+              <select style={{ ...iSty, width: 90 }} value={form.currency} onChange={(e) => setForm((f) => ({ ...f, currency: e.target.value }))}>
+                <option value="NGN">NGN</option>
+                <option value="USD">USD</option>
+              </select>
+            </div>
+          </div>
+        )}
+
+        {/* ── Time slots ── */}
+        <div style={{ marginBottom: 16 }}>
+          <label style={lSty}>Availability slots</label>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
+            {timeSlots.map((s, i) => (
+              <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "4px 10px", borderRadius: 20, background: "rgba(249,115,22,.1)", border: "1px solid rgba(249,115,22,.3)", fontSize: "1.2rem", color: "var(--accent)", fontWeight: 600 }}>
+                {s.day.slice(0, 3)} {fmt12h(s.startTime)}–{fmt12h(s.endTime)}
+                <button type="button" onClick={() => removeSlot(i)} style={{ border: "none", background: "none", cursor: "pointer", color: "var(--accent)", padding: 0, lineHeight: 1, display: "flex" }}><i className="fas fa-xmark" /></button>
+              </span>
+            ))}
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr auto auto auto", gap: 8, alignItems: "end" }}>
+            <select style={iSty} value={newSlot.day} onChange={(e) => setNewSlot((s) => ({ ...s, day: e.target.value }))}>
+              {DAYS.map((d) => <option key={d}>{d}</option>)}
+            </select>
+            <select style={{ ...iSty, width: 100 }} value={newSlot.startTime} onChange={(e) => setNewSlot((s) => ({ ...s, startTime: e.target.value }))}>
+              {TIME_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}
+            </select>
+            <span style={{ display: "flex", alignItems: "center", color: "var(--ink-3)", flexShrink: 0 }}>to</span>
+            <select style={{ ...iSty, width: 100 }} value={newSlot.endTime} onChange={(e) => setNewSlot((s) => ({ ...s, endTime: e.target.value }))}>
+              {TIME_OPTIONS.filter((t) => t > newSlot.startTime).map((t) => <option key={t} value={t}>{t}</option>)}
+            </select>
+            <button type="button" className="btn btn-ghost btn-sm" onClick={addSlot}><i className="fas fa-plus" /> Add</button>
+          </div>
+        </div>
+
+        {/* ── Portfolio links ── */}
+        <div style={{ marginBottom: 16 }}>
+          <label style={lSty}>Portfolio links</label>
+          {form.portfolioLinks.map((link, i) => (
+            <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+              <span style={{ flex: 1, fontSize: "1.2rem", color: "var(--accent)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{link}</span>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => removePortfolioLink(i)}><i className="fas fa-xmark" /></button>
+            </div>
+          ))}
+          <div style={{ display: "flex", gap: 8 }}>
+            <input style={{ ...iSty, flex: 1 }} value={form.newPortfolioLink} onChange={(e) => setForm((f) => ({ ...f, newPortfolioLink: e.target.value }))} placeholder="https://behance.net/you or any URL" onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addPortfolioLink())} />
+            <button type="button" className="btn btn-ghost btn-sm" onClick={addPortfolioLink}><i className="fas fa-plus" /> Add</button>
+          </div>
+        </div>
+
+        {/* ── Tags ── */}
+        <div style={{ marginBottom: 16 }}>
+          <label style={lSty}>Tags <span style={{ color: "var(--ink-4)", fontWeight: 400 }}>(comma-separated)</span></label>
+          <input style={iSty} value={form.tags} onChange={(e) => setForm((f) => ({ ...f, tags: e.target.value }))} placeholder="e.g. design, logo, affordable" />
+        </div>
+
+        {/* ── Available toggle ── */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 0", borderTop: "1px solid var(--line)", marginBottom: 18 }}>
           <div>
-            <div style={{ fontSize: "1.3rem", fontWeight: 600 }}>Currently Available?</div>
-            <div style={{ fontSize: "1.15rem", color: "var(--ink-3)" }}>Clients can book you right now</div>
+            <div style={{ fontSize: "1.3rem", fontWeight: 600 }}>Currently available for bookings?</div>
+            <div style={{ fontSize: "1.15rem", color: "var(--ink-3)" }}>Clients can request bookings right now</div>
           </div>
           <label className="partner-toggle" style={{ flexShrink: 0 }}>
-            <input type="checkbox" checked={form.available} onChange={(e) => setForm((f) => ({ ...f, available: e.target.checked })) } style={{ display: "none" }} />
+            <input type="checkbox" checked={form.available} onChange={(e) => setForm((f) => ({ ...f, available: e.target.checked }))} style={{ display: "none" }} />
             <span className={`partner-toggle-track${form.available ? " on" : ""}`} />
           </label>
         </div>
@@ -228,6 +498,7 @@ function ServiceModal({ service, onClose, onSave, showToast }) {
         </div>
       </div>
     </div>
+    </>
   );
 }
 
@@ -265,7 +536,12 @@ export default function ProviderAnalytics() {
   const [payoutAmount, setPayoutAmount]   = useState("");
   const [payoutSaving, setPayoutSaving]   = useState(false);
 
-  // Settings
+  // Settings — profile fields (always available) + service fields (optional)
+  const [profileForm, setProfileForm] = useState({
+    businessName: "", headline: "", bio: "", location: "",
+    whatsapp: "", portfolioUrl: "", instagram: "", twitter: "", yearsExperience: "",
+  });
+  const [profileSaving, setProfileSaving] = useState(false);
   const [settingsForm, setSettingsForm]   = useState({ title: "", desc: "", timeSlots: "" });
   const [settingsSaving, setSettingsSaving] = useState(false);
 
@@ -298,6 +574,23 @@ export default function ProviderAnalytics() {
       }
     }).finally(() => setLoading(false));
   }, []);
+
+  // Initialise profile form from user context when user loads
+  useEffect(() => {
+    if (!user) return;
+    const sp = user.serviceProviderInfo || {};
+    setProfileForm({
+      businessName:    user.name || sp.businessName || "",
+      headline:        sp.headline || "",
+      bio:             sp.bio || user.bio || "",
+      location:        sp.location || "",
+      whatsapp:        sp.whatsapp || "",
+      portfolioUrl:    sp.portfolioUrl || "",
+      instagram:       sp.instagram || "",
+      twitter:         sp.twitter || "",
+      yearsExperience: sp.yearsExperience != null ? String(sp.yearsExperience) : "",
+    });
+  }, [user]);
 
   // ── Load services when Services tab opens ─────────────────────────────────────
   useEffect(() => {
@@ -390,6 +683,28 @@ export default function ProviderAnalytics() {
     finally { setPayoutSaving(false); }
   }
 
+  async function saveProfile() {
+    setProfileSaving(true);
+    try {
+      await apiFetch("/api/services/becomeServiceProvider", {
+        method: "POST",
+        body: {
+          businessName:    profileForm.businessName,
+          headline:        profileForm.headline,
+          bio:             profileForm.bio,
+          location:        profileForm.location,
+          whatsapp:        profileForm.whatsapp,
+          portfolioUrl:    profileForm.portfolioUrl,
+          instagram:       profileForm.instagram,
+          twitter:         profileForm.twitter,
+          yearsExperience: profileForm.yearsExperience,
+        },
+      });
+      showToast("Profile updated", "success");
+    } catch (err) { showToast(err?.message || "Failed to save profile", "error"); }
+    finally { setProfileSaving(false); }
+  }
+
   async function saveSettings() {
     setSettingsSaving(true);
     try {
@@ -437,23 +752,21 @@ export default function ProviderAnalytics() {
   const PAGE = (
     <div style={{ padding: "24px 20px", paddingBottom: 80 }}>
 
-      {/* Verification banner */}
+      {/* Subscription banner */}
       {!loading && !isVerified && (
-        <div style={{ marginBottom: 20, padding: "14px 18px", borderRadius: "var(--r-lg)", background: verifyRequested ? "rgba(59,130,246,.08)" : "rgba(249,115,22,.07)", border: `1px solid ${verifyRequested ? "rgba(59,130,246,.25)" : "rgba(249,115,22,.25)"}`, display: "flex", alignItems: "center", gap: 14 }}>
-          <i className={`fas fa-${verifyRequested ? "clock" : "shield-halved"}`} style={{ fontSize: "1.8rem", color: verifyRequested ? "#3b82f6" : "var(--accent)", flexShrink: 0 }} />
+        <div style={{ marginBottom: 20, padding: "14px 18px", borderRadius: "var(--r-lg)", background: verifyRequested ? "rgba(59,130,246,.08)" : "linear-gradient(135deg,rgba(245,158,11,.1),rgba(217,119,6,.07))", border: `1px solid ${verifyRequested ? "rgba(59,130,246,.25)" : "rgba(245,158,11,.4)"}`, display: "flex", alignItems: "center", gap: 14 }}>
+          <i className={`fas fa-${verifyRequested ? "clock" : "certificate"}`} style={{ fontSize: "1.8rem", color: verifyRequested ? "#3b82f6" : "#d97706", flexShrink: 0 }} />
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: "1.35rem", fontWeight: 700, color: verifyRequested ? "#1d4ed8" : "var(--ink-1)" }}>
-              {verifyRequested ? "Verification pending" : "Get your service verified"}
+              {verifyRequested ? "Subscription pending" : "Subscribe for the verified badge"}
             </div>
             <div style={{ fontSize: "1.2rem", color: "var(--ink-3)", marginTop: 2 }}>
-              {verifyRequested ? "We're reviewing your profile. You'll be notified once approved." : "A verified badge builds client trust and gets you more bookings."}
+              {verifyRequested ? "We're reviewing your request. You'll be notified once activated." : "Get more bookings and build client trust with a verified badge."}
             </div>
           </div>
-          {!verifyRequested && (
-            <button className="btn btn-primary btn-sm" style={{ borderRadius: "var(--r-pill)", flexShrink: 0 }} onClick={requestVerification} disabled={verifyLoading}>
-              {verifyLoading ? <i className="fas fa-spinner fa-spin" /> : <><i className="fas fa-badge-check" /> Get Verified</>}
-            </button>
-          )}
+          <button className="btn btn-primary btn-sm" style={{ borderRadius: "var(--r-pill)", flexShrink: 0 }} onClick={() => navigate("/subscribe?type=provider")}>
+            {verifyRequested ? "View details" : <><i className="fas fa-certificate" /> See plans</>}
+          </button>
         </div>
       )}
 
@@ -721,35 +1034,105 @@ export default function ProviderAnalytics() {
       {tab === "Settings" && (
         <div>
           <h2 style={{ fontSize: "2rem", fontWeight: 800, margin: "0 0 20px" }}>Settings</h2>
-          {!service ? (
-            <div style={{ textAlign: "center", padding: "60px 20px" }}>
-              <i className="fas fa-briefcase" style={{ fontSize: "3.2rem", color: "var(--ink-4)", marginBottom: 16, display: "block" }} />
-              <p style={{ color: "var(--ink-2)", fontSize: "1.4rem", marginBottom: 8 }}>No service found.</p>
-              <p style={{ color: "var(--ink-3)", fontSize: "1.25rem", marginBottom: 20 }}>Create your first service to access settings.</p>
-              <button className="btn btn-primary" onClick={() => setTab("Services")}>
-                <i className="fas fa-plus" /> Go to Services
-              </button>
+
+          {/* ── Provider Profile — always visible ── */}
+          <div className="card" style={{ padding: 20, marginBottom: 16 }}>
+            <h3 style={{ margin: "0 0 16px", fontSize: "1.6rem", fontWeight: 700 }}>
+              <i className="fas fa-user-circle" style={{ marginRight: 8, color: "var(--accent)" }} />Provider Profile
+            </h3>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+              <div style={{ gridColumn: "1 / -1" }}>
+                <label style={lSty}>Name / Business Name</label>
+                <input style={iSty} value={profileForm.businessName} onChange={(e) => setProfileForm((f) => ({ ...f, businessName: e.target.value }))} placeholder="Your name or business" />
+              </div>
+              <div style={{ gridColumn: "1 / -1" }}>
+                <label style={lSty}>Professional Headline</label>
+                <input style={iSty} value={profileForm.headline} onChange={(e) => setProfileForm((f) => ({ ...f, headline: e.target.value }))} placeholder="e.g. Graphic Designer · UNILAG 400L" />
+              </div>
+              <div style={{ gridColumn: "1 / -1" }}>
+                <label style={lSty}>Bio</label>
+                <textarea style={{ ...iSty, height: 80, resize: "vertical" }} value={profileForm.bio} onChange={(e) => setProfileForm((f) => ({ ...f, bio: e.target.value }))} placeholder="Describe your skills and background…" />
+              </div>
+              <div>
+                <label style={lSty}>Location</label>
+                <input style={iSty} value={profileForm.location} onChange={(e) => setProfileForm((f) => ({ ...f, location: e.target.value }))} placeholder="e.g. Akoka, Yaba" />
+              </div>
+              <div>
+                <label style={lSty}>Years of experience</label>
+                <input style={iSty} type="number" min="0" value={profileForm.yearsExperience} onChange={(e) => setProfileForm((f) => ({ ...f, yearsExperience: e.target.value }))} placeholder="0" />
+              </div>
+              <div>
+                <label style={lSty}>WhatsApp number</label>
+                <input style={iSty} type="tel" value={profileForm.whatsapp} onChange={(e) => setProfileForm((f) => ({ ...f, whatsapp: e.target.value }))} placeholder="08012345678" />
+              </div>
+              <div>
+                <label style={lSty}>Portfolio URL</label>
+                <input style={iSty} type="url" value={profileForm.portfolioUrl} onChange={(e) => setProfileForm((f) => ({ ...f, portfolioUrl: e.target.value }))} placeholder="https://behance.net/you" />
+              </div>
+              <div>
+                <label style={lSty}>Instagram</label>
+                <input style={iSty} value={profileForm.instagram} onChange={(e) => setProfileForm((f) => ({ ...f, instagram: e.target.value }))} placeholder="@username" />
+              </div>
+              <div>
+                <label style={lSty}>Twitter / X</label>
+                <input style={iSty} value={profileForm.twitter} onChange={(e) => setProfileForm((f) => ({ ...f, twitter: e.target.value }))} placeholder="@username" />
+              </div>
             </div>
-          ) : (
-            <div className="card" style={{ padding: 20 }}>
-              <h3 style={{ margin: "0 0 16px", fontSize: "1.6rem", fontWeight: 700 }}><i className="fas fa-briefcase" style={{ marginRight: 8, color: "var(--accent)" }} />Service Settings</h3>
+            <button className="btn btn-primary btn-sm" disabled={profileSaving} onClick={saveProfile}>
+              {profileSaving ? <i className="fas fa-spinner fa-spin" /> : <><i className="fas fa-save" /> Save Profile</>}
+            </button>
+          </div>
+
+          {/* ── Service quick-edit — only if at least one service exists ── */}
+          {service ? (
+            <div className="card" style={{ padding: 20, marginBottom: 16 }}>
+              <h3 style={{ margin: "0 0 4px", fontSize: "1.6rem", fontWeight: 700 }}>
+                <i className="fas fa-briefcase" style={{ marginRight: 8, color: "var(--accent)" }} />Default Service Settings
+              </h3>
+              <p style={{ margin: "0 0 16px", fontSize: "1.2rem", color: "var(--ink-3)" }}>Quick edits for "{service.title || "your service"}". Full editing is available in the Services tab.</p>
               <div style={{ marginBottom: 12 }}>
                 <label style={lSty}>Service Title</label>
-                <input style={iSty} value={settingsForm.title} onChange={(e) => setSettingsForm((f) => ({ ...f, title: e.target.value }))} placeholder="e.g. Software Developer" />
-              </div>
-              <div style={{ marginBottom: 12 }}>
-                <label style={lSty}>Description</label>
-                <textarea style={{ ...iSty, height: 80, resize: "vertical" }} value={settingsForm.desc} onChange={(e) => setSettingsForm((f) => ({ ...f, desc: e.target.value }))} placeholder="Describe your service..." />
+                <input style={iSty} value={settingsForm.title} onChange={(e) => setSettingsForm((f) => ({ ...f, title: e.target.value }))} placeholder="e.g. Logo Design" />
               </div>
               <div style={{ marginBottom: 16 }}>
-                <label style={lSty}>Availability Time Slots</label>
-                <input style={iSty} value={settingsForm.timeSlots} onChange={(e) => setSettingsForm((f) => ({ ...f, timeSlots: e.target.value }))} placeholder="e.g. Mon 9am–11am, Wed 2pm–4pm" />
+                <label style={lSty}>Short Description</label>
+                <textarea style={{ ...iSty, height: 72, resize: "vertical" }} value={settingsForm.desc} onChange={(e) => setSettingsForm((f) => ({ ...f, desc: e.target.value }))} placeholder="One-line summary shown on the listing card" />
               </div>
-              <button className="btn btn-primary btn-sm" disabled={settingsSaving} onClick={saveSettings}>
-                {settingsSaving ? <i className="fas fa-spinner fa-spin" /> : <><i className="fas fa-save" /> Save Settings</>}
+              <div style={{ display: "flex", gap: 10 }}>
+                <button className="btn btn-primary btn-sm" disabled={settingsSaving} onClick={saveSettings}>
+                  {settingsSaving ? <i className="fas fa-spinner fa-spin" /> : <><i className="fas fa-save" /> Save</>}
+                </button>
+                <button className="btn btn-ghost btn-sm" onClick={() => setTab("Services")}>
+                  <i className="fas fa-pen" /> Edit all services
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="card" style={{ padding: "16px 20px", marginBottom: 16, display: "flex", alignItems: "center", gap: 14 }}>
+              <i className="fas fa-briefcase" style={{ fontSize: "1.8rem", color: "var(--ink-4)", flexShrink: 0 }} />
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: "1.3rem", fontWeight: 600, marginBottom: 2 }}>No services yet</div>
+                <div style={{ fontSize: "1.2rem", color: "var(--ink-3)" }}>Service-specific settings will appear here once you add your first service.</div>
+              </div>
+              <button className="btn btn-primary btn-sm" onClick={() => setTab("Services")}>
+                <i className="fas fa-plus" /> Add service
               </button>
             </div>
           )}
+
+          {/* ── Account link ── */}
+          <div className="card" style={{ padding: "14px 20px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <i className="fas fa-sliders" style={{ fontSize: "1.6rem", color: "var(--ink-3)", flexShrink: 0 }} />
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: "1.3rem", fontWeight: 600 }}>Account settings</div>
+                <div style={{ fontSize: "1.2rem", color: "var(--ink-3)" }}>Password, email, notifications and more</div>
+              </div>
+              <button className="btn btn-ghost btn-sm" onClick={() => navigate("/settings")}>
+                Open <i className="fas fa-arrow-right" />
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

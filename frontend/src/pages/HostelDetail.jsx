@@ -155,6 +155,39 @@ export default function HostelDetail() {
           <p style={{ fontSize: "1.4rem", color: "var(--ink-2)", lineHeight: 1.6, marginBottom: 16 }}>{listing.description}</p>
         )}
 
+        {/* Move-in cost breakdown — only shown if any extra fees are set */}
+        {(listing.agreementFee > 0 || listing.commissionFee > 0 || listing.agentFee > 0 || listing.cautionFee > 0) && (() => {
+          const naira = (n) => `₦${Number(n).toLocaleString()}`;
+          const fees = [
+            { label: "Rent", amount: listing.price },
+            listing.agreementFee  > 0 && { label: "Agreement fee",  amount: listing.agreementFee },
+            listing.commissionFee > 0 && { label: "Commission fee", amount: listing.commissionFee },
+            listing.agentFee      > 0 && { label: "Agent fee",      amount: listing.agentFee },
+            listing.cautionFee    > 0 && { label: "Caution fee",    amount: listing.cautionFee },
+          ].filter(Boolean);
+          const total = fees.reduce((s, f) => s + f.amount, 0);
+          return (
+            <div style={{ border: "1px solid var(--line)", borderRadius: "var(--r-lg)", overflow: "hidden", marginBottom: 16 }}>
+              <div style={{ padding: "10px 14px", background: "var(--surface)", borderBottom: "1px solid var(--line)", fontSize: "1.2rem", fontWeight: 700, letterSpacing: ".04em", color: "var(--ink-2)" }}>
+                MOVE-IN COST BREAKDOWN
+              </div>
+              <div style={{ padding: "12px 14px" }}>
+                {fees.map((f, i) => (
+                  <div key={i} style={{ display: "flex", justifyContent: "space-between", fontSize: "1.3rem", marginBottom: i < fees.length - 1 ? 8 : 0, color: f.label === "Rent" ? "var(--ink-1)" : "var(--ink-2)" }}>
+                    <span>{f.label}</span>
+                    <span style={{ fontWeight: 600 }}>{naira(f.amount)}</span>
+                  </div>
+                ))}
+                <div style={{ height: 1, background: "var(--line)", margin: "10px 0" }} />
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "1.5rem", fontWeight: 800 }}>
+                  <span>Total move-in</span>
+                  <span style={{ color: "var(--accent)" }}>{naira(total)}</span>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
         {/* Agent / Owner */}
         {listing.owner && (
           <div style={{ padding: 14, border: "1px solid var(--line)", borderRadius: "var(--r-lg)", display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>

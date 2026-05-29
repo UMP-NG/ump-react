@@ -7,7 +7,6 @@ import ImageCropModal from "../components/ImageCropModal";
 
 const SELLER_CATS  = ["Electronics", "Books", "Fashion", "Food", "Beauty", "Accessories", "Handmade", "Other"];
 const SERVICE_CATS = ["Design", "Writing", "Tech / Coding", "Tutoring", "Photography", "Fitness", "Music", "Other"];
-const PACKAGES     = ["Basic", "Standard", "Premium"];
 
 const PERKS = [
   { icon: "naira-sign",      text: "Zero setup cost — always free to join" },
@@ -37,11 +36,9 @@ export default function Provider() {
   });
 
   const [service, setService] = useState({
-    nameOrBusiness: "", title: "", category: "",
-    shortDescription: "", about: "",
-    rate: "", currency: "NGN", package: "",
-    duration: "", certifications: "", portfolio: "",
-    policies: "", timeSlots: [], isAvailable: false, tags: "",
+    nameOrBusiness: "", headline: "", categories: [],
+    bio: "", yearsExperience: "", location: "",
+    whatsapp: "", portfolioUrl: "", instagram: "", twitter: "",
   });
 
   const isLimited = user?.isLimitedAccount;
@@ -98,17 +95,16 @@ export default function Provider() {
           },
         });
       } else {
-        const { serviceImageFile, isAvailable, nameOrBusiness, shortDescription, timeSlots, ...rest } = service;
-        const imageObj = serviceImageFile ? await uploadFile(serviceImageFile) : null;
+        // Profile-only registration — service listings are added from the Provider Dashboard
+        const { avatarFile, nameOrBusiness, ...profileData } = service;
+        const avatarObj = avatarFile ? await uploadFile(avatarFile) : null;
         await apiFetch("/api/services/becomeServiceProvider", {
           method: "POST",
           body: {
-            name: nameOrBusiness,
-            desc: shortDescription,
-            available: isAvailable,
-            ...rest,
-            timeSlots: JSON.stringify(timeSlots),
-            ...(imageObj && { serviceImageUrl: imageObj.url }),
+            businessName: nameOrBusiness,
+            ...profileData,
+            categories: Array.isArray(profileData.categories) ? profileData.categories.join(",") : profileData.categories,
+            ...(avatarObj && { avatarUrl: avatarObj.url }),
           },
         });
       }
@@ -483,80 +479,16 @@ function SellerForm({ seller, setSeller }) {
   );
 }
 
-const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-const HOURS = Array.from({ length: 24 }, (_, i) => {
-  const h = i % 12 || 12;
-  const ampm = i < 12 ? "am" : "pm";
-  return `${h}:00${ampm}`;
-});
-
-function TimeSlotPicker({ slots, onChange }) {
-  const [day, setDay]     = useState(DAYS[0]);
-  const [from, setFrom]   = useState(HOURS[8]);
-  const [to, setTo]       = useState(HOURS[10]);
-  const [slotError, setSlotError] = useState("");
-
-  function addSlot() {
-    if (HOURS.indexOf(from) >= HOURS.indexOf(to)) {
-      setSlotError("End time must be after start time.");
-      return;
-    }
-    setSlotError("");
-    const label = `${day} ${from}–${to}`;
-    if (!slots.includes(label)) onChange([...slots, label]);
-  }
-
-  return (
-    <div>
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
-        <select className="select" style={{ flex: "1 1 80px" }} value={day} onChange={(e) => setDay(e.target.value)}>
-          {DAYS.map((d) => <option key={d}>{d}</option>)}
-        </select>
-        <select className="select" style={{ flex: "1 1 100px" }} value={from} onChange={(e) => setFrom(e.target.value)}>
-          {HOURS.map((h) => <option key={h}>{h}</option>)}
-        </select>
-        <span style={{ display: "flex", alignItems: "center", fontSize: "1.3rem", color: "var(--ink-3)", flexShrink: 0 }}>to</span>
-        <select className="select" style={{ flex: "1 1 100px" }} value={to} onChange={(e) => setTo(e.target.value)}>
-          {HOURS.map((h) => <option key={h}>{h}</option>)}
-        </select>
-        <button type="button" className="btn btn-primary" style={{ flexShrink: 0 }} onClick={addSlot}>
-          <i className="fas fa-plus" /> Add
-        </button>
-      </div>
-      {slotError && (
-        <p style={{ margin: "0 0 8px", fontSize: "1.2rem", color: "#dc2626" }}>
-          <i className="fas fa-circle-exclamation" style={{ marginRight: 4 }} />{slotError}
-        </p>
-      )}
-      {slots.length > 0 && (
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-          {slots.map((sl) => (
-            <span key={sl} style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "var(--surface)", border: "1px solid var(--line)", borderRadius: "var(--r-pill)", padding: "4px 10px", fontSize: "1.2rem" }}>
-              <i className="fas fa-clock" style={{ color: "var(--accent)", fontSize: "1rem" }} />
-              {sl}
-              <button type="button" onClick={() => onChange(slots.filter((s) => s !== sl))} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--ink-3)", padding: 0, lineHeight: 1, fontSize: "1.1rem" }}>
-                <i className="fas fa-xmark" />
-              </button>
-            </span>
-          ))}
-        </div>
-      )}
-      {slots.length === 0 && (
-        <p style={{ fontSize: "1.2rem", color: "var(--ink-4)", margin: 0 }}>No time slots added yet.</p>
-      )}
-    </div>
-  );
-}
 
 function ProviderForm({ service, setService }) {
   const s   = service;
   const set = (k) => (e) => setService((prev) => ({ ...prev, [k]: e.target.value }));
 
-  const imageRef = useRef(null);
-  const [imagePreview, setImagePreview] = useState(null);
+  const avatarRef = useRef(null);
+  const [avatarPreview, setAvatarPreview] = useState(null);
   const [cropSrc, setCropSrc] = useState(null);
 
-  function pickImage(e) {
+  function pickAvatar(e) {
     const file = e.target.files[0];
     if (!file) return;
     const reader = new FileReader();
@@ -566,136 +498,96 @@ function ProviderForm({ service, setService }) {
   }
 
   function handleCropConfirm(blob) {
-    const url = URL.createObjectURL(blob);
-    setImagePreview(url);
-    setService((prev) => ({ ...prev, serviceImageFile: new File([blob], "service.jpg", { type: "image/jpeg" }) }));
+    setAvatarPreview(URL.createObjectURL(blob));
+    setService((prev) => ({ ...prev, avatarFile: new File([blob], "avatar.jpg", { type: "image/jpeg" }) }));
     setCropSrc(null);
+  }
+
+  function toggleCategory(cat) {
+    setService((prev) => {
+      const cats = Array.isArray(prev.categories) ? prev.categories : [];
+      return {
+        ...prev,
+        categories: cats.includes(cat) ? cats.filter((c) => c !== cat) : [...cats, cat],
+      };
+    });
   }
 
   return (
     <>
       {cropSrc && (
-        <ImageCropModal
-          src={cropSrc}
-          aspect={1}
-          title="Crop service image"
-          onConfirm={handleCropConfirm}
-          onCancel={() => setCropSrc(null)}
-        />
+        <ImageCropModal src={cropSrc} aspect={1} title="Crop profile photo" onConfirm={handleCropConfirm} onCancel={() => setCropSrc(null)} />
       )}
-      <input ref={imageRef} type="file" accept="image/*" style={{ display: "none" }} onChange={pickImage} />
+      <input ref={avatarRef} type="file" accept="image/*" style={{ display: "none" }} onChange={pickAvatar} />
 
-      <FormSection title="About You">
-        <Field label="Your Name or Business Name">
-          <input className="input" placeholder="Full name or business name" value={s.nameOrBusiness} onChange={set("nameOrBusiness")} />
-        </Field>
-        <Field label="Service Title" required>
-          <input className="input" placeholder="e.g. Graphics Design, Tutoring" value={s.title} onChange={set("title")} required />
-        </Field>
-        <Field label="Service Category" required>
-          <select className="select" value={s.category} onChange={set("category")} required>
-            <option value="">Select a category</option>
-            {SERVICE_CATS.map((c) => <option key={c}>{c}</option>)}
-          </select>
-        </Field>
-        <Field label="Short Description of Service">
-          <input className="input" placeholder="One-line summary of what you offer" value={s.shortDescription} onChange={set("shortDescription")} />
-        </Field>
-        <Field label="Detailed About You / Your Service">
-          <textarea className="textarea" style={{ minHeight: 100 }} placeholder="Describe your background, experience, what clients can expect…" value={s.about} onChange={set("about")} />
-        </Field>
-      </FormSection>
+      <div style={{ marginBottom: 6, padding: "12px 14px", background: "rgba(99,102,241,.07)", border: "1px solid rgba(99,102,241,.2)", borderRadius: "var(--r-md)", fontSize: "1.25rem", color: "#4338ca" }}>
+        <i className="fas fa-circle-info" style={{ marginRight: 6 }} />
+        Set up your <strong>provider profile</strong> here. Once registered, you'll add your individual services from your Provider Dashboard.
+      </div>
 
-      <FormSection title="Pricing & Package">
-        <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 10, alignItems: "end" }}>
-          <Field label="Service Rate" required>
-            <input className="input" type="number" placeholder="5000" min="0" value={s.rate} onChange={set("rate")} required />
-          </Field>
-          <div style={{ paddingBottom: 1 }}>
-            <div className="label" style={{ marginBottom: 6 }}>Currency</div>
-            <select className="select" value={s.currency} onChange={set("currency")} style={{ width: 100 }}>
-              <option value="NGN">NGN</option>
-              <option value="USD">USD</option>
-            </select>
-          </div>
-        </div>
-        <Field label="Service Package">
-          <select className="select" value={s.package} onChange={set("package")}>
-            <option value="">Select Package</option>
-            {PACKAGES.map((p) => <option key={p}>{p}</option>)}
-          </select>
-        </Field>
-        <Field label="Duration (in hours or days)">
-          <input className="input" placeholder="e.g. 2 hours, 3 days" value={s.duration} onChange={set("duration")} />
-        </Field>
-      </FormSection>
-
-      <FormSection title="Credentials & Portfolio">
-        <Field label="Certifications" hint="Comma-separated">
-          <input className="input" placeholder="e.g. Google UX, ACCA, IELTS 7.5" value={s.certifications} onChange={set("certifications")} />
-        </Field>
-        <Field label="Portfolio (Images or Links)" hint="Comma-separated">
-          <input className="input" placeholder="e.g. https://behance.net/you, https://..." value={s.portfolio} onChange={set("portfolio")} />
-        </Field>
-        <Field label="Policies" hint="Comma-separated">
-          <input className="input" placeholder="e.g. No refunds after delivery, 24hr response time" value={s.policies} onChange={set("policies")} />
-        </Field>
-      </FormSection>
-
-      <FormSection title="Availability">
-        <Field label="Time Slots" hint="Add the days and times you're available for bookings">
-          <TimeSlotPicker
-            slots={Array.isArray(s.timeSlots) ? s.timeSlots : []}
-            onChange={(slots) => setService((prev) => ({ ...prev, timeSlots: slots }))}
-          />
-        </Field>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 0" }}>
-          <div>
-            <div style={{ fontSize: "1.4rem", fontWeight: 600, color: "var(--ink-1)" }}>Currently Available?</div>
-            <div style={{ fontSize: "1.2rem", color: "var(--ink-3)", marginTop: 2 }}>Clients can book you right now</div>
-          </div>
-          <label className="partner-toggle">
-            <input
-              type="checkbox"
-              checked={s.isAvailable}
-              onChange={(e) => setService((prev) => ({ ...prev, isAvailable: e.target.checked }))}
-            />
-            <span className="partner-toggle-track" />
-          </label>
-        </div>
-      </FormSection>
-
-      <FormSection title="Media & Tags">
-        {/* Service image */}
-        <div>
-          <div className="label" style={{ marginBottom: 6 }}>Upload a Service Image</div>
-          <button
-            type="button"
-            onClick={() => imageRef.current?.click()}
-            style={{ width: "100%", height: 110, borderRadius: "var(--r-lg)", border: imagePreview ? "none" : "2px dashed var(--line)", background: imagePreview ? "transparent" : "var(--surface)", overflow: "hidden", cursor: "pointer", position: "relative", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8 }}
-          >
-            {imagePreview ? (
-              <>
-                <img src={imagePreview} alt="service" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,.45)", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, color: "#fff", fontSize: "1.3rem", fontWeight: 600, opacity: 0, transition: "opacity .15s" }}
-                  onMouseEnter={(e) => e.currentTarget.style.opacity = 1}
-                  onMouseLeave={(e) => e.currentTarget.style.opacity = 0}
-                >
-                  <i className="fas fa-pen" /> Change image
-                </div>
-              </>
-            ) : (
-              <>
-                <i className="fas fa-camera" style={{ fontSize: "2rem", color: "var(--ink-4)" }} />
-                <span style={{ fontSize: "1.25rem", fontWeight: 600, color: "var(--ink-2)" }}>Upload a Service Image</span>
-                <span style={{ fontSize: "1.1rem", color: "var(--ink-3)" }}>No file chosen</span>
-              </>
-            )}
+      <FormSection title="Your Profile">
+        {/* Avatar */}
+        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          <button type="button" onClick={() => avatarRef.current?.click()} style={{ width: 72, height: 72, borderRadius: "50%", border: avatarPreview ? "none" : "2px dashed var(--line)", background: avatarPreview ? "transparent" : "var(--surface)", overflow: "hidden", cursor: "pointer", flexShrink: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 4 }}>
+            {avatarPreview
+              ? <img src={avatarPreview} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+              : <><i className="fas fa-camera" style={{ fontSize: "1.6rem", color: "var(--ink-4)" }} /><span style={{ fontSize: "1rem", color: "var(--ink-4)" }}>Photo</span></>}
           </button>
+          <div style={{ flex: 1 }}>
+            <div className="label" style={{ marginBottom: 3 }}>Profile photo <span style={{ color: "var(--ink-3)", fontWeight: 400 }}>(optional)</span></div>
+            <p style={{ margin: 0, fontSize: "1.15rem", color: "var(--ink-3)" }}>A clear headshot or brand logo. Shown on all your service listings.</p>
+          </div>
         </div>
-        <Field label="Tags" hint="Comma-separated, e.g. creative, web, design">
-          <input className="input" placeholder="e.g. creative, web, design, affordable" value={s.tags} onChange={set("tags")} />
+
+        <Field label="Your Name or Business Name" required>
+          <input className="input" placeholder="e.g. Chukwuemeka Eze or EzeDesigns" value={s.nameOrBusiness} onChange={set("nameOrBusiness")} required />
         </Field>
+        <Field label="Professional Headline" hint="One line that describes what you do">
+          <input className="input" placeholder="e.g. Graphic Designer · UNILAG 400L" value={s.headline} onChange={set("headline")} />
+        </Field>
+        <Field label="About You">
+          <textarea className="textarea" style={{ minHeight: 90 }} placeholder="Describe your background, skills, and what makes you stand out…" value={s.bio} onChange={set("bio")} />
+        </Field>
+      </FormSection>
+
+      <FormSection title="Skills & Experience">
+        <div>
+          <div className="label" style={{ marginBottom: 8 }}>Service categories <span style={{ color: "var(--accent)" }}>*</span></div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            {SERVICE_CATS.map((cat) => {
+              const active = Array.isArray(s.categories) && s.categories.includes(cat);
+              return (
+                <button key={cat} type="button" onClick={() => toggleCategory(cat)}
+                  style={{ padding: "6px 14px", borderRadius: "var(--r-pill)", border: `1.5px solid ${active ? "var(--accent)" : "var(--line)"}`, background: active ? "rgba(249,115,22,.1)" : "transparent", color: active ? "var(--accent)" : "var(--ink-2)", fontWeight: active ? 700 : 400, fontSize: "1.2rem", cursor: "pointer", fontFamily: "var(--font-sans)" }}>
+                  {cat}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        <Field label="Years of experience">
+          <input className="input" type="number" min="0" max="30" placeholder="e.g. 2" value={s.yearsExperience} onChange={set("yearsExperience")} />
+        </Field>
+        <Field label="Location on campus / area">
+          <input className="input" placeholder="e.g. Akoka, Yaba — near UNILAG" value={s.location} onChange={set("location")} />
+        </Field>
+      </FormSection>
+
+      <FormSection title="Contact & Links">
+        <Field label="WhatsApp number" hint="Clients may contact you here for quick queries">
+          <input className="input" type="tel" placeholder="e.g. 08012345678" value={s.whatsapp} onChange={set("whatsapp")} />
+        </Field>
+        <Field label="Portfolio website">
+          <input className="input" type="url" placeholder="https://behance.net/you or personal site" value={s.portfolioUrl} onChange={set("portfolioUrl")} />
+        </Field>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <Field label="Instagram handle">
+            <input className="input" placeholder="@username" value={s.instagram} onChange={set("instagram")} />
+          </Field>
+          <Field label="Twitter/X handle">
+            <input className="input" placeholder="@username" value={s.twitter} onChange={set("twitter")} />
+          </Field>
+        </div>
       </FormSection>
     </>
   );

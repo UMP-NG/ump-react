@@ -29,85 +29,46 @@ export const becomeServiceProvider = async (req, res) => {
       return res.status(403).json({ message: "Please link your UNILAG email before registering as a service provider." });
     }
 
-    // ✅ Add 'service_provider' to roles array
     if (!user.roles) user.roles = [];
-    if (!user.roles.includes("service_provider")) {
-      user.roles.push("service_provider");
+    if (!user.roles.includes("service_provider")) user.roles.push("service_provider");
+
+    // Save provider profile — individual services are created separately from the dashboard
+    const {
+      businessName, headline, bio, categories, yearsExperience,
+      location, whatsapp, portfolioUrl, instagram, twitter, avatarUrl,
+    } = req.body;
+
+    if (!user.serviceProviderInfo) user.serviceProviderInfo = {};
+    if (businessName)    user.serviceProviderInfo.businessName    = businessName.trim();
+    if (headline)        user.serviceProviderInfo.headline        = headline.trim();
+    if (bio)             user.serviceProviderInfo.bio             = bio.trim();
+    if (location)        user.serviceProviderInfo.location        = location.trim();
+    if (whatsapp)        user.serviceProviderInfo.whatsapp        = whatsapp.trim();
+    if (portfolioUrl)    user.serviceProviderInfo.portfolioUrl    = portfolioUrl.trim();
+    if (instagram)       user.serviceProviderInfo.instagram       = instagram.trim();
+    if (twitter)         user.serviceProviderInfo.twitter         = twitter.trim();
+    if (yearsExperience !== undefined) user.serviceProviderInfo.yearsExperience = Number(yearsExperience) || 0;
+    if (categories) {
+      user.serviceProviderInfo.categories = Array.isArray(categories)
+        ? categories : categories.split(",").map((c) => c.trim()).filter(Boolean);
     }
 
-    // Optionally allow adding first service here
-    if (req.body.name || req.body.title) {
-      try {
-        // Parse timeSlots safely
-        let timeSlots = [];
-        if (req.body.timeSlots) {
-          try {
-            timeSlots = Array.isArray(req.body.timeSlots)
-              ? req.body.timeSlots
-              : JSON.parse(req.body.timeSlots);
-          } catch {
-            timeSlots = [];
-          }
-        }
-
-        // Create a Service document (not embedded in User)
-        const serviceData = {
-          name: req.body.name,
-          title: req.body.title,
-          major: req.body.major,
-          desc: req.body.desc,
-          about: req.body.about,
-          rate: Number(req.body.rate) || 0,
-          currency: req.body.currency || "NGN",
-          package: req.body.package || "",
-          duration: Number(req.body.duration) || 0,
-          certifications: req.body.certifications
-            ? req.body.certifications.split(",").map((c) => c.trim())
-            : [],
-          portfolio: req.body.portfolio
-            ? req.body.portfolio.split(",").map((p) => p.trim())
-            : [],
-          policies: req.body.policies
-            ? req.body.policies.split(",").map((p) => p.trim())
-            : [],
-          tags: req.body.tags
-            ? req.body.tags.split(",").map((t) => t.trim())
-            : [],
-          timeSlots: timeSlots,
-          isAvailable: req.body.available === "on" || req.body.available === true,
-          images: req.file
-            ? [{ url: req.file.path, publicId: req.file.filename }]
-            : req.body.serviceImageUrl
-            ? [{ url: req.body.serviceImageUrl, publicId: "" }]
-            : [],
-          provider: req.user._id,  // Reference to the provider (user)
-        };
-
-        // Create the Service document
-        const service = await Service.create(serviceData);
-
-        // Push the Service ID to user.services array (if the field exists)
-        if (!user.services) user.services = [];
-        user.services.push(service._id);
-      } catch (serviceErr) {
-        console.error("⚠️ Error creating first service:", serviceErr);
-        // Don't fail the whole request if service creation fails
-        // The user still gets the service_provider role
-      }
+    // Profile photo uploaded via /api/upload and passed as avatarUrl
+    const avatarFile = req.file;
+    if (avatarFile) {
+      user.avatar = { url: avatarFile.path, publicId: avatarFile.filename };
+    } else if (avatarUrl) {
+      user.avatar = { url: avatarUrl, publicId: "" };
     }
+
+    if (businessName && !user.name) user.name = businessName.trim();
 
     await user.save();
 
-    res.status(200).json({
-      success: true,
-      message: "User is now a service provider",
-      user,
-    });
+    res.status(200).json({ success: true, message: "Provider profile saved. You can now add services from your dashboard.", user });
   } catch (error) {
-    console.error("❌ Error becoming service provider:", error);
-    res
-      .status(500)
-      .json({ success: false, message: "Server error", error: error.message });
+    console.error("❌ becomeServiceProvider error:", error);
+    res.status(500).json({ success: false, message: "Server error", error: error.message });
   }
 };
 
@@ -120,60 +81,59 @@ export const createService = async (req, res) => {
     if (!user) return res.status(404).json({ message: "User not found" });
 
     const {
-      name,
-      title,
-      major,
-      desc,
-      about,
-      rate,
-      currency,
-      package: pkg,
-      duration,
-      certifications,
-      portfolio,
-      policies,
-      tags,
-      timeSlots,
-      available,
+      name, title, major, desc, about,
+      pricingType, rate, currency, duration,
+      certifications, portfolio, policies, tags,
+      timeSlots, available,
+      videoUrl, videoPublicId,
     } = req.body;
 
-    const parsedTimeSlots = timeSlots
-      ? Array.isArray(timeSlots)
-        ? timeSlots
-        : [timeSlots]
-      : [];
-
-    const isAvailable = available === "on" || available === true;
-
-    // Handle uploaded image(s) - now supporting multiple images
-    let images = [];
-    if (req.files && req.files.images) {
-      images = req.files.images.map((file) => ({
-        url: file.path,
-        publicId: file.filename,
-      }));
+    // Structured time slots: [{day, startTime, endTime}]
+    let parsedTimeSlots = [];
+    if (timeSlots) {
+      try {
+        parsedTimeSlots = Array.isArray(timeSlots) ? timeSlots : JSON.parse(timeSlots);
+      } catch { parsedTimeSlots = []; }
     }
+
+    // Images — max 5
+    let images = [];
+    if (req.files?.images) {
+      images = req.files.images.slice(0, 5).map((f) => ({ url: f.path, publicId: f.filename }));
+    } else if (req.body.images) {
+      const imgs = Array.isArray(req.body.images) ? req.body.images : [req.body.images];
+      images = imgs.slice(0, 5).map((url) => ({ url, publicId: "" }));
+    }
+
+    // Video — single file
+    let video = undefined;
+    if (req.files?.video?.[0]) {
+      video = { url: req.files.video[0].path, publicId: req.files.video[0].filename };
+    } else if (videoUrl) {
+      video = { url: videoUrl, publicId: videoPublicId || "" };
+    }
+
+    const splitArr = (v) => v ? (Array.isArray(v) ? v : v.split(",").map((s) => s.trim()).filter(Boolean)) : [];
 
     const service = await Service.create({
       provider: user._id,
-      name,
+      name: name || user.serviceProviderInfo?.businessName || user.name,
       title,
       major,
       desc,
       about,
+      pricingType: pricingType || "fixed",
       rate: Number(rate) || 0,
       currency: currency || "NGN",
-      package: pkg || "",
-      duration: Number(duration) || 0,
-      certifications: certifications
-        ? certifications.split(",").map((c) => c.trim())
-        : [],
-      portfolio: portfolio ? portfolio.split(",").map((p) => p.trim()) : [],
-      policies: policies ? policies.split(",").map((p) => p.trim()) : [],
-      tags: tags ? tags.split(",").map((t) => t.trim()) : [],
+      duration: duration || "",
+      certifications: splitArr(certifications),
+      portfolio: splitArr(portfolio),
+      policies: splitArr(policies),
+      tags: splitArr(tags),
       timeSlots: parsedTimeSlots,
-      isAvailable,
+      available: available === "on" || available === true || available === "true",
       images,
+      ...(video && { video }),
     });
 
     // Link service id to user's services array for easy lookup
@@ -200,6 +160,111 @@ export const createService = async (req, res) => {
     res
       .status(500)
       .json({ success: false, message: "Server error", error: error.message });
+  }
+};
+
+// ===============================
+// GET all service providers (public browse page)
+// Query Users first so providers with zero services still appear
+// ===============================
+export const getAllProviders = async (req, res) => {
+  try {
+    // 1. All users who have the service_provider role
+    const users = await User.find({ roles: "service_provider" })
+      .select("name avatar serviceProviderInfo")
+      .lean();
+
+    if (!users.length) return res.json({ success: true, providers: [] });
+
+    // 2. Service stats (count, avg rating, categories) per provider — one aggregate query
+    const userIds = users.map((u) => u._id);
+    const stats = await Service.aggregate([
+      { $match: { provider: { $in: userIds } } },
+      { $group: {
+        _id:          "$provider",
+        serviceCount: { $sum: 1 },
+        avgRating:    { $avg: "$rating" },
+        categories:   { $addToSet: "$major" },
+        verified:     { $max: "$verified" },
+        available:    { $max: "$available" },
+      }},
+    ]);
+
+    const statsMap = {};
+    stats.forEach((s) => { statsMap[s._id.toString()] = s; });
+
+    // 3. Merge user profile + service stats
+    const providers = users.map((u) => {
+      const sp  = u.serviceProviderInfo || {};
+      const st  = statsMap[u._id.toString()] || {};
+      // Merge categories from service stats + provider-registered categories
+      const cats = [...new Set([
+        ...(st.categories || []),
+        ...(sp.categories || []),
+      ].filter(Boolean))];
+      return {
+        _id:             u._id,
+        name:            u.name,
+        avatar:          u.avatar,
+        businessName:    sp.businessName || u.name,
+        headline:        sp.headline || "",
+        bio:             sp.bio || "",
+        categories:      cats,
+        yearsExperience: sp.yearsExperience || 0,
+        location:        sp.location || "",
+        portfolioUrl:    sp.portfolioUrl || "",
+        instagram:       sp.instagram || "",
+        twitter:         sp.twitter || "",
+        verified:        st.verified || false,
+        available:       st.available || false,
+        serviceCount:    st.serviceCount || 0,
+        avgRating:       st.avgRating ? Math.round(st.avgRating * 10) / 10 : 0,
+      };
+    });
+
+    res.json({ success: true, providers });
+  } catch (err) {
+    console.error("getAllProviders error:", err);
+    res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+// ===============================
+// GET a single provider's profile + all their services
+// ===============================
+export const getProviderById = async (req, res) => {
+  try {
+    const user = await User.findOne({ _id: req.params.id, roles: "service_provider" })
+      .select("name avatar serviceProviderInfo roles")
+      .lean();
+    if (!user) return res.status(404).json({ message: "Provider not found" });
+
+    const services = await Service.find({ provider: req.params.id }).lean();
+    const sp = user.serviceProviderInfo || {};
+
+    res.json({
+      success: true,
+      provider: {
+        _id:          user._id,
+        name:         user.name,
+        avatar:       user.avatar,
+        businessName: sp.businessName || user.name,
+        headline:     sp.headline || "",
+        bio:          sp.bio || "",
+        categories:   sp.categories || [],
+        yearsExperience: sp.yearsExperience || 0,
+        location:     sp.location || "",
+        whatsapp:     sp.whatsapp || "",
+        portfolioUrl: sp.portfolioUrl || "",
+        instagram:    sp.instagram || "",
+        twitter:      sp.twitter || "",
+        verified:     sp.verified || false,
+      },
+      services,
+    });
+  } catch (err) {
+    console.error("getProviderById error:", err);
+    res.status(500).json({ success: false, message: "Server error" });
   }
 };
 

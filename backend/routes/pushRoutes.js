@@ -1,11 +1,13 @@
 import express from "express";
 import { protect } from "../middleware/authMiddleware.js";
-import { getVapidKey, subscribe, unsubscribe } from "../controllers/pushController.js";
+import { getVapidKey, subscribe, unsubscribe, sendTestPush, trackOpen } from "../controllers/pushController.js";
 
 const router = express.Router();
 
-router.get("/vapid-key",    getVapidKey);          // public — needed before login to show permission prompt
+router.get("/vapid-key",    getVapidKey);
 router.post("/subscribe",   protect, subscribe);
 router.delete("/unsubscribe", protect, unsubscribe);
+router.post("/test",        protect, sendTestPush);
+router.post("/open/:broadcastId", trackOpen);
 
 export default router;

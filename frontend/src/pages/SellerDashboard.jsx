@@ -125,7 +125,7 @@ function StatusBadge({ status }) {
 }
 
 // ─── Verify banner ────────────────────────────────────────────────────────────
-function VerifyBanner({ requested, onRequest, loading }) {
+function VerifyBanner({ requested, onNavigate }) {
   if (requested) {
     return (
       <div style={{ padding: "12px 16px", borderRadius: "var(--r-md)", background: "rgba(59,130,246,.08)", border: "1px solid rgba(59,130,246,.25)", display: "flex", alignItems: "center", gap: 14, marginBottom: 16 }}>
@@ -134,18 +134,19 @@ function VerifyBanner({ requested, onRequest, loading }) {
           <div style={{ fontSize: "1.3rem", fontWeight: 700, color: "#1d4ed8" }}>Subscription pending</div>
           <div style={{ fontSize: "1.15rem", color: "var(--ink-3)" }}>We're reviewing your subscription request. You'll be notified once activated.</div>
         </div>
+        <button className="btn btn-ghost btn-sm" style={{ flexShrink: 0 }} onClick={onNavigate}>View details</button>
       </div>
     );
   }
   return (
-    <div style={{ padding: "12px 16px", borderRadius: "var(--r-md)", background: "rgba(249,115,22,.07)", border: "1px solid rgba(249,115,22,.25)", display: "flex", alignItems: "center", gap: 14, marginBottom: 16 }}>
+    <div style={{ padding: "12px 16px", borderRadius: "var(--r-md)", background: "linear-gradient(135deg,rgba(245,158,11,.1),rgba(217,119,6,.07))", border: "1px solid rgba(245,158,11,.4)", display: "flex", alignItems: "center", gap: 14, marginBottom: 16 }}>
       <i className="fas fa-crown" style={{ fontSize: "1.6rem", color: "#f59e0b", flexShrink: 0 }} />
       <div style={{ flex: 1 }}>
         <div style={{ fontSize: "1.3rem", fontWeight: 700 }}>Subscribe your store</div>
-        <div style={{ fontSize: "1.15rem", color: "var(--ink-3)" }}>Get the UMP crown badge — show buyers you're a serious seller and boost visibility.</div>
+        <div style={{ fontSize: "1.15rem", color: "var(--ink-3)" }}>Get the UMP crown badge, priority search placement and unlimited listings.</div>
       </div>
-      <button className="btn btn-primary btn-sm" style={{ borderRadius: "var(--r-pill)", flexShrink: 0 }} onClick={onRequest} disabled={loading}>
-        {loading ? <i className="fas fa-spinner fa-spin" /> : <><i className="fas fa-crown" /> Subscribe</>}
+      <button className="btn btn-primary btn-sm" style={{ borderRadius: "var(--r-pill)", flexShrink: 0 }} onClick={onNavigate}>
+        <i className="fas fa-crown" /> See plans
       </button>
     </div>
   );
@@ -361,6 +362,10 @@ function ListingModal({ listing, onClose, onSave, showToast }) {
     furnished: listing?.furnished || false,
     available: listing?.available ?? true,
     amenities: listing?.amenities || [],
+    agreementFee:  listing?.agreementFee  || "",
+    commissionFee: listing?.commissionFee || "",
+    agentFee:      listing?.agentFee      || "",
+    cautionFee:    listing?.cautionFee    || "",
   });
   const [imageFiles, setImageFiles] = useState([]);
   const [imagePreviews, setImagePreviews] = useState([]);
@@ -437,6 +442,10 @@ function ListingModal({ listing, onClose, onSave, showToast }) {
       fd.append("description", form.description);
       fd.append("furnished", form.furnished);
       fd.append("available", form.available);
+      fd.append("agreementFee",  Number(form.agreementFee)  || 0);
+      fd.append("commissionFee", Number(form.commissionFee) || 0);
+      fd.append("agentFee",      Number(form.agentFee)      || 0);
+      fd.append("cautionFee",    Number(form.cautionFee)    || 0);
       form.amenities.forEach((a) => fd.append("amenities", a));
       imageFiles.forEach((f) => fd.append("images", f));
       if (videoFile) fd.append("videos", videoFile);
@@ -516,6 +525,29 @@ function ListingModal({ listing, onClose, onSave, showToast }) {
           <div style={{ marginBottom: 14 }}>
             <label style={lSty}>Location / Neighborhood</label>
             <input style={iSty} value={form.location} onChange={set("location")} placeholder="e.g. Akoka, Yaba, Lagos" />
+          </div>
+
+          {/* Agent / move-in fees — optional */}
+          <div style={{ marginBottom: 4 }}>
+            <label style={lSty}>Agent & Move-in Fees <span style={{ color: "var(--ink-3)", fontWeight: 400 }}>(optional — Lagos agents)</span></label>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
+            <div>
+              <label style={{ ...lSty, fontSize: "1.1rem" }}>Agreement fee (₦)</label>
+              <input style={iSty} type="number" min="0" value={form.agreementFee} onChange={set("agreementFee")} placeholder="0" />
+            </div>
+            <div>
+              <label style={{ ...lSty, fontSize: "1.1rem" }}>Commission fee (₦)</label>
+              <input style={iSty} type="number" min="0" value={form.commissionFee} onChange={set("commissionFee")} placeholder="0" />
+            </div>
+            <div>
+              <label style={{ ...lSty, fontSize: "1.1rem" }}>Agent fee (₦)</label>
+              <input style={iSty} type="number" min="0" value={form.agentFee} onChange={set("agentFee")} placeholder="0" />
+            </div>
+            <div>
+              <label style={{ ...lSty, fontSize: "1.1rem" }}>Caution fee (₦)</label>
+              <input style={iSty} type="number" min="0" value={form.cautionFee} onChange={set("cautionFee")} placeholder="0" />
+            </div>
           </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 10, marginBottom: 14 }}>
@@ -672,6 +704,7 @@ function AddProductModal({ onClose, onSave, showToast }) {
   const [form, setForm] = useState({ name: "", price: "", stock: "", desc: "", condition: "New", status: "active", category: "", colors: [], specs: [], deliveryFee: "" });
   const [imageFiles, setImageFiles] = useState([]);
   const [imagePreviews, setImagePreviews] = useState([]);
+  const [mainImageIdx, setMainImageIdx] = useState(0);
   const [categories, setCategories] = useState([]);
   const [saving, setSaving] = useState(false);
   const [colorInput, setColorInput] = useState({ name: "", code: "#e0e0e0" });
@@ -718,6 +751,7 @@ function AddProductModal({ onClose, onSave, showToast }) {
   function removePreview(i) {
     setImageFiles((prev) => prev.filter((_, idx) => idx !== i));
     setImagePreviews((prev) => prev.filter((_, idx) => idx !== i));
+    setMainImageIdx((m) => { if (i < m) return m - 1; if (i === m) return 0; return m; });
   }
 
   const addColor = () => { if (!colorInput.name.trim()) return; setForm((f) => ({ ...f, colors: [...f.colors, { ...colorInput }] })); setColorInput({ name: "", code: "#e0e0e0" }); };
@@ -742,7 +776,11 @@ function AddProductModal({ onClose, onSave, showToast }) {
       fd.append("colors", JSON.stringify(form.colors));
       fd.append("deliveryFee", Number(form.deliveryFee) || 0);
       form.specs.forEach(({ k, v }) => { fd.append("specKey", k); fd.append("specValue", v); });
-      imageFiles.forEach((file) => fd.append("images", file));
+      // Send main image first so it becomes the cover
+      const orderedFiles = mainImageIdx === 0
+        ? imageFiles
+        : [imageFiles[mainImageIdx], ...imageFiles.filter((_, i) => i !== mainImageIdx)];
+      orderedFiles.forEach((file) => fd.append("images", file));
 
       const result = await apiFetch("/api/products/", { method: "POST", body: fd });
       showToast("Product created!", "success");
@@ -835,22 +873,37 @@ function AddProductModal({ onClose, onSave, showToast }) {
           {/* Images */}
           <div style={{ marginBottom: 14 }}>
             <label style={lSty}>Images <span style={{ fontWeight: 400, color: "var(--ink-4)" }}>(max 4)</span></label>
-            <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", padding: "8px 14px", borderRadius: "var(--r-md)", border: "1px dashed var(--line)", background: "var(--surface)", width: "fit-content" }}>
-              <i className="fas fa-cloud-arrow-up" style={{ color: "var(--accent)" }} />
-              <span style={{ fontSize: "1.2rem", color: "var(--ink-2)" }}>{imageFiles.length > 0 ? `${imageFiles.length} file(s) selected` : "Choose photos"}</span>
-              <input type="file" accept="image/*" multiple style={{ display: "none" }} onChange={handleImages} />
-            </label>
+            {imageFiles.length < 4 && (
+              <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", padding: "8px 14px", borderRadius: "var(--r-md)", border: "1px dashed var(--line)", background: "var(--surface)", width: "fit-content" }}>
+                <i className="fas fa-cloud-arrow-up" style={{ color: "var(--accent)" }} />
+                <span style={{ fontSize: "1.2rem", color: "var(--ink-2)" }}>Add photos</span>
+                <input type="file" accept="image/*" multiple style={{ display: "none" }} onChange={handleImages} />
+              </label>
+            )}
             {imagePreviews.length > 0 && (
               <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
                 {imagePreviews.map((src, i) => (
-                  <div key={i} style={{ position: "relative", width: 80, height: 80 }}>
-                    <img src={src} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 8 }} />
-                    <button onClick={() => removePreview(i)} style={{ position: "absolute", top: -4, right: -4, width: 18, height: 18, borderRadius: "50%", background: "#dc2626", color: "#fff", border: "none", cursor: "pointer", fontSize: "0.9rem", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}>
+                  <div
+                    key={i}
+                    onClick={() => setMainImageIdx(i)}
+                    title={i === mainImageIdx ? "Cover photo" : "Tap to set as cover"}
+                    style={{ position: "relative", width: 80, height: 80, cursor: "pointer", borderRadius: 8, overflow: "hidden", outline: i === mainImageIdx ? "2.5px solid var(--accent)" : "none", outlineOffset: 2 }}
+                  >
+                    <img src={src} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    {i === mainImageIdx && (
+                      <span style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "rgba(249,115,22,.85)", color: "#fff", fontSize: "0.85rem", fontWeight: 700, textAlign: "center", padding: "1px 0" }}>Cover</span>
+                    )}
+                    <button type="button" onClick={(e) => { e.stopPropagation(); removePreview(i); }} style={{ position: "absolute", top: 2, right: 2, width: 18, height: 18, borderRadius: "50%", background: "rgba(0,0,0,.65)", color: "#fff", border: "none", cursor: "pointer", fontSize: "0.85rem", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}>
                       <i className="fas fa-xmark" />
                     </button>
                   </div>
                 ))}
               </div>
+            )}
+            {imagePreviews.length > 1 && (
+              <p style={{ margin: "5px 0 0", fontSize: "1.1rem", color: "var(--ink-3)" }}>
+                <i className="fas fa-circle-info" style={{ marginRight: 4 }} />Tap an image to set it as the cover
+              </p>
             )}
           </div>
 
@@ -1356,7 +1409,7 @@ export default function SellerDashboard() {
   const PAGE_CONTENT = (
     <div style={{ padding: "20px 20px 80px" }}>
       {!loading && !profile?.isSubscribed && (
-        <VerifyBanner requested={!!profile?.subscriptionRequested} onRequest={requestVerification} loading={verifyLoading} />
+        <VerifyBanner requested={!!profile?.subscriptionRequested} onNavigate={() => navigate("/subscribe?type=seller")} />
       )}
 
       <Alerts orders={orders} products={products} kpis={kpis} setTab={setTab} />

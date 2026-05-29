@@ -3,10 +3,10 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { useUser } from "../context/UserContext";
 
 const MAIN = [
-  { id: "home",     path: "/",         icon: "house",              label: "Home" },
-  { id: "market",   path: "/market",   icon: "store",              label: "Market" },
-  { id: "stores",   path: "/store",    icon: "shop",               label: "Stores" },
-  { id: "services", path: "/services", icon: "hand-holding-heart", label: "Services" },
+  { id: "home",      path: "/",          icon: "house",              label: "Home" },
+  { id: "market",    path: "/market",    icon: "store",              label: "Market" },
+  { id: "services",  path: "/services",  icon: "hand-holding-heart", label: "Services" },
+  { id: "providers", path: "/providers", icon: "people-group",       label: "Providers" },
 ];
 
 const MORE_ITEMS = [

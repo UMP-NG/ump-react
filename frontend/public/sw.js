@@ -26,9 +26,16 @@ self.addEventListener("notificationclick", (event) => {
   event.notification.close();
 
   const url = event.notification.data?.url || "/";
+  const broadcastId = event.notification.tag;
+
   event.waitUntil(
-    clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientList) => {
-      // If app is already open, focus it and navigate
+    (async () => {
+      // Track the open (fire-and-forget; ignore errors)
+      if (broadcastId && broadcastId !== "ump-broadcast") {
+        try { await fetch(`/api/push/open/${broadcastId}`, { method: "POST" }); } catch {}
+      }
+
+      const clientList = await clients.matchAll({ type: "window", includeUncontrolled: true });
       for (const client of clientList) {
         if ("focus" in client) {
           client.focus();
@@ -36,9 +43,8 @@ self.addEventListener("notificationclick", (event) => {
           return;
         }
       }
-      // Otherwise open a new tab
       if (clients.openWindow) return clients.openWindow(url);
-    })
+    })()
   );
 });
 

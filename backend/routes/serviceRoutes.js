@@ -8,6 +8,8 @@ import {
   getMyServices,
   becomeServiceProvider,
   requestServiceVerification,
+  getAllProviders,
+  getProviderById,
 } from "../controllers/serviceController.js";
 import { protect, requireRole } from "../middleware/authMiddleware.js";
 import { uploadServiceImages } from "../middleware/upload.js";
@@ -26,6 +28,8 @@ router.post(
 
 router.post("/request-verification", protect, requestServiceVerification);
 
+router.get("/providers", getAllProviders);
+router.get("/providers/:id", getProviderById);
 router.get("/", getAllServices);
 router.get("/:id", getServiceById);
 

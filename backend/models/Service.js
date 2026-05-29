@@ -2,74 +2,59 @@ import mongoose from "mongoose";
 
 const serviceSchema = new mongoose.Schema(
   {
-    name: {
+    name:  { type: String, required: true, trim: true }, // provider display name
+    title: { type: String, trim: true },                 // service headline
+
+    // ── Pricing ────────────────────────────────────────────────────────────────
+    pricingType: {
       type: String,
-      required: true, // Service or freelancer name
-      trim: true,
+      enum: ["fixed", "hourly", "per_project", "starting_from", "negotiable", "free"],
+      default: "fixed",
     },
-    title: {
-      type: String,
-      trim: true, // Short tagline
-    },
-    rate: {
-      type: Number, // e.g., 5000
-      required: true,
-    },
-    currency: {
-      type: String,
-      default: "NGN", // optional, e.g., NGN, USD
-    },
-    package: {
-      type: String, // Basic / Standard / Premium
-      trim: true,
-    },
-    rating: {
-      type: Number,
-      default: 0,
-      min: 0,
-      max: 5,
-    },
-    reviewsCount: {
-      type: Number,
-      default: 0,
-    },
-    verified: {
-      type: Boolean,
-      default: false,
-    },
-    verificationRequested: { type: Boolean, default: false },
-    images: [
+    rate:     { type: Number, default: 0 }, // 0 = free / negotiable
+    currency: { type: String, default: "NGN" },
+
+    // ── Media (max 5 images, 1 video) ─────────────────────────────────────────
+    images: [{ url: String, publicId: String }],
+    video:  { url: String, publicId: String },
+
+    // ── Description ────────────────────────────────────────────────────────────
+    major: String,  // category
+    desc:  String,  // short description shown on listing card
+    about: String,  // detailed description
+
+    // ── Credentials & links ────────────────────────────────────────────────────
+    certifications: [String],
+    portfolio:      [String], // portfolio URLs
+    policies:       [String],
+    tags:           [String],
+
+    // ── Availability ───────────────────────────────────────────────────────────
+    // Each slot: { day: "Monday", startTime: "09:00", endTime: "11:00" }
+    timeSlots: [
       {
-        url: String,
-        publicId: String,
+        day:       { type: String }, // "Monday" … "Sunday"
+        startTime: { type: String }, // "09:00" (24-hr)
+        endTime:   { type: String }, // "11:00"
       },
     ],
-    major: String, // category
-    desc: String, // short description
-    about: String, // detailed description
-    certifications: [String],
-    portfolio: [String],
-    policies: [String],
-    timeSlots: [String],
-    provider: {
-      type: mongoose.Schema.Types.ObjectId,
-      required: true,
-      ref: "User", // ✅ reference User instead of Seller
-    },
-    available: {
-      type: Boolean,
-      default: true,
-    },
-    // reviews references (Review model stores author, rating, text)
-    reviews: [{ type: mongoose.Schema.Types.ObjectId, ref: "Review" }],
-    likes: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
-    tags: [String],
-    duration: {
-      type: Number, // duration in hours or days
-    },
+    available: { type: Boolean, default: true },
+    duration:  { type: String }, // display string e.g. "2 hours", "3 days"
+
+    // ── Quality signals ────────────────────────────────────────────────────────
+    rating:       { type: Number, default: 0, min: 0, max: 5 },
+    reviewsCount: { type: Number, default: 0 },
+    verified:     { type: Boolean, default: false },
+    verificationRequested: { type: Boolean, default: false },
+
+    // ── Relations ──────────────────────────────────────────────────────────────
+    provider: { type: mongoose.Schema.Types.ObjectId, required: true, ref: "User" },
+    reviews:  [{ type: mongoose.Schema.Types.ObjectId, ref: "Review" }],
+    likes:    [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
   },
   { timestamps: true }
 );
 
-export default mongoose.model("Service", serviceSchema);
+serviceSchema.index({ name: "text", title: "text", desc: "text", major: "text", tags: "text" });
 
+export default mongoose.model("Service", serviceSchema);

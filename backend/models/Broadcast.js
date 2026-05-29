@@ -16,6 +16,7 @@ const broadcastSchema = new mongoose.Schema(
     expires:  Date,
     status:   { type: String, enum: ["draft", "scheduled", "sent"], default: "sent" },
     reach:    { type: Number, default: 0 },
+    opens:    { type: Number, default: 0 },
     openRate: Number,
     sentAt:   Date,
     sentBy:   { type: mongoose.Schema.Types.ObjectId, ref: "User" },

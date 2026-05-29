@@ -5,6 +5,14 @@ import Footer from "../components/Footer";
 import BottomNav from "../components/BottomNav";
 import Ph from "../components/Ph";
 import { naira } from "../components/ProductCard";
+
+const PRICE_SUFFIX = { hourly: "/hr", per_project: "/project", starting_from: " from", fixed: "" };
+function fmtPrice(s) {
+  if (s.pricingType === "negotiable") return { label: "Negotiable", accent: false };
+  if (s.pricingType === "free")       return { label: "Free",       accent: false };
+  const cur = s.currency === "USD" ? "$" : "₦";
+  return { label: `${cur}${Number(s.rate || 0).toLocaleString()}${PRICE_SUFFIX[s.pricingType] || ""}`, accent: true };
+}
 import { apiFetch } from "../utils/api";
 import Skel from "../components/Skel";
 
@@ -113,71 +121,68 @@ export default function Services() {
           </label>
         </div>
 
-        <div style={{ padding: "14px 0 24px", display: "flex", flexDirection: "column", gap: 12 }}>
-          {loading
-            ? [1, 2, 3].map((i) => <Skel.ServiceCard key={i} />)
-            : visible.length === 0
-            ? (
-                <div className="empty-state">
-                  <i className="fas fa-hand-holding-heart" />
-                  <h3>No services found</h3>
-                  <p>{cat !== "All" ? `No "${cat}" services match your filters` : "No services listed yet — check back soon"}</p>
-                </div>
-              )
-            : visible.map((s) => {
+        <div style={{ padding: "14px 0 24px" }}>
+          {loading ? (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 14 }}>
+              {[1,2,3,4].map((i) => <Skel.ServiceCard key={i} />)}
+            </div>
+          ) : visible.length === 0 ? (
+            <div className="empty-state">
+              <i className="fas fa-hand-holding-heart" />
+              <h3>No services found</h3>
+              <p>{cat !== "All" ? `No "${cat}" services match your filters` : "No services listed yet — check back soon"}</p>
+            </div>
+          ) : (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 14 }}>
+              {visible.map((s) => {
                 const imgUrl = s.images?.[0]?.url || null;
-                const providerName = s.provider?.storeName || s.provider?.businessName || s.provider?.brandName || s.provider?.name || "Provider";
+                const providerName = s.provider?.serviceProviderInfo?.businessName || s.provider?.storeName || s.provider?.businessName || s.provider?.name || "Provider";
+                const price = fmtPrice(s);
 
                 return (
                   <div
                     key={s._id}
                     className="card"
-                    style={{ padding: 14, display: "flex", gap: 12, cursor: "pointer" }}
+                    style={{ overflow: "hidden", cursor: "pointer" }}
                     onClick={() => navigate(`/services/${s._id}`)}
                   >
-                    <div style={{ width: 96, height: 96, borderRadius: 14, overflow: "hidden", flexShrink: 0, background: "var(--surface)" }}>
+                    {/* Cover image */}
+                    <div style={{ height: 140, background: "var(--surface)", position: "relative" }}>
                       {imgUrl
                         ? <img src={imgUrl} alt={s.title || s.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                        : <Ph kind={s.category?.toLowerCase() || s.major?.toLowerCase() || "default"} label={s.category || s.major || ""} />
-                      }
+                        : <Ph kind={s.major?.toLowerCase() || "default"} label={s.major || ""} />}
+                      {s.available === false && (
+                        <span style={{ position: "absolute", top: 6, left: 6, fontSize: "0.9rem", padding: "2px 7px", borderRadius: 8, background: "rgba(220,38,38,.9)", color: "#fff", fontWeight: 700 }}>Unavailable</span>
+                      )}
                     </div>
 
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
-                        <div style={{ fontSize: "1.4rem", fontWeight: 700, lineHeight: 1.3 }}>{s.title || s.name}</div>
-                        {s.available === false && (
-                          <span style={{ fontSize: "1rem", padding: "2px 7px", borderRadius: 10, background: "#fee2e2", color: "#dc2626", fontWeight: 600, flexShrink: 0 }}>Unavailable</span>
-                        )}
+                    {/* Info */}
+                    <div style={{ padding: "10px 12px 12px" }}>
+                      {s.major && (
+                        <div style={{ fontSize: "1.05rem", color: "var(--accent)", fontWeight: 600, textTransform: "uppercase", letterSpacing: ".04em", marginBottom: 2 }}>{s.major}</div>
+                      )}
+                      <div style={{ fontSize: "1.35rem", fontWeight: 700, lineHeight: 1.3, marginBottom: 4, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>
+                        {s.title || s.name}
                       </div>
-
-                      <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "1.2rem", color: "var(--ink-3)", marginTop: 4 }}>
-                        {providerName}
-                        {s.verified && <i className="fas fa-circle-check" style={{ color: "var(--accent)", fontSize: "1rem" }} />}
+                      <div style={{ display: "flex", alignItems: "center", gap: 4, fontSize: "1.15rem", color: "var(--ink-3)", marginBottom: 6 }}>
+                        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{providerName}</span>
+                        {s.verified && <i className="fas fa-crown" style={{ color: "#f59e0b", fontSize: "0.9rem", flexShrink: 0 }} />}
                       </div>
-
                       {(s.rating || 0) > 0 && (
-                        <div className="rating" style={{ marginTop: 4 }}>
+                        <div className="rating" style={{ fontSize: "1.1rem", marginBottom: 6 }}>
                           <i className="fas fa-star star" /> {s.rating}
                           <span className="count">({s.reviewsCount || 0})</span>
                         </div>
                       )}
-
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8 }}>
-                        <span style={{ fontSize: "1.5rem", fontWeight: 800, color: "var(--accent)" }}>
-                          {naira(s.rate || 0)}<span style={{ fontSize: "1.1rem", color: "var(--ink-3)", fontWeight: 500 }}>/session</span>
-                        </span>
-                        <button
-                          className="btn btn-sm btn-dark"
-                          onClick={(e) => { e.stopPropagation(); navigate(`/services/${s._id}`); }}
-                        >
-                          Book
-                        </button>
+                      <div style={{ fontSize: "1.55rem", fontWeight: 800, color: price.accent ? "var(--accent)" : "var(--ink-1)" }}>
+                        {price.label}
                       </div>
                     </div>
                   </div>
                 );
-              })
-          }
+              })}
+            </div>
+          )}
         </div>
       </div>
 

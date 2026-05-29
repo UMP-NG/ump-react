@@ -23,44 +23,6 @@ const TYPE_COLOR = {
   system:  "var(--ink-3)",
 };
 
-function urlBase64ToUint8Array(base64) {
-  const pad = "=".repeat((4 - (base64.length % 4)) % 4);
-  const b64 = (base64 + pad).replace(/-/g, "+").replace(/_/g, "/");
-  return Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
-}
-
-async function setupWebPush() {
-  if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
-
-  // 1. Request notification permission
-  const permission = await Notification.requestPermission();
-  if (permission !== "granted") return;
-
-  // 2. Register (or reuse) the service worker
-  const reg = await navigator.serviceWorker.register("/sw.js", { scope: "/" });
-  await navigator.serviceWorker.ready;
-
-  // 3. Get the VAPID public key from the backend
-  const { key } = await apiFetch("/api/push/vapid-key");
-  if (!key) return; // push not configured on this backend
-
-  // 4. Subscribe (no-op if already subscribed to the same key)
-  const existing = await reg.pushManager.getSubscription();
-  if (existing) {
-    // Re-send in case the subscription was evicted from the DB
-    await apiFetch("/api/push/subscribe", { method: "POST", body: existing.toJSON() });
-    return;
-  }
-
-  const sub = await reg.pushManager.subscribe({
-    userVisibleOnly: true,
-    applicationServerKey: urlBase64ToUint8Array(key),
-  });
-
-  // 5. Save subscription on the backend
-  await apiFetch("/api/push/subscribe", { method: "POST", body: sub.toJSON() });
-}
-
 function fireBrowserNotification(notif, onClickLink) {
   if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
   // Only fire the OS notification when the tab is not visible
@@ -81,10 +43,7 @@ export default function NotificationBanner() {
   const [queue, setQueue] = useState([]);
   const timerRef = useRef({});
 
-  // Register SW + subscribe to web push as soon as user is logged in
-  useEffect(() => {
-    if (user) setupWebPush().catch(() => { /* ignore — push is best-effort */ });
-  }, [user]);
+  // Push subscription is handled by UserContext.subscribeToPush() — no duplicate call needed here.
 
   useEffect(() => {
     if (!user) return;
