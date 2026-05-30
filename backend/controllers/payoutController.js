@@ -8,7 +8,7 @@ import paystack from "../utils/paystack.js";
 // Fix #10a: read bank details from Seller model where they are actually stored
 export const getPayoutDetails = async (req, res) => {
   try {
-    const seller = await Seller.findOne({ user: req.user._id }).select("pendingPayout bankDetails").lean();
+    const seller = await Seller.findOne({ user: req.user._id }).select("bankDetails").lean();
     const accountDetails = seller?.bankDetails || {};
     res.json({
       success: true,
@@ -50,7 +50,7 @@ export const requestPayout = async (req, res) => {
     const config = await Config.findOne().select("fees").lean();
     const minPayout = config?.fees?.minPayout ?? 2000;
     if (amount < minPayout)
-      return res.status(400).json({ message: `Minimum payout is ₦${minPayout.toLocaleString()}` });
+      return res.status(400).json({ message: `Minimum payout is ₦${minPayout.toLocaleString("en-NG")}` });
 
     const payoutData = {
       amount,
@@ -179,15 +179,22 @@ export const getPayoutSummary = async (req, res) => {
       return res.json({
         success: true,
         summary: {
-          available:  seller?.pendingPayout  || 0,
-          nextPayout: lastEntry?.date        || null,
-          role:       "seller",
+          available:     seller?.pendingPayout || 0,
+          lastPayoutDate: lastEntry?.date      || null,
+          role:          "seller",
         },
       });
     }
 
     // For other roles: fall back to aggregation with a timeout guard
-    const role    = roles.includes("walker") ? "walker" : roles.includes("service_provider") ? "provider" : "seller";
+    const role = roles.includes("walker")
+      ? "walker"
+      : roles.includes("service_provider")
+      ? "provider"
+      : null;
+
+    if (!role) return res.status(403).json({ message: "Unauthorized role" });
+
     const roleKey = role;
 
     const computeSummary = async () => {
@@ -201,8 +208,8 @@ export const getPayoutSummary = async (req, res) => {
       ]);
       const lastPayout = await Payout.findOne({ [roleKey]: userId }).sort({ createdAt: -1 }).lean();
       return {
-        available:  Math.max(0, (paidAgg[0]?.total || 0) - (paidOutAgg[0]?.total || 0)),
-        nextPayout: lastPayout?.createdAt || null,
+        available:     Math.max(0, (paidAgg[0]?.total || 0) - (paidOutAgg[0]?.total || 0)),
+        lastPayoutDate: lastPayout?.createdAt || null,
         role,
       };
     };

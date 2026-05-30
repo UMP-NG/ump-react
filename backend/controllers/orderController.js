@@ -456,11 +456,15 @@ export const updateOrder = async (req, res) => {
     const order = await Order.findById(req.params.id);
     if (!order) return res.status(404).json({ message: "Order not found" });
 
-    // Fix #1: verify ownership — only the order's seller or an admin may update
+    // Only the order's seller (or an item-level seller, or an admin) may update
     const isAdmin = req.user.roles?.includes("admin");
-    const sellerId = order.seller?.toString();
-    if (!isAdmin && sellerId && sellerId !== req.user._id.toString()) {
-      return res.status(403).json({ message: "Not authorized to update this order" });
+    const userId  = req.user._id.toString();
+    if (!isAdmin) {
+      const directMatch = order.seller?.toString() === userId;
+      const itemMatch   = order.items.some((i) => i.product?.seller?.toString() === userId);
+      if (!directMatch && !itemMatch) {
+        return res.status(403).json({ message: "Not authorized to update this order" });
+      }
     }
 
     if (status) order.status = status;
@@ -872,11 +876,15 @@ export const bookDispatch = async (req, res) => {
     if (order.blackboxTrackingId)
       return res.status(400).json({ message: "Dispatch already booked", trackingId: order.blackboxTrackingId });
 
-    // Confirm the requesting user owns this order's seller account (admins bypass this check)
-    const sellerUserId = order.seller?.toString();
+    // Confirm the requesting user owns this order (admins bypass this check)
     const isAdmin = req.user.roles?.includes("admin");
-    if (!isAdmin && sellerUserId && sellerUserId !== req.user._id.toString()) {
-      return res.status(403).json({ message: "Not authorised" });
+    if (!isAdmin) {
+      const uid         = req.user._id.toString();
+      const directMatch = order.seller?.toString() === uid;
+      const itemMatch   = order.items.some((i) => i.product?.seller?.toString() === uid);
+      if (!directMatch && !itemMatch) {
+        return res.status(403).json({ message: "Not authorised" });
+      }
     }
 
     const packageDescription = order.items

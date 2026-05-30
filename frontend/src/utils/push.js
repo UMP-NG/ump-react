@@ -52,7 +52,8 @@ export async function subscribeToPush() {
     // Wait for THIS registration to be active, not just any controlling SW.
     // Using navigator.serviceWorker.ready here would return a stale registration
     // if a different SW (e.g. firebase-messaging-sw.js) was previously controlling.
-    await waitForActive(reg);
+    const activeWorker = await waitForActive(reg);
+    if (!activeWorker) return "error"; // SW failed to activate — no push possible
 
     // 2. Get VAPID public key from server (returns "unsupported" silently if server has no VAPID keys)
     let keyData;

@@ -6,11 +6,18 @@ import Product from "../models/Product.js";
 import Service from "../models/Service.js";
 import { getIO } from "../utils/socket.js";
 
+// Normalise image data which may be stored as a string URL or as { url, publicId }
+function extractImage(img) {
+  if (!img) return null;
+  if (typeof img === "string") return img || null;
+  return img.url || null;
+}
+
 // POST /api/negotiations
 // Buyer proposes a price for a product or service
 export const createNegotiation = async (req, res) => {
   try {
-    const { itemType, itemId, proposedPrice, sellerId } = req.body;
+    const { itemType, itemId, proposedPrice } = req.body;
     const buyerId = req.user._id;
 
     if (!["Product", "Service"].includes(itemType)) {
@@ -22,30 +29,34 @@ export const createNegotiation = async (req, res) => {
       return res.status(400).json({ message: "Invalid proposed price" });
     }
 
-    if (!mongoose.Types.ObjectId.isValid(itemId) || !mongoose.Types.ObjectId.isValid(sellerId)) {
-      return res.status(400).json({ message: "Invalid item or seller ID" });
+    if (!mongoose.Types.ObjectId.isValid(itemId)) {
+      return res.status(400).json({ message: "Invalid item ID" });
+    }
+
+    let originalPrice, itemName, itemImage, sellerId;
+
+    if (itemType === "Product") {
+      const product = await Product.findById(itemId).select("name price images seller");
+      if (!product) return res.status(404).json({ message: "Product not found" });
+      if (!product.seller) return res.status(400).json({ message: "This product has no seller" });
+      originalPrice = product.price;
+      itemName = product.name;
+      itemImage = extractImage(product.images?.[0]);
+      sellerId = product.seller;
+    } else {
+      const service = await Service.findById(itemId).select("title name rate images provider");
+      if (!service) return res.status(404).json({ message: "Service not found" });
+      if (!service.rate) return res.status(400).json({ message: "This service has no fixed rate to negotiate" });
+      if (!service.provider) return res.status(400).json({ message: "This service has no provider" });
+      originalPrice = service.rate;
+      itemName = service.title || service.name;
+      itemImage = extractImage(service.images?.[0]);
+      sellerId = service.provider;
     }
 
     // Prevent negotiating with yourself
     if (sellerId.toString() === buyerId.toString()) {
       return res.status(400).json({ message: "You cannot negotiate with yourself" });
-    }
-
-    let originalPrice, itemName, itemImage;
-
-    if (itemType === "Product") {
-      const product = await Product.findById(itemId);
-      if (!product) return res.status(404).json({ message: "Product not found" });
-      originalPrice = product.price;
-      itemName = product.name;
-      itemImage = product.images?.[0]?.url || null;
-    } else {
-      const service = await Service.findById(itemId);
-      if (!service) return res.status(404).json({ message: "Service not found" });
-      if (!service.rate) return res.status(400).json({ message: "This service has no fixed rate to negotiate" });
-      originalPrice = service.rate;
-      itemName = service.title || service.name;
-      itemImage = service.images?.[0]?.url || null;
     }
 
     if (parsed >= originalPrice) {
@@ -186,7 +197,7 @@ export const applyNegotiatedPrice = async (req, res) => {
     }
 
     if (negotiation.status !== "accepted") {
-      return res.status(400).json({ message: "Negotiation must be accepted before applying" });
+      return res.status(400).json({ message: negotiation.status === "applied" ? "Price has already been applied to the buyer's cart" : "Negotiation must be accepted before applying" });
     }
 
     if (negotiation.itemType !== "Product") {
@@ -216,10 +227,14 @@ export const applyNegotiatedPrice = async (req, res) => {
 
     await cart.save();
 
+    // Mark as applied so it cannot be re-applied
+    negotiation.status = "applied";
+    await negotiation.save();
+
     const io = getIO();
     if (io) {
       io.to(buyerId.toString()).emit("cart_updated", {
-        message: `"${negotiation.itemName}" added at your negotiated price ₦${Number(negotiation.proposedPrice).toLocaleString()}!`,
+        message: `"${negotiation.itemName}" added at your negotiated price ₦${Number(negotiation.proposedPrice).toLocaleString("en-NG")}!`,
         negotiationId: negotiation._id,
       });
     }

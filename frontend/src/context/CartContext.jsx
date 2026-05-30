@@ -7,6 +7,7 @@ const CartContext = createContext({
   cartItems: new Map(),
   refreshCart: () => {},
   updateQty: async () => {},
+  addToCart: async () => {},
 });
 
 export function CartProvider({ children }) {
@@ -57,18 +58,15 @@ export function CartProvider({ children }) {
           return m;
         });
       }
-    } catch {
+    } catch (err) {
       refreshCart();
+      throw err; // re-throw so callers can show an error toast
     }
   }
 
   async function addToCart(productId) {
-    try {
-      await apiFetch("/api/cart/add", { method: "POST", body: { productId, quantity: 1 } });
-      refreshCart();
-    } catch (err) {
-      throw err;
-    }
+    await apiFetch("/api/cart/add", { method: "POST", body: { productId, quantity: 1 } });
+    refreshCart();
   }
 
   return (

@@ -368,6 +368,7 @@ function NegotiationCard({ msg, iAmSeller, onRespond, onApply }) {
   const meta = msg.meta || {};
   const [acting, setActing] = useState(false);
   const [applying, setApplying] = useState(false);
+  const [cardError, setCardError] = useState("");
   const status = msg._negotiationStatus || meta.status || "pending";
 
   const fmt = (n) => "₦" + Number(n).toLocaleString("en-NG");
@@ -379,8 +380,11 @@ function NegotiationCard({ msg, iAmSeller, onRespond, onApply }) {
   async function respond(action) {
     if (acting) return;
     setActing(true);
+    setCardError("");
     try {
       await onRespond(msg.negotiationId, action);
+    } catch (err) {
+      setCardError(err?.body?.message || err?.message || "Action failed. Try again.");
     } finally {
       setActing(false);
     }
@@ -389,8 +393,11 @@ function NegotiationCard({ msg, iAmSeller, onRespond, onApply }) {
   async function applyPrice() {
     if (applying) return;
     setApplying(true);
+    setCardError("");
     try {
       await onApply(msg.negotiationId);
+    } catch (err) {
+      setCardError(err?.body?.message || err?.message || "Could not apply price. Try again.");
     } finally {
       setApplying(false);
     }
@@ -481,6 +488,12 @@ function NegotiationCard({ msg, iAmSeller, onRespond, onApply }) {
           </button>
         </div>
       )}
+
+      {cardError && (
+        <div style={{ padding: "6px 12px 10px", fontSize: "1.1rem", color: "#ef4444", display: "flex", alignItems: "center", gap: 5 }}>
+          <i className="fas fa-circle-exclamation" style={{ fontSize: "0.9rem" }} /> {cardError}
+        </div>
+      )}
     </div>
   );
 }
@@ -560,14 +573,15 @@ function MsgThread({ convo, onBack }) {
     return () => socket.off("negotiation_update", onNegotiationUpdate);
   }, []);
 
-  // Listen for incoming real-time messages (negotiation responses, etc.)
+  // Listen for incoming real-time messages from the OTHER person in this thread.
+  // We deliberately skip messages where we are the sender — those are already
+  // added optimistically in send(), so processing them here would duplicate them.
   useEffect(() => {
     function onNewMessage(msg) {
       const senderId = typeof msg.sender === "object" ? msg.sender?._id?.toString() : msg.sender?.toString();
-      const isInThisThread =
-        senderId === receiverId?.toString() ||
-        (typeof msg.receiver === "object" ? msg.receiver?._id?.toString() : msg.receiver?.toString()) === receiverId?.toString();
-      if (!isInThisThread) return;
+      const myId     = user?._id?.toString();
+      if (senderId === myId) return;                        // own message — skip
+      if (senderId !== receiverId?.toString()) return;      // different thread — skip
       setMessages((prev) => {
         const exists = prev.some((m) => m._id === msg._id);
         if (exists) return prev;
@@ -576,7 +590,7 @@ function MsgThread({ convo, onBack }) {
     }
     socket.on("new_message", onNewMessage);
     return () => socket.off("new_message", onNewMessage);
-  }, [receiverId, mapMessage]);
+  }, [receiverId, mapMessage, user]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });

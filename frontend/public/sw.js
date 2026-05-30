@@ -132,8 +132,10 @@ self.addEventListener("push", (event) => {
     icon:    data.icon || "/images/ump-logo.png",
     badge:   "/images/ump-logo.png",
     tag,
-    // Only renotify when the tag changes (avoids spamming duplicate notifications)
-    renotify: !!data.tag,
+    // renotify: true — always show the notification with animation/sound even when
+    // replacing a previous one with the same tag. Without this, subsequent pushes
+    // with the same tag are silently updated (no banner, no vibration) on Android.
+    renotify: true,
     // Vibration pattern — required for phones to buzz (ignored on desktop)
     vibrate: [200, 100, 200],
     data: { url: data.url || "/", broadcastId: data.tag || null },

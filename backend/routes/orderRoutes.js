@@ -1,6 +1,4 @@
-import Order from "../models/Order.js";
 import express from "express";
-import { protect as verifyToken } from "../middleware/authMiddleware.js";
 import {
   createOrder,
   getMyOrders,
@@ -72,7 +70,6 @@ router.post(
   "/checkout",
   protect,
   requireRole("user", "seller", "admin"),
-  verifyToken,
   checkoutCart
 );
 
@@ -81,7 +78,6 @@ router.get(
   "/my-orders",
   protect,
   requireRole("user", "seller", "admin"),
-  verifyToken,
   getMyOrders
 );
 

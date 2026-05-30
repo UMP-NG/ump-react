@@ -970,8 +970,8 @@ export default function ProviderAnalytics() {
             <div style={{ fontSize: "3.6rem", fontWeight: 900, letterSpacing: "-0.04em" }}>{naira(kpis.availableBalance || 0)}</div>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 14, paddingTop: 14, borderTop: "1px solid rgba(255,255,255,.15)" }}>
               <div>
-                <div style={{ fontSize: "1.1rem", opacity: 0.5 }}>Next Scheduled Payout</div>
-                <div style={{ fontSize: "1.35rem", fontWeight: 600, marginTop: 2 }}>{kpis.nextPayout || "Not scheduled"}</div>
+                <div style={{ fontSize: "1.1rem", opacity: 0.5 }}>Last Payout</div>
+                <div style={{ fontSize: "1.35rem", fontWeight: 600, marginTop: 2 }}>{kpis.lastPayoutDate ? new Date(kpis.lastPayoutDate).toLocaleDateString("en-NG") : "None yet"}</div>
               </div>
             </div>
           </div>

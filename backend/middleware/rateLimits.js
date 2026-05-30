@@ -1,9 +1,17 @@
 import rateLimit from "express-rate-limit";
 
+// Key by authenticated user ID when available, falling back to IP.
+// This prevents shared IPs (campus WiFi, proxies) from incorrectly
+// throttling one user because another on the same network hit the limit.
+function keyByUser(req) {
+  return req.user?._id?.toString() || req.ip;
+}
+
 const make = (windowMs, max, message) =>
   rateLimit({
     windowMs,
     max,
+    keyGenerator: keyByUser,
     standardHeaders: true,
     legacyHeaders: false,
     message: { success: false, message },
