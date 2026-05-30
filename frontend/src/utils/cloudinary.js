@@ -1,10 +1,6 @@
 /**
- * Append Cloudinary auto-quality + auto-format transforms to any Cloudinary URL.
+ * Append Cloudinary auto-quality + auto-format transforms to any Cloudinary image URL.
  * Non-Cloudinary URLs are returned unchanged.
- *
- * @param {string} url  - Raw image URL (Cloudinary or otherwise)
- * @param {object} opts - Optional overrides: { w: number } for width cap
- * @returns {string}
  */
 export function cloudImg(url, opts = {}) {
   if (!url || !url.includes("res.cloudinary.com")) return url;
@@ -14,4 +10,20 @@ export function cloudImg(url, opts = {}) {
     .filter(Boolean)
     .join(",");
   return url.replace("/upload/", `/upload/${transforms}/`);
+}
+
+/**
+ * Ensure a Cloudinary video URL is served in an iOS-compatible format.
+ *
+ * `vc_auto` tells Cloudinary to transcode to H.264/AAC for Safari/iOS
+ * and to VP9/AV1 for Chrome — one URL works on every browser.
+ * Without this, WebM uploads simply refuse to play on iPhone.
+ *
+ * Local blob: URLs (preview before upload) are returned unchanged.
+ */
+export function cloudVideo(url) {
+  if (!url || !url.includes("res.cloudinary.com")) return url;
+  // Idempotency guard
+  if (/\/upload\/vc_/.test(url)) return url;
+  return url.replace("/upload/", "/upload/vc_auto,ac_aac/");
 }

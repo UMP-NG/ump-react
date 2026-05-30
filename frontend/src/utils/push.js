@@ -7,6 +7,23 @@ function urlBase64ToUint8Array(base64String) {
   return Uint8Array.from([...raw].map((c) => c.charCodeAt(0)));
 }
 
+// Wait for a specific ServiceWorkerRegistration to have an active worker.
+// navigator.serviceWorker.ready resolves with whatever SW is already controlling
+// the page — that might be an old or different SW. This waits for OUR registration.
+function waitForActive(reg) {
+  if (reg.active) return Promise.resolve(reg.active);
+  return new Promise((resolve) => {
+    const worker = reg.installing || reg.waiting;
+    if (!worker) { resolve(null); return; }
+    worker.addEventListener("statechange", function handler() {
+      if (worker.state === "activated") {
+        worker.removeEventListener("statechange", handler);
+        resolve(worker);
+      }
+    });
+  });
+}
+
 /**
  * Register the service worker, ask notification permission, subscribe to
  * Web Push, and save the subscription to the backend.
@@ -18,10 +35,24 @@ export async function subscribeToPush() {
     return "unsupported";
   }
 
+  // iOS Safari only supports Web Push inside a home-screen PWA (iOS 16.4+).
+  // Outside a PWA, Notification is defined but requestPermission always returns "denied".
+  // Detect this early so we don't waste a subscription attempt.
+  if (
+    /iP(hone|od|ad)/.test(navigator.userAgent) &&
+    !window.navigator.standalone
+  ) {
+    return "unsupported";
+  }
+
   try {
-    // 1. Register the service worker (idempotent — safe to call every login)
+    // 1. Register OUR service worker (idempotent — safe to call every login)
     const reg = await navigator.serviceWorker.register("/sw.js", { scope: "/" });
-    await navigator.serviceWorker.ready;
+
+    // Wait for THIS registration to be active, not just any controlling SW.
+    // Using navigator.serviceWorker.ready here would return a stale registration
+    // if a different SW (e.g. firebase-messaging-sw.js) was previously controlling.
+    await waitForActive(reg);
 
     // 2. Get VAPID public key from server (returns "unsupported" silently if server has no VAPID keys)
     let keyData;

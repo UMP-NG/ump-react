@@ -139,9 +139,9 @@ router.post("/google", authLimiter, async (req, res) => {
       path: "/",
     });
 
+    // Fix #5: don't return the raw token in the body — the httpOnly cookie is enough.
     res.json({
       message: "Google sign-in successful",
-      token,
       user: {
         _id:              user._id,
         name:             user.name,

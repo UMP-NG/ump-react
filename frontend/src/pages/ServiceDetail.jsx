@@ -32,8 +32,9 @@ function formatPrice(service) {
 }
 import { apiFetch } from "../utils/api";
 import Skel from "../components/Skel";
-import { cloudImg } from "../utils/cloudinary";
+import { cloudImg, cloudVideo } from "../utils/cloudinary";
 import ReportModal from "../components/ReportModal";
+import NegotiationModal from "../components/NegotiationModal";
 
 export default function ServiceDetail() {
   const { id } = useParams();
@@ -48,6 +49,7 @@ export default function ServiceDetail() {
   const [bookedSlots, setBookedSlots] = useState([]);
   const [toast, setToast] = useState(null);
   const [showReport, setShowReport] = useState(false);
+  const [negotiateOpen, setNegotiateOpen] = useState(false);
   const [activeImg, setActiveImg] = useState(0);   // must be here — before any early returns
   const toastTimer = useRef(null);
 
@@ -175,7 +177,7 @@ export default function ServiceDetail() {
       {/* Video */}
       {service.video?.url && (
         <div style={{ margin: "12px 16px 0", borderRadius: "var(--r-xl)", overflow: "hidden", background: "#000" }}>
-          <video src={service.video.url} controls playsInline preload="metadata" style={{ width: "100%", maxHeight: 220, display: "block" }} />
+          <video src={cloudVideo(service.video.url)} controls playsInline preload="metadata" style={{ width: "100%", maxHeight: 220, display: "block" }} />
         </div>
       )}
 
@@ -292,14 +294,35 @@ export default function ServiceDetail() {
         />
       )}
 
+      {negotiateOpen && service && service.rate && service.provider && (
+        <NegotiationModal
+          itemType="Service"
+          itemId={service._id}
+          itemName={service.title || service.name}
+          itemImage={service.images?.[0]?.url || null}
+          originalPrice={service.rate}
+          sellerId={typeof service.provider === "object" ? service.provider._id : service.provider}
+          onClose={() => setNegotiateOpen(false)}
+        />
+      )}
+
       {/* Sticky book bar */}
-      <div style={{ position: "fixed", left: 16, right: 16, bottom: 16, background: "var(--white)", border: "1px solid var(--line)", borderRadius: "var(--r-pill)", padding: "10px 16px", display: "flex", alignItems: "center", gap: 12, boxShadow: "var(--shadow-pop)", zIndex: 40 }}>
-        <div style={{ flex: 1 }}>
+      <div style={{ position: "fixed", left: 16, right: 16, bottom: 16, background: "var(--white)", border: "1px solid var(--line)", borderRadius: "var(--r-pill)", padding: "10px 16px", display: "flex", alignItems: "center", gap: 10, boxShadow: "var(--shadow-pop)", zIndex: 40 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: "1.8rem", fontWeight: 800, color: price.accent !== false ? "var(--accent)" : "var(--ink-1)" }}>
             {price.label}<span style={{ fontSize: "1.1rem", color: "var(--ink-3)", fontWeight: 500 }}>{price.sub}</span>
           </div>
         </div>
-        <button className="btn btn-primary" style={{ borderRadius: "var(--r-pill)" }} onClick={() => setBookingOpen(true)}>
+        {service.rate && service.pricingType !== "free" && service.provider && (
+          <button
+            className="icon-btn"
+            title="Negotiate price"
+            onClick={() => setNegotiateOpen(true)}
+          >
+            <i className="fas fa-handshake" />
+          </button>
+        )}
+        <button className="btn btn-primary" style={{ borderRadius: "var(--r-pill)", flexShrink: 0 }} onClick={() => setBookingOpen(true)}>
           <i className="fa-solid fa-calendar-check" /> Book session
         </button>
       </div>

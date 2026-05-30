@@ -1,4 +1,6 @@
 import mongoose from "mongoose";
+import fs from "fs";                           // fix #9: was missing, needed by generateInvoicePDF
+import crypto from "crypto";
 import Order from "../models/Order.js";
 import Product from "../models/Product.js";
 import Seller from "../models/Seller.js";
@@ -11,8 +13,9 @@ import axios from "axios";
 import { audit } from "../utils/auditLog.js";
 import { notify } from "../utils/notify.js";
 
+// Fix #6: use cryptographically secure random bytes instead of Math.random()
 function generateDeliveryCode() {
-  return Math.random().toString(36).substring(2, 8).toUpperCase();
+  return crypto.randomBytes(3).toString("hex").toUpperCase(); // 3 bytes = 6 hex chars
 }
 
 const __filename = fileURLToPath(import.meta.url);
@@ -37,20 +40,23 @@ export const createOrder = async (req, res) => {
     // Process each item
     const processedItems = [];
     for (const item of items) {
-      const product = await Product.findById(item.product);
-
-      if (!product) {
-        return res
-          .status(404)
-          .json({ message: `Product not found: ${item.product}` });
+      // Fix #12: validate quantity before using it in calculations
+      const qty = Number(item.quantity);
+      if (!Number.isInteger(qty) || qty < 1) {
+        return res.status(400).json({ message: `Invalid quantity for item ${item.product}. Must be a positive integer.` });
       }
 
-      subtotal    += product.price * item.quantity;
+      const product = await Product.findById(item.product);
+      if (!product) {
+        return res.status(404).json({ message: `Product not found: ${item.product}` });
+      }
+
+      subtotal    += product.price * qty;
       deliveryFee += Math.max(0, product.deliveryFee || 0);
 
       processedItems.push({
         product: product._id,
-        quantity: item.quantity,
+        quantity: qty,
         price: product.price,
         variant: item.variant || {},
       });
@@ -334,6 +340,15 @@ export const updateOrderStatus = async (req, res) => {
     if (order.status === "partial" && status !== "cancelled")
       return res.status(400).json({ message: "Partial delivery in progress — use the delivery code to confirm remaining items" });
 
+    // Fix #2: delivery orders must be completed via the buyer's delivery code,
+    // not by the seller directly marking them as completed
+    if (status === "completed" && order.deliveryMethod === "delivery" && !order.deliveryCodeUsed)
+      return res.status(400).json({ message: "Delivery orders must be completed by the buyer confirming the delivery code — use the 'Confirm delivery' flow instead." });
+
+    // Fix #11: prevent double-crediting if escrow was already released
+    if (status === "completed" && order.escrowReleasedAt)
+      return res.status(400).json({ message: "Escrow has already been released for this order." });
+
     // Enforce forward-only transitions (cancellation is always allowed)
     const FLOW = { pending: 0, confirmed: 1, shipped: 2, completed: 3 };
     if (status !== "cancelled" && FLOW[status] <= FLOW[order.status])
@@ -427,7 +442,7 @@ export const updateOrderStatus = async (req, res) => {
     });
   } catch (err) {
     console.error("updateOrderStatus error:", err);
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ message: "Server error" }); // fix #16: don't leak err.message
   }
 };
 
@@ -441,8 +456,16 @@ export const updateOrder = async (req, res) => {
     const order = await Order.findById(req.params.id);
     if (!order) return res.status(404).json({ message: "Order not found" });
 
+    // Fix #1: verify ownership — only the order's seller or an admin may update
+    const isAdmin = req.user.roles?.includes("admin");
+    const sellerId = order.seller?.toString();
+    if (!isAdmin && sellerId && sellerId !== req.user._id.toString()) {
+      return res.status(403).json({ message: "Not authorized to update this order" });
+    }
+
     if (status) order.status = status;
-    if (paymentStatus) order.paymentStatus = paymentStatus;
+    // Fix #1: only admins may change paymentStatus — sellers cannot
+    if (paymentStatus && isAdmin) order.paymentStatus = paymentStatus;
     if (trackingNumber) order.trackingNumber = trackingNumber;
 
     await order.save();
@@ -459,10 +482,11 @@ export const updateOrder = async (req, res) => {
 export const hasPurchased = async (req, res) => {
   try {
     const { productId } = req.params;
+    // Fix #18: include "partial" — buyer has received some items and can review them
     const order = await Order.findOne({
       buyer: req.user._id,
       "items.product": productId,
-      status: { $in: ["confirmed", "shipped", "completed"] },
+      status: { $in: ["confirmed", "shipped", "partial", "completed"] },
     }).select("_id");
     res.json({ purchased: !!order });
   } catch (err) {
@@ -516,18 +540,22 @@ export const raiseDispute = async (req, res) => {
 // ===============================
 export const cancelOrder = async (req, res) => {
   try {
-    const { id } = req.params; // keep using :id if your route uses /orders/:id
+    const { id } = req.params;
     const order = await Order.findById(id);
 
     if (!order) {
       return res.status(404).json({ message: "Order not found" });
     }
 
+    // Fix #3: only the buyer or an admin may cancel an order
+    const isAdmin = req.user.roles?.includes("admin");
+    if (!isAdmin && order.buyer?.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ message: "Not authorized to cancel this order" });
+    }
+
     // Prevent direct deletion of paid orders
     if (order.paymentStatus === "paid") {
-      return res
-        .status(400)
-        .json({ message: "Paid orders require refund process" });
+      return res.status(400).json({ message: "Paid orders require refund process" });
     }
 
     order.status = "cancelled";
@@ -547,14 +575,24 @@ export const cancelOrder = async (req, res) => {
 // 🧾 Generate Invoice PDF
 export const downloadInvoice = async (req, res) => {
   try {
-    const { orderId } = req.params;
-    const order = await Order.findById(orderId).populate("user");
+    // Fix #8a: route uses /:id not /:orderId — was always undefined causing 404
+    const { id } = req.params;
+    const order = await Order.findById(id).populate("buyer", "name email");
 
     if (!order) return res.status(404).json({ message: "Order not found" });
+
+    // Fix #8b: verify the requester is the buyer, the seller, or an admin
+    const isAdmin  = req.user.roles?.includes("admin");
+    const isBuyer  = order.buyer?._id?.toString() === req.user._id.toString();
+    const isSeller = order.seller?.toString()      === req.user._id.toString();
+    if (!isAdmin && !isBuyer && !isSeller) {
+      return res.status(403).json({ message: "Not authorized to download this invoice" });
+    }
 
     const pdfPath = await generateInvoicePDF(order);
     res.download(pdfPath);
   } catch (error) {
+    console.error("downloadInvoice error:", error);
     res.status(500).json({ message: "Failed to generate invoice" });
   }
 };
@@ -673,14 +711,18 @@ export const confirmDelivery = async (req, res) => {
     if (order.deliveryCode !== deliveryCode.trim().toUpperCase())
       return res.status(400).json({ message: "Invalid delivery code" });
 
-    // Verify seller owns this order
+    // Fix #15: always verify seller ownership — previously skipped when order.seller was null
     const userId = req.user._id.toString();
-    const sellerUserId = order.seller?.toString();
-    if (sellerUserId && sellerUserId !== userId) {
-      const products = await Product.find({ seller: req.user._id }).select("_id").lean();
-      const productIds = products.map((p) => p._id.toString());
-      const ownsItem = order.items.some((i) => productIds.includes((i.product?._id || i.product).toString()));
-      if (!ownsItem) return res.status(403).json({ message: "Not authorized" });
+    const isAdmin = req.user.roles?.includes("admin");
+    if (!isAdmin) {
+      const sellerUserId = order.seller?.toString();
+      // Check either direct seller match or product ownership
+      if (!sellerUserId || sellerUserId !== userId) {
+        const products = await Product.find({ seller: req.user._id }).select("_id").lean();
+        const productIds = products.map((p) => p._id.toString());
+        const ownsItem = order.items.some((i) => productIds.includes((i.product?._id || i.product).toString()));
+        if (!ownsItem) return res.status(403).json({ message: "Not authorized" });
+      }
     }
 
     // Look up seller profile

@@ -21,6 +21,7 @@ import {
 } from "../controllers/orderController.js";
 import { uploadPaymentProof } from "../middleware/upload.js";
 import { protect, requireRole } from "../middleware/authMiddleware.js";
+import { deliveryCodeLimiter } from "../middleware/rateLimits.js";
 
 const router = express.Router();
 
@@ -84,12 +85,12 @@ router.get(
   getMyOrders
 );
 
-// ✅ Confirm delivery (release escrow)
+// ✅ Confirm delivery (release escrow) — rate-limited to prevent code brute-forcing
 router.put(
   "/:orderId/confirm-delivery",
   protect,
   requireRole("user", "seller", "admin"),
-  verifyToken,
+  deliveryCodeLimiter,
   confirmDelivery
 );
 

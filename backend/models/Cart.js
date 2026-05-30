@@ -16,6 +16,8 @@ const cartItemSchema = new mongoose.Schema({
     type: Number,
     required: true,
   },
+  negotiatedPrice: { type: Number },
+  negotiationId: { type: mongoose.Schema.Types.ObjectId },
 });
 
 const cartSchema = new mongoose.Schema(
@@ -40,10 +42,9 @@ const cartSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// Auto update total before saving
 cartSchema.pre("save", function (next) {
   this.total = this.items.reduce(
-    (sum, item) => sum + item.price * item.quantity,
+    (sum, item) => sum + (item.negotiatedPrice ?? item.price) * item.quantity,
     0
   );
   next();

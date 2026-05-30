@@ -6,13 +6,16 @@ import App from "./App";
 import { UserProvider } from "./context/UserContext";
 import { ToastProvider } from "./context/ToastContext";
 import { WishlistProvider } from "./context/WishlistContext";
+import { CartProvider } from "./context/CartContext";
 
 createRoot(document.getElementById("root")).render(
   <BrowserRouter>
     <UserProvider>
       <ToastProvider>
         <WishlistProvider>
-          <App />
+          <CartProvider>
+            <App />
+          </CartProvider>
         </WishlistProvider>
       </ToastProvider>
     </UserProvider>

@@ -19,8 +19,12 @@ const SWR_API_PATTERNS = [
 
 // ── Install: pre-cache the app shell ─────────────────────────────────────────
 self.addEventListener("install", (event) => {
+  // Use allSettled so a single failed URL (slow network, missing asset) does
+  // NOT abort the install — push subscriptions must survive bad connections.
   event.waitUntil(
-    caches.open(SHELL_CACHE).then((cache) => cache.addAll(SHELL_URLS))
+    caches.open(SHELL_CACHE).then((cache) =>
+      Promise.allSettled(SHELL_URLS.map((url) => cache.add(url)))
+    )
   );
   self.skipWaiting();
 });
@@ -120,15 +124,21 @@ self.addEventListener("push", (event) => {
   let data;
   try { data = event.data.json(); } catch { data = { title: "UMP", body: event.data.text() }; }
 
-  const title   = data.title || "UMP";
+  const title = data.title || "UMP";
+  const tag   = data.tag   || "ump-notification";
+
   const options = {
-    body:     data.body  || "",
-    icon:     data.icon  || "/images/ump-logo.png",
-    badge:    data.badge || "/images/ump-logo.png",
-    tag:      data.tag   || "ump-broadcast",
-    renotify: true,
-    data:     { url: data.url || "/", broadcastId: data.tag || null },
-    actions:  data.url ? [{ action: "open", title: "View" }] : [],
+    body:    data.body || "",
+    icon:    data.icon || "/images/ump-logo.png",
+    badge:   "/images/ump-logo.png",
+    tag,
+    // Only renotify when the tag changes (avoids spamming duplicate notifications)
+    renotify: !!data.tag,
+    // Vibration pattern — required for phones to buzz (ignored on desktop)
+    vibrate: [200, 100, 200],
+    data: { url: data.url || "/", broadcastId: data.tag || null },
+    // NOTE: 'actions' removed — not supported on iOS and breaks notifications on some
+    // Android variants (the browser silently discards the entire notification)
   };
 
   event.waitUntil(self.registration.showNotification(title, options));

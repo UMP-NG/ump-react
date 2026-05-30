@@ -2,60 +2,37 @@ import Payout from "../models/Payout.js";
 import Order from "../models/Order.js";
 import User from "../models/User.js";
 import Seller from "../models/Seller.js";
+import Config from "../models/Config.js";
 import paystack from "../utils/paystack.js";
 
-// ✅ Get payout summary/details
+// Fix #10a: read bank details from Seller model where they are actually stored
 export const getPayoutDetails = async (req, res) => {
   try {
-    const user = await User.findById(req.user._id);
-
-    if (!user)
-      return res
-        .status(404)
-        .json({ success: false, message: "User not found" });
-
-    const payout = {
-      available: user.payoutAvailable || 0,
-      nextPayout: user.nextPayout || "Not scheduled",
-      bankName: user.bankName || "",
-      accountNumber: user.accountNumber || "",
-    };
-
-    res.json({ success: true, payout });
+    const seller = await Seller.findOne({ user: req.user._id }).select("pendingPayout bankDetails").lean();
+    const accountDetails = seller?.bankDetails || {};
+    res.json({
+      success: true,
+      accountDetails: {
+        bankName:      accountDetails.bankName      || "",
+        bankCode:      accountDetails.bankCode      || "",
+        accountName:   accountDetails.accountName   || "",
+        accountNumber: accountDetails.accountNumber || "",
+      },
+    });
   } catch (err) {
     console.error("Payout fetch error:", err);
     res.status(500).json({ success: false, message: "Server error" });
   }
 };
 
-// ✅ Update payout details
+// Fix #10b: updatePayoutDetails was writing to non-existent User fields.
+// The canonical bank-details save is in paymentController.saveBankDetails (registers Paystack recipient).
+// This endpoint now redirects callers to use that instead.
 export const updatePayoutDetails = async (req, res) => {
-  try {
-    const { bankName, accountNumber } = req.body;
-
-    if (!bankName || !accountNumber)
-      return res
-        .status(400)
-        .json({ success: false, message: "All fields required" });
-
-    const user = await User.findByIdAndUpdate(
-      req.user._id,
-      { bankName, accountNumber },
-      { new: true }
-    );
-
-    res.json({
-      success: true,
-      message: "Payout details updated",
-      payout: {
-        bankName: user.bankName,
-        accountNumber: user.accountNumber,
-      },
-    });
-  } catch (err) {
-    console.error("Update payout error:", err);
-    res.status(500).json({ success: false, message: "Server error" });
-  }
+  res.status(400).json({
+    success: false,
+    message: "Use PUT /api/payments/bank-details to update bank details — it registers the account with Paystack for instant transfers.",
+  });
 };
 
 export const requestPayout = async (req, res) => {
@@ -68,6 +45,12 @@ export const requestPayout = async (req, res) => {
     const { amount, method, accountDetails } = req.body;
     if (!amount || amount <= 0)
       return res.status(400).json({ message: "Invalid amount" });
+
+    // Fix #17: enforce the platform minimum payout from Config (default ₦2000)
+    const config = await Config.findOne().select("fees").lean();
+    const minPayout = config?.fees?.minPayout ?? 2000;
+    if (amount < minPayout)
+      return res.status(400).json({ message: `Minimum payout is ₦${minPayout.toLocaleString()}` });
 
     const payoutData = {
       amount,
@@ -129,7 +112,7 @@ export const requestPayout = async (req, res) => {
     res.json({ success: true, message: statusMsg, payout });
   } catch (err) {
     console.error("requestPayout error:", err);
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ message: "Payout request failed. Please try again." });
   }
 };
 
@@ -181,67 +164,58 @@ export const getPayoutsForSeller = async (req, res) => {
   }
 };
 
+// Fix #14: use seller.pendingPayout (the canonical live balance maintained by
+// updateOrderStatus + confirmDelivery) instead of re-aggregating Order/Payout docs,
+// which could diverge from reality after cancellations or refunds.
 export const getPayoutSummary = async (req, res) => {
   try {
     const userId = req.user?._id;
-    const role = req.user.roles?.[0];
+    const roles  = req.user.roles || [];
 
-    const roleKey =
-      role === "walker"
-        ? "walker"
-        : role === "service_provider"
-        ? "provider"
-        : "seller";
+    // For sellers: read directly from the Seller document
+    if (roles.includes("seller")) {
+      const seller    = await Seller.findOne({ user: userId }).select("pendingPayout payoutHistory").lean();
+      const lastEntry = seller?.payoutHistory?.slice(-1)?.[0];
+      return res.json({
+        success: true,
+        summary: {
+          available:  seller?.pendingPayout  || 0,
+          nextPayout: lastEntry?.date        || null,
+          role:       "seller",
+        },
+      });
+    }
+
+    // For other roles: fall back to aggregation with a timeout guard
+    const role    = roles.includes("walker") ? "walker" : roles.includes("service_provider") ? "provider" : "seller";
+    const roleKey = role;
 
     const computeSummary = async () => {
       const paidAgg = await Order.aggregate([
         { $match: { [roleKey]: userId, paymentStatus: "paid" } },
-        { $group: { _id: null, totalPaid: { $sum: "$totalAmount" } } },
+        { $group: { _id: null, total: { $sum: "$totalAmount" } } },
       ]);
-      const totalPaid = paidAgg[0]?.totalPaid || 0;
-
       const paidOutAgg = await Payout.aggregate([
         { $match: { [roleKey]: userId, status: "completed" } },
-        { $group: { _id: null, totalPaidOut: { $sum: "$amount" } } },
+        { $group: { _id: null, total: { $sum: "$amount" } } },
       ]);
-      const totalPaidOut = paidOutAgg[0]?.totalPaidOut || 0;
-
-      const availableForPayout = Math.max(0, totalPaid - totalPaidOut);
-      const lastPayout = await Payout.findOne({ [roleKey]: userId })
-        .sort({ createdAt: -1 })
-        .lean();
-
+      const lastPayout = await Payout.findOne({ [roleKey]: userId }).sort({ createdAt: -1 }).lean();
       return {
-        available: availableForPayout,
+        available:  Math.max(0, (paidAgg[0]?.total || 0) - (paidOutAgg[0]?.total || 0)),
         nextPayout: lastPayout?.createdAt || null,
         role,
       };
     };
 
-    const timeoutMs = 8000;
     const result = await Promise.race([
       computeSummary(),
-      new Promise((resolve) =>
-        setTimeout(
-          () =>
-            resolve({
-              available: 0,
-              nextPayout: null,
-              _timedOut: true,
-            }),
-          timeoutMs
-        )
-      ),
+      new Promise(resolve => setTimeout(() => resolve({ available: 0, nextPayout: null, _timedOut: true }), 8000)),
     ]);
 
     if (result._timedOut) {
       console.warn(`[payoutController] getPayoutSummary timed out for ${role}`);
-      return res.json({
-        success: true,
-        summary: { available: 0, nextPayout: null, note: "timed out" },
-      });
+      return res.json({ success: true, summary: { available: 0, nextPayout: null } });
     }
-
     return res.json({ success: true, summary: result });
   } catch (err) {
     console.error("getPayoutSummary error:", err);

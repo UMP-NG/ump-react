@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import BottomNav from "../components/BottomNav";
@@ -6,6 +6,7 @@ import Ph from "../components/Ph";
 import Skel from "../components/Skel";
 import { apiFetch } from "../utils/api";
 import { useUser } from "../context/UserContext";
+import { socket } from "../utils/socket";
 
 // Issue type → supportRole mapping
 const ISSUE_TYPES = [
@@ -362,6 +363,128 @@ export default function Messages() {
   );
 }
 
+// ─── Negotiation card rendered inside a chat bubble ───────────────────────────
+function NegotiationCard({ msg, iAmSeller, onRespond, onApply }) {
+  const meta = msg.meta || {};
+  const [acting, setActing] = useState(false);
+  const [applying, setApplying] = useState(false);
+  const status = msg._negotiationStatus || meta.status || "pending";
+
+  const fmt = (n) => "₦" + Number(n).toLocaleString("en-NG");
+
+  const statusColor = status === "accepted" ? "#16a34a" : status === "rejected" ? "#ef4444" : "#f59e0b";
+  const statusLabel = status === "accepted" ? "Accepted" : status === "rejected" ? "Rejected" : "Pending";
+  const statusIcon  = status === "accepted" ? "fa-check-circle" : status === "rejected" ? "fa-times-circle" : "fa-clock";
+
+  async function respond(action) {
+    if (acting) return;
+    setActing(true);
+    try {
+      await onRespond(msg.negotiationId, action);
+    } finally {
+      setActing(false);
+    }
+  }
+
+  async function applyPrice() {
+    if (applying) return;
+    setApplying(true);
+    try {
+      await onApply(msg.negotiationId);
+    } finally {
+      setApplying(false);
+    }
+  }
+
+  return (
+    <div style={{
+      background: "var(--white)", border: "1px solid var(--line)", borderRadius: 14,
+      overflow: "hidden", minWidth: 240, maxWidth: 320,
+    }}>
+      {/* Item preview */}
+      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 12px 10px" }}>
+        {meta.itemImage ? (
+          <img src={meta.itemImage} alt={meta.itemName} style={{ width: 44, height: 44, borderRadius: 8, objectFit: "cover", flexShrink: 0 }} />
+        ) : (
+          <div style={{ width: 44, height: 44, borderRadius: 8, background: "var(--surface)", flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <i className="fas fa-box" style={{ color: "var(--ink-4)" }} />
+          </div>
+        )}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontWeight: 700, fontSize: "1.25rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "var(--ink-1)" }}>
+            {meta.itemName}
+          </div>
+          <div style={{ fontSize: "1.1rem", color: "var(--ink-3)" }}>
+            {meta.itemType === "Service" ? "Service" : "Product"}
+          </div>
+        </div>
+      </div>
+
+      {/* Price comparison */}
+      <div style={{ padding: "0 12px 10px", display: "flex", gap: 12, alignItems: "center" }}>
+        <div>
+          <div style={{ fontSize: "1.05rem", color: "var(--ink-4)", marginBottom: 1 }}>Listed price</div>
+          <div style={{ fontSize: "1.3rem", fontWeight: 600, color: "var(--ink-2)", textDecoration: "line-through" }}>{fmt(meta.originalPrice)}</div>
+        </div>
+        <i className="fas fa-arrow-right" style={{ color: "var(--ink-4)", fontSize: "1rem" }} />
+        <div>
+          <div style={{ fontSize: "1.05rem", color: "var(--ink-4)", marginBottom: 1 }}>Offer</div>
+          <div style={{ fontSize: "1.5rem", fontWeight: 800, color: "var(--accent)" }}>{fmt(meta.proposedPrice)}</div>
+        </div>
+      </div>
+
+      {/* Status badge */}
+      <div style={{ padding: "6px 12px", background: "var(--surface)", display: "flex", alignItems: "center", gap: 6 }}>
+        <i className={`fas ${statusIcon}`} style={{ color: statusColor, fontSize: "1rem" }} />
+        <span style={{ fontSize: "1.1rem", fontWeight: 700, color: statusColor }}>{statusLabel}</span>
+      </div>
+
+      {/* Seller actions — only on the initiating (non-response) card, when pending */}
+      {iAmSeller && !meta.isResponse && status === "pending" && (
+        <div style={{ display: "flex", gap: 0, borderTop: "1px solid var(--line)" }}>
+          <button
+            onClick={() => respond("reject")}
+            disabled={acting}
+            style={{ flex: 1, padding: "10px 0", background: "none", border: "none", borderRight: "1px solid var(--line)", cursor: acting ? "default" : "pointer", fontSize: "1.25rem", fontWeight: 700, color: "#ef4444", fontFamily: "var(--font-sans)" }}
+          >
+            {acting ? <i className="fas fa-spinner fa-spin" /> : "Reject"}
+          </button>
+          <button
+            onClick={() => respond("accept")}
+            disabled={acting}
+            style={{ flex: 1, padding: "10px 0", background: "none", border: "none", cursor: acting ? "default" : "pointer", fontSize: "1.25rem", fontWeight: 700, color: "#16a34a", fontFamily: "var(--font-sans)" }}
+          >
+            {acting ? <i className="fas fa-spinner fa-spin" /> : "Accept"}
+          </button>
+        </div>
+      )}
+
+      {/* Apply-to-cart button — seller sees this on the response card after accepting */}
+      {iAmSeller && meta.isResponse && meta.canApply && meta.itemType === "Product" && (
+        <div style={{ padding: "10px 12px", borderTop: "1px solid var(--line)" }}>
+          <button
+            onClick={applyPrice}
+            disabled={applying || meta._applied}
+            style={{
+              width: "100%", padding: "9px 0", borderRadius: 8,
+              background: applying || meta._applied ? "var(--surface)" : "var(--accent)",
+              color: applying || meta._applied ? "var(--ink-3)" : "#fff",
+              border: "none", cursor: applying || meta._applied ? "default" : "pointer",
+              fontSize: "1.25rem", fontWeight: 700, fontFamily: "var(--font-sans)",
+            }}
+          >
+            {applying
+              ? <><i className="fas fa-spinner fa-spin" /> Applying…</>
+              : meta._applied
+              ? <><i className="fas fa-check" /> Price applied to cart</>
+              : <><i className="fas fa-cart-plus" /> Apply price to buyer's cart</>}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function formatTime(iso) {
   const d = new Date(iso);
   const now = new Date();
@@ -401,6 +524,12 @@ function MsgThread({ convo, onBack }) {
   const otherIsAdmin = other.roles?.includes("admin") ?? convo?.roles?.includes("admin") ?? false;
   const iAmAdmin     = user?.roles?.includes("admin") ?? false;
 
+  const mapMessage = useCallback((m) => {
+    const senderId = typeof m.sender === "object" ? m.sender?._id?.toString() : m.sender?.toString();
+    const isAdminMsg = m.isAdminMessage || m.sender?.roles?.includes("admin");
+    return { ...m, isOwn: senderId !== receiverId?.toString(), isAdminMessage: !!isAdminMsg };
+  }, [receiverId]);
+
   useEffect(() => {
     if (!receiverId) { setLoading(false); return; }
     setLoading(true);
@@ -409,20 +538,74 @@ function MsgThread({ convo, onBack }) {
       .then((d) => {
         const raw    = Array.isArray(d) ? d : (d.messages || []);
         const sorted = [...raw].reverse();
-        setMessages(sorted.map((m) => {
-          const senderId = typeof m.sender === "object" ? m.sender?._id?.toString() : m.sender?.toString();
-          const isAdminMsg = m.isAdminMessage || m.sender?.roles?.includes("admin");
-          return { ...m, isOwn: senderId !== receiverId.toString(), isAdminMessage: !!isAdminMsg };
-        }));
+        setMessages(sorted.map(mapMessage));
         apiFetch(`/api/messages/conversation/${receiverId}/read`, { method: "PUT" }).catch(() => {});
       })
       .catch((err) => { if (err?.status === 401) setAuthError(true); })
       .finally(() => setLoading(false));
-  }, [receiverId]);
+  }, [receiverId, mapMessage]);
+
+  // Listen for real-time negotiation status changes
+  useEffect(() => {
+    function onNegotiationUpdate({ negotiationId, status }) {
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.negotiationId?.toString() === negotiationId?.toString()
+            ? { ...m, _negotiationStatus: status }
+            : m
+        )
+      );
+    }
+    socket.on("negotiation_update", onNegotiationUpdate);
+    return () => socket.off("negotiation_update", onNegotiationUpdate);
+  }, []);
+
+  // Listen for incoming real-time messages (negotiation responses, etc.)
+  useEffect(() => {
+    function onNewMessage(msg) {
+      const senderId = typeof msg.sender === "object" ? msg.sender?._id?.toString() : msg.sender?.toString();
+      const isInThisThread =
+        senderId === receiverId?.toString() ||
+        (typeof msg.receiver === "object" ? msg.receiver?._id?.toString() : msg.receiver?.toString()) === receiverId?.toString();
+      if (!isInThisThread) return;
+      setMessages((prev) => {
+        const exists = prev.some((m) => m._id === msg._id);
+        if (exists) return prev;
+        return [...prev, mapMessage(msg)];
+      });
+    }
+    socket.on("new_message", onNewMessage);
+    return () => socket.off("new_message", onNewMessage);
+  }, [receiverId, mapMessage]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  async function handleNegotiationRespond(negotiationId, action) {
+    await apiFetch(`/api/negotiations/${negotiationId}/respond`, {
+      method: "PUT",
+      body: { action },
+    });
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.negotiationId?.toString() === negotiationId?.toString()
+          ? { ...m, _negotiationStatus: action === "accept" ? "accepted" : "rejected" }
+          : m
+      )
+    );
+  }
+
+  async function handleApplyPrice(negotiationId) {
+    await apiFetch(`/api/negotiations/${negotiationId}/apply`, { method: "PUT" });
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.negotiationId?.toString() === negotiationId?.toString()
+          ? { ...m, meta: { ...(m.meta || {}), _applied: true } }
+          : m
+      )
+    );
+  }
 
   async function send(e) {
     e.preventDefault();
@@ -529,18 +712,29 @@ function MsgThread({ convo, onBack }) {
         ) : null}
 
         {messages.map((msg) => {
-          const isMe       = msg.isOwn;
-          const isAdminMsg = msg.isAdminMessage;
+          const isMe        = msg.isOwn;
+          const isAdminMsg  = msg.isAdminMessage;
+          const isNegotiation = msg.type === "negotiation" && msg.meta;
+
+          // For negotiation cards, the "seller" is the person receiving the initial offer
+          // iAmSeller = I am not the one who sent this particular message (the one offering)
+          // More precisely: on the initiating card (isResponse=false), the seller is msg.receiver
+          // We check: the current user is the seller (receiver of the initial offer) = !isMe when !meta.isResponse
+          const iAmSellerOnThisCard = isNegotiation && (
+            msg.meta.isResponse ? isMe : !isMe
+          );
 
           // Bubble styles
           let bubbleBg, bubbleColor, borderRadius;
-          if (isMe && isAdminMsg) {
-            // Admin's own sent messages — deep navy with gold accent
+          if (isNegotiation) {
+            bubbleBg    = "transparent";
+            bubbleColor = "var(--ink-1)";
+            borderRadius = 0;
+          } else if (isMe && isAdminMsg) {
             bubbleBg    = "#1e293b";
             bubbleColor = "#f1f5f9";
             borderRadius = "18px 18px 4px 18px";
           } else if (!isMe && isAdminMsg) {
-            // User receiving admin message — dark slate
             bubbleBg    = "#1e293b";
             bubbleColor = "#f1f5f9";
             borderRadius = "18px 18px 18px 4px";
@@ -565,26 +759,44 @@ function MsgThread({ convo, onBack }) {
                 </div>
               )}
 
+              {/* Negotiation label */}
+              {isNegotiation && (
+                <div style={{ display: "flex", alignItems: "center", gap: 5, paddingLeft: isMe ? 0 : 4, paddingRight: isMe ? 4 : 0, marginBottom: 2 }}>
+                  <i className="fas fa-handshake" style={{ fontSize: "1rem", color: "var(--accent)" }} />
+                  <span style={{ fontSize: "1.05rem", fontWeight: 700, color: "var(--ink-2)" }}>
+                    {msg.meta?.isResponse ? "Negotiation response" : "Price negotiation"}
+                  </span>
+                </div>
+              )}
+
               <div style={{
                 background: bubbleBg,
                 color: bubbleColor,
-                padding: "9px 14px",
+                padding: isNegotiation ? 0 : "9px 14px",
                 borderRadius,
                 fontSize: "1.4rem",
                 lineHeight: 1.45,
-                maxWidth: "72%",
-                boxShadow: isAdminMsg ? "0 2px 8px rgba(30,41,59,.2)" : "0 1px 4px rgba(0,0,0,.07)",
+                maxWidth: isNegotiation ? 340 : "72%",
+                boxShadow: isAdminMsg ? "0 2px 8px rgba(30,41,59,.2)" : isNegotiation ? "none" : "0 1px 4px rgba(0,0,0,.07)",
                 wordBreak: "break-word",
                 border: isAdminMsg ? "1px solid rgba(245,158,11,.15)" : "none",
               }}>
-                {msg.content || msg.text}
+                {isNegotiation ? (
+                  <NegotiationCard
+                    msg={msg}
+                    iAmSeller={iAmSellerOnThisCard}
+                    onRespond={handleNegotiationRespond}
+                    onApply={handleApplyPrice}
+                  />
+                ) : (
+                  msg.content || msg.text
+                )}
               </div>
 
               <div style={{ display: "flex", alignItems: "center", gap: 5, paddingLeft: isMe ? 0 : 4, paddingRight: isMe ? 4 : 0 }}>
                 <span style={{ fontSize: "1rem", color: "var(--ink-3)" }}>
                   {msg.createdAt ? new Date(msg.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : ""}
                 </span>
-                {/* Admin sent indicator on own messages */}
                 {isMe && isAdminMsg && (
                   <span style={{ fontSize: "1rem", color: "#f59e0b", display: "flex", alignItems: "center", gap: 3, fontWeight: 600 }}>
                     <i className="fa-solid fa-shield-halved" style={{ fontSize: "0.8rem" }}></i> Admin

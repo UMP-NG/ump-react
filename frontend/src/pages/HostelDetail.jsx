@@ -6,7 +6,7 @@ import Ph from "../components/Ph";
 import { naira } from "../components/ProductCard";
 import { apiFetch } from "../utils/api";
 import { useToast } from "../context/ToastContext";
-import { cloudImg } from "../utils/cloudinary";
+import { cloudImg, cloudVideo } from "../utils/cloudinary";
 import Skel from "../components/Skel";
 import ReportModal from "../components/ReportModal";
 
@@ -125,7 +125,7 @@ export default function HostelDetail() {
         <div style={{ margin: "12px 16px 0" }}>
           <div style={{ fontSize: "1.2rem", fontWeight: 700, color: "var(--ink-3)", textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 6 }}><i className="fas fa-video" style={{ marginRight: 6, color: "var(--accent)" }} />Video tour</div>
           <video controls playsInline preload="metadata" style={{ width: "100%", borderRadius: "var(--r-xl)", maxHeight: 220, background: "#000" }}>
-              <source src={listing.videos[0].url} type="video/mp4" />
+              <source src={cloudVideo(listing.videos[0].url)} />
             </video>
         </div>
       )}

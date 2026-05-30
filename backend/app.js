@@ -66,6 +66,7 @@ import wishlistRoutes from "./routes/wishlistRoutes.js";
 import serviceAnalytics from "./routes/serviceAnalyticsRoutes.js";
 import reportRoutes from "./routes/reportRoutes.js";
 import pushRoutes from "./routes/pushRoutes.js";
+import negotiationRoutes from "./routes/negotiationRoutes.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 import uploadRoute from "./routes/uploadRoute.js";
 
@@ -305,6 +306,7 @@ app.use("/api/wishlist", wishlistRoutes);
 app.use("/api/reports", reportRoutes);
 app.use("/api/push",   pushRoutes);
 app.use("/api/upload", uploadRoute);
+app.use("/api/negotiations", negotiationRoutes);
 
 // 🧯 Centralized error handler
 app.use(errorHandler);

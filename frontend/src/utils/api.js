@@ -1,10 +1,12 @@
 // src/utils/api.js
 
+// VITE_API_BASE must be set in your Render / deployment environment variables.
+// The localhost fallback is for local dev only.
+// Production falls back to the same origin (empty string) so relative /api calls
+// hit the same Render service — works when frontend + backend are co-deployed.
 export const API_BASE =
   import.meta.env.VITE_API_BASE ||
-  (window.location.hostname === "localhost"
-    ? "http://localhost:5000"
-    : "https://ump-html-1.onrender.com");
+  (window.location.hostname === "localhost" ? "http://localhost:5000" : "");
 
 // ── JWT helpers ──────────────────────────────────────────────────────────────
 const TOKEN_KEY = "ump_tk";

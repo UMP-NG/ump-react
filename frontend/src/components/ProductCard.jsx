@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Ph from "./Ph";
-import { apiFetch } from "../utils/api";
 import { useToast } from "../context/ToastContext";
 import { useWishlist } from "../context/WishlistContext";
+import { useCart } from "../context/CartContext";
 import QuickViewModal from "./QuickViewModal";
 import { cloudImg } from "../utils/cloudinary";
 
@@ -22,18 +22,25 @@ export default function ProductCard({ product, variant = "always", onAddToCart }
   const navigate = useNavigate();
   const showToast = useToast();
   const { ids: wishlistIds, toggle: toggleWishlist } = useWishlist();
+  const { cartItems, addToCart, updateQty } = useCart();
   const [quickView, setQuickView] = useState(false);
   const [adding, setAdding] = useState(false);
+  const [qtyLoading, setQtyLoading] = useState(false);
   const [wishlistLoading, setWishlistLoading] = useState(false);
   const wishlisted = wishlistIds.has(product?._id?.toString());
   const imgSrc = cloudImg(getImageUrl(product?.images?.[0]), { w: 400 });
+
+  const productId = product?._id?.toString();
+  const cartItem = cartItems.get(productId);
+  const inCart = !!cartItem;
+  const cartQty = cartItem?.quantity || 0;
 
   async function handleAddToCart(e) {
     e.stopPropagation();
     if (adding) return;
     setAdding(true);
     try {
-      await apiFetch("/api/cart/add", { method: "POST", body: { productId: product._id, quantity: 1 } });
+      await addToCart(product._id);
       showToast("Added to cart!", "success");
       onAddToCart?.();
     } catch (err) {
@@ -45,6 +52,19 @@ export default function ProductCard({ product, variant = "always", onAddToCart }
       }
     } finally {
       setAdding(false);
+    }
+  }
+
+  async function handleQtyChange(e, delta) {
+    e.stopPropagation();
+    if (qtyLoading) return;
+    setQtyLoading(true);
+    try {
+      await updateQty(productId, cartQty + delta);
+    } catch {
+      showToast("Couldn't update quantity", "error");
+    } finally {
+      setQtyLoading(false);
     }
   }
 
@@ -105,12 +125,39 @@ export default function ProductCard({ product, variant = "always", onAddToCart }
         </div>
       </div>
       <div className="product-actions">
-        <button className="icon-btn" title="Quick view" onClick={(e) => { e.stopPropagation(); setQuickView(true); }}>
-          <i className="far fa-eye" />
-        </button>
-        <button className="icon-btn primary" onClick={handleAddToCart} disabled={adding || outOfStock} style={outOfStock ? { opacity: 0.5, cursor: "not-allowed" } : undefined}>
-          {adding ? <i className="fas fa-spinner fa-spin" /> : outOfStock ? "Sold out" : <><i className="fas fa-bag-shopping" /> Add</>}
-        </button>
+        {!inCart && (
+          <button className="icon-btn" title="Quick view" onClick={(e) => { e.stopPropagation(); setQuickView(true); }}>
+            <i className="far fa-eye" />
+          </button>
+        )}
+        {inCart ? (
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{ display: "flex", alignItems: "center", gap: 4, marginLeft: "auto" }}
+          >
+            <button
+              className="icon-btn"
+              style={{ width: 30, height: 30, background: "var(--surface)", borderRadius: 8, flexShrink: 0 }}
+              onClick={(e) => handleQtyChange(e, -1)}
+              disabled={qtyLoading}
+            >
+              {qtyLoading ? <i className="fas fa-spinner fa-spin" style={{ fontSize: "0.75rem" }} /> : <i className="fas fa-minus" style={{ fontSize: "0.75rem" }} />}
+            </button>
+            <span style={{ minWidth: 22, textAlign: "center", fontWeight: 700, fontSize: "1.3rem" }}>{cartQty}</span>
+            <button
+              className="icon-btn primary"
+              style={{ width: 30, height: 30, borderRadius: 8, flexShrink: 0 }}
+              onClick={(e) => handleQtyChange(e, 1)}
+              disabled={qtyLoading}
+            >
+              <i className="fas fa-plus" style={{ fontSize: "0.75rem" }} />
+            </button>
+          </div>
+        ) : (
+          <button className="icon-btn primary" onClick={handleAddToCart} disabled={adding || outOfStock} style={outOfStock ? { opacity: 0.5, cursor: "not-allowed" } : undefined}>
+            {adding ? <i className="fas fa-spinner fa-spin" /> : outOfStock ? "Sold out" : <><i className="fas fa-bag-shopping" /> Add</>}
+          </button>
+        )}
       </div>
     </div>
     {quickView && <QuickViewModal product={product} onClose={() => setQuickView(false)} />}

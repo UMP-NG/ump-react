@@ -448,10 +448,9 @@ export const forgotPassword = async (req, res) => {
       // Error logged at mail service level
     }
 
-    res.status(200).json({
-      message: "Password reset link generated",
-      resetUrl,
-    });
+    // Fix #4: never return the reset URL in the API response — only send it via email.
+    // Returning it here would expose the token to any log aggregator or MITM.
+    res.status(200).json({ message: "If that email exists, a password reset link has been sent." });
   } catch (error) {
     res.status(500).json({ message: "Server error" });
   }

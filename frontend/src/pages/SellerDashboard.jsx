@@ -7,6 +7,7 @@ import { useToast } from "../context/ToastContext";
 import FloatingChat from "../components/FloatingChat";
 import Skel from "../components/Skel";
 import ImageCropModal from "../components/ImageCropModal";
+import { cloudVideo } from "../utils/cloudinary";
 
 // ─── Sidebar nav items ────────────────────────────────────────────────────────
 const NAV = [
@@ -668,11 +669,11 @@ function ListingModal({ listing, onClose, onSave, showToast }) {
           <div style={{ marginBottom: 4 }}>
             <label style={lSty}>Video Tour <span style={{ fontWeight: 400, color: "var(--ink-4)" }}>(optional)</span></label>
             {!videoPreview && listing?.videos?.[0]?.url && (
-              <video src={listing.videos[0].url} controls style={{ width: "100%", borderRadius: 8, maxHeight: 160, marginBottom: 8 }} />
+              <video src={cloudVideo(listing.videos[0].url)} controls playsInline preload="metadata" style={{ width: "100%", borderRadius: 8, maxHeight: 160, marginBottom: 8 }} />
             )}
             {videoPreview ? (
               <div style={{ position: "relative" }}>
-                <video src={videoPreview} controls style={{ width: "100%", borderRadius: 8, maxHeight: 160 }} />
+                <video src={videoPreview} controls playsInline preload="metadata" style={{ width: "100%", borderRadius: 8, maxHeight: 160 }} />
                 <button onClick={() => { setVideoFile(null); setVideoPreview(null); }} style={{ position: "absolute", top: 8, right: 8, background: "#dc2626", color: "#fff", border: "none", borderRadius: "50%", width: 26, height: 26, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1rem" }}>
                   <i className="fas fa-xmark" />
                 </button>

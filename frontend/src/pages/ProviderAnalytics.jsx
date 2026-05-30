@@ -7,6 +7,7 @@ import { useToast } from "../context/ToastContext";
 import FloatingChat from "../components/FloatingChat";
 import Skel from "../components/Skel";
 import ImageCropModal from "../components/ImageCropModal";
+import { cloudVideo } from "../utils/cloudinary";
 
 const SERVICE_CATS = ["Design", "Writing", "Tech / Coding", "Tutoring", "Photography", "Fitness", "Music", "Other"];
 const PACKAGES     = ["Basic", "Standard", "Premium"];
@@ -167,7 +168,13 @@ function ServiceModal({ service, onClose, onSave, showToast }) {
   }
 
   function handleCropConfirm(blob) {
-    const croppedFile = new File([blob], "service-img.jpg", { type: "image/jpeg" });
+    // File constructor not available in iOS Safari < 13.4 — fall back to the raw Blob
+    let croppedFile;
+    try {
+      croppedFile = new File([blob], "service-img.jpg", { type: "image/jpeg" });
+    } catch {
+      croppedFile = blob; // Blob is accepted by FormData just like File
+    }
     setImagePreviews((p) => [...p, { url: URL.createObjectURL(croppedFile), file: croppedFile, publicId: "" }]);
     setCropSrc(null);
     // Process next in queue
@@ -227,15 +234,19 @@ function ServiceModal({ service, onClose, onSave, showToast }) {
         ? imagePreviews
         : [imagePreviews[mainImageIdx], ...imagePreviews.filter((_, i) => i !== mainImageIdx)];
 
-      const uploadedImages = await Promise.all(
+      const imageResults = await Promise.allSettled(
         orderedPreviews.map(async (p) => {
-          if (p.file) {
-            const up = await uploadFile(p.file);
-            return up;
-          }
+          if (p.file) return await uploadFile(p.file);
           return { url: p.url, publicId: p.publicId || "" };
         })
       );
+      const failedUploads = imageResults.filter(r => r.status === "rejected");
+      if (failedUploads.length) {
+        showToast(`${failedUploads.length} image(s) failed to upload. Check your connection and try again.`, "error");
+        setSaving(false);
+        return;
+      }
+      const uploadedImages = imageResults.map(r => r.value);
 
       // Upload video if new
       let videoData = service?.video ? { url: service.video.url, publicId: service.video.publicId } : undefined;
@@ -355,7 +366,7 @@ function ServiceModal({ service, onClose, onSave, showToast }) {
           {videoPreview
             ? <div style={{ position: "relative", borderRadius: "var(--r-md)", overflow: "hidden", background: "#000" }}>
                 <video
-                  src={videoPreview}
+                  src={cloudVideo(videoPreview)}
                   controls
                   playsInline
                   preload="metadata"

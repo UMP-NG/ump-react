@@ -106,7 +106,10 @@ export const createService = async (req, res) => {
       images = req.files.images.slice(0, 5).map((f) => ({ url: f.path, publicId: f.filename }));
     } else if (req.body.images) {
       const imgs = Array.isArray(req.body.images) ? req.body.images : [req.body.images];
-      images = imgs.slice(0, 5).map((url) => ({ url, publicId: "" }));
+      // Accept both plain URL strings and {url, publicId} objects (frontend pre-uploads then sends objects)
+      images = imgs.slice(0, 5).map((img) =>
+        typeof img === "string" ? { url: img, publicId: "" } : { url: img.url, publicId: img.publicId || "" }
+      );
     }
 
     // Video — single file

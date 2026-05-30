@@ -23,6 +23,9 @@ const uploadToCloudinary = (buffer, filename, folder, isVideo = false) => {
         resource_type: isVideo ? "video" : "image",
         public_id: filename,
         timeout: 60000,
+        // Convert HEIC/HEIF (iPhone camera format) to JPEG automatically
+        format: isVideo ? undefined : "jpg",
+        transformation: isVideo ? undefined : [{ quality: "auto", fetch_format: "auto" }],
       },
       (error, result) => {
         if (error) {
@@ -46,6 +49,9 @@ const ALLOWED_IMAGE_MIMES = new Set([
   "image/png",
   "image/webp",
   "image/gif",
+  // iOS camera uploads HEIC/HEIF on older devices before browser conversion
+  "image/heic",
+  "image/heif",
 ]);
 
 // Accepts both images and videos — used for listings/services that allow both
@@ -154,8 +160,8 @@ export const uploadSellerMedia = (req, res, cb) => {
 
 export const uploadServiceImages = (req, res, cb) => {
   const multerUpload = upload.fields([
-    { name: "images", maxCount: 4 },
-    { name: "image", maxCount: 1 },
+    { name: "images", maxCount: 5 },
+    { name: "image",  maxCount: 1 },
   ]);
 
   multerUpload(req, res, async (err) => {

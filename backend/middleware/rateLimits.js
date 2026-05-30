@@ -27,3 +27,6 @@ export const paymentLimiter = make(15 * 60 * 1000, 30, "Too many payment request
 
 // 20 req / 5 min — file uploads
 export const uploadLimiter = make(5 * 60 * 1000, 20, "Too many uploads. Please slow down.");
+
+// 5 req / 15 min — delivery code confirmation (brute-force protection on escrow release)
+export const deliveryCodeLimiter = make(15 * 60 * 1000, 5, "Too many delivery confirmation attempts. Try again in 15 minutes.");

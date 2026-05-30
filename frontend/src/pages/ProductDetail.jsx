@@ -7,6 +7,7 @@ import { getImageUrl, naira } from "../components/ProductCard";
 import { apiFetch } from "../utils/api";
 import Skel from "../components/Skel";
 import ReportModal from "../components/ReportModal";
+import NegotiationModal from "../components/NegotiationModal";
 
 const TABS = [
   { key: "description",  label: "Description" },
@@ -58,6 +59,7 @@ export default function ProductDetail() {
   const [hasPurchased, setHasPurchased] = useState(null);
   const [toast, setToast] = useState("");
   const [isDesktop, setIsDesktop] = useState(() => window.innerWidth >= 768);
+  const [negotiateOpen, setNegotiateOpen] = useState(false);
   const toastTimer = useRef(null);
 
   useEffect(() => {
@@ -461,6 +463,15 @@ export default function ProductDetail() {
             {cartLoading ? <i className="fas fa-spinner fa-spin" /> : outOfStock ? "Out of Stock" : <><i className="fas fa-bag-shopping" /> Add to cart — {naira(product.price * qty)}</>}
           </button>
         </div>
+        {!outOfStock && seller && (
+          <button
+            className="btn btn-ghost"
+            style={{ width: "100%", marginTop: 8, justifyContent: "center", gap: 8 }}
+            onClick={() => setNegotiateOpen(true)}
+          >
+            <i className="fas fa-handshake" /> Negotiate price
+          </button>
+        )}
         <div style={{ marginTop: 14, padding: "10px 12px", background: "rgba(245,158,11,.06)", border: "1px solid rgba(245,158,11,.22)", borderRadius: "var(--r-md)", display: "flex", gap: 10, alignItems: "flex-start" }}>
           <i className="fas fa-shield-halved" style={{ color: "#f59e0b", marginTop: 2, flexShrink: 0, fontSize: "1.2rem" }} />
           <p style={{ margin: 0, fontSize: "1.15rem", color: "var(--ink-2)", lineHeight: 1.55 }}>
@@ -548,13 +559,25 @@ export default function ProductDetail() {
         />
       )}
 
+      {negotiateOpen && product && seller && (
+        <NegotiationModal
+          itemType="Product"
+          itemId={product._id}
+          itemName={product.name}
+          itemImage={product.images?.[0]?.url || null}
+          originalPrice={product.price}
+          sellerId={seller._id}
+          onClose={() => setNegotiateOpen(false)}
+        />
+      )}
+
       {/* mobile-only fixed cart bar */}
       {!isDesktop && (
         <div style={{
           position: "fixed", left: 16, right: 16, bottom: 16,
           background: "var(--white)", border: "1px solid var(--line)",
           borderRadius: "var(--r-pill)", padding: 6,
-          display: "flex", alignItems: "center", gap: 10,
+          display: "flex", alignItems: "center", gap: 8,
           boxShadow: "var(--shadow-pop)", zIndex: 40,
         }}>
           {!outOfStock && (
@@ -567,6 +590,16 @@ export default function ProductDetail() {
                 <i className="fas fa-plus" />
               </button>
             </div>
+          )}
+          {!outOfStock && seller && (
+            <button
+              className="icon-btn"
+              title="Negotiate price"
+              style={{ flexShrink: 0 }}
+              onClick={() => setNegotiateOpen(true)}
+            >
+              <i className="fas fa-handshake" />
+            </button>
           )}
           <button className="btn btn-primary" style={{ flex: 1, opacity: outOfStock ? 0.6 : 1 }} onClick={handleAddToCart} disabled={cartLoading || outOfStock}>
             {cartLoading ? <i className="fas fa-spinner fa-spin" /> : outOfStock ? "Out of Stock" : <><i className="fas fa-bag-shopping" /> Add — {naira(product.price * qty)}</>}
