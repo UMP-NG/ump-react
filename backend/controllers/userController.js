@@ -2,6 +2,7 @@ import User from "../models/User.js";
 import Product from "../models/Product.js";
 import Service from "../models/Service.js";
 import cloudinary from "../config/cloudinary.js";
+import logger from "../utils/logger.js";
 
 // ===============================
 // GET current logged-in user profile
@@ -13,7 +14,7 @@ export const getCurrentUserProfile = async (req, res) => {
     if (!user) return res.status(404).json({ message: "User not found" });
     res.json(user);
   } catch (error) {
-    console.error("Error fetching user profile:", error);
+    logger.error("Error fetching user profile:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -40,15 +41,26 @@ export const updateUserProfile = async (req, res) => {
     if (gender !== undefined) user.gender = gender;
     if (website !== undefined) user.website = website;
     if (notificationPreferences !== undefined && typeof notificationPreferences === "object") {
-      user.notificationPreferences = { ...user.notificationPreferences, ...notificationPreferences };
+      // Whitelist allowed preference keys — prevent injecting arbitrary fields
+      const ALLOWED_PREFS = ["order", "message", "payout", "inventory", "account", "platform", "promotions"];
+      const safePrefs = {};
+      for (const key of ALLOWED_PREFS) {
+        if (typeof notificationPreferences[key] === "boolean") {
+          safePrefs[key] = notificationPreferences[key];
+        }
+      }
+      user.notificationPreferences = { ...user.notificationPreferences, ...safePrefs };
     }
 
-    // Handle avatar - if it's a string, treat it as URL
-    if (avatar !== undefined) {
-      if (typeof avatar === "string") {
-        user.avatar = { url: avatar, publicId: "" };
-      } else if (typeof avatar === "object" && avatar !== null) {
-        user.avatar = avatar;
+    // Handle avatar — only accept a Cloudinary URL string; never accept raw objects
+    // (accepting an object lets callers overwrite internal publicId with anything they want)
+    if (avatar !== undefined && typeof avatar === "string") {
+      const CLOUDINARY = process.env.CLOUDINARY_CLOUD_NAME;
+      const validUrl = CLOUDINARY
+        ? new RegExp(`^https://res\\.cloudinary\\.com/${CLOUDINARY}/`, "i")
+        : /^https:\/\/res\.cloudinary\.com\//i;
+      if (validUrl.test(avatar)) {
+        user.avatar = { url: avatar, publicId: user.avatar?.publicId || "" };
       }
     }
 
@@ -65,11 +77,11 @@ export const updateUserProfile = async (req, res) => {
       user: updatedUser,
     });
   } catch (error) {
-    console.error("❌ ERROR in updateUserProfile:");
-    console.error("   Error name:", error.name);
-    console.error("   Error message:", error.message);
-    console.error("   Error code:", error.code);
-    console.error("   Full error:", error);
+    logger.error("❌ ERROR in updateUserProfile:");
+    logger.error("   Error name:", error.name);
+    logger.error("   Error message:", error.message);
+    logger.error("   Error code:", error.code);
+    logger.error("   Full error:", error);
 
     // Handle specific errors
     if (error.code === 11000) {
@@ -111,7 +123,7 @@ export const getAllUsers = async (req, res) => {
       
     res.json(users);
   } catch (error) {
-    console.error("Error fetching users:", error);
+    logger.error("Error fetching users:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -125,7 +137,7 @@ export const getUserById = async (req, res) => {
     if (!user) return res.status(404).json({ message: "User not found" });
     res.json(user);
   } catch (error) {
-    console.error("Error fetching user:", error);
+    logger.error("Error fetching user:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -141,7 +153,7 @@ export const deleteUser = async (req, res) => {
     await user.remove();
     res.json({ message: "User deleted successfully" });
   } catch (error) {
-    console.error("Error deleting user:", error);
+    logger.error("Error deleting user:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -414,7 +426,7 @@ export const becomeServiceProvider = async (req, res) => {
       service,
     });
   } catch (error) {
-    console.error("❌ Error becoming service provider:", error);
+    logger.error("❌ Error becoming service provider:", error);
     res.status(500).json({
       success: false,
       message: "Server error",
@@ -450,7 +462,7 @@ export const updateWalkerProfile = async (req, res) => {
       avatar: user.avatar,
     });
   } catch (err) {
-    console.error("❌ updateWalkerProfile error:", err);
+    logger.error("❌ updateWalkerProfile error:", err);
     res.status(500).json({ message: "Server error" });
   }
 };

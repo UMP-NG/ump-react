@@ -2,6 +2,7 @@ import Product from "../models/Product.js";
 import Review from "../models/Review.js";
 import Seller from "../models/Seller.js";
 import cloudinary from "../config/cloudinary.js";
+import logger from "../utils/logger.js";
 
 const escapeRegex = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -82,10 +83,10 @@ export const createProduct = async (req, res) => {
             await seller.save();
           }
         } else {
-          console.warn("⚠️ Seller profile not found for user:", req.user._id);
+          logger.warn("⚠️ Seller profile not found for user:", req.user._id);
         }
       } catch (sellerErr) {
-        console.error("❌ Error linking product to seller:", sellerErr);
+        logger.error("❌ Error linking product to seller:", sellerErr);
         // Don't fail the request, just log the error
       }
     }
@@ -96,7 +97,7 @@ export const createProduct = async (req, res) => {
       product,
     });
   } catch (error) {
-    console.error("❌ Error creating product:", error);
+    logger.error("❌ Error creating product:", error);
 
     if (error.name === "MulterError") {
       return res.status(400).json({
@@ -129,7 +130,7 @@ export const getMyProducts = async (req, res) => {
       products,
     });
   } catch (error) {
-    console.error("❌ Error fetching seller products:", error);
+    logger.error("❌ Error fetching seller products:", error);
     res.status(500).json({
       success: false,
       message: "Server error fetching seller products",
@@ -231,7 +232,7 @@ export const getAllProducts = async (req, res) => {
       return res.status(200).json({ success: true, count: products.length, total, products });
     }
   } catch (error) {
-    console.error("❌ Error fetching products:", error);
+    logger.error("❌ Error fetching products:", error);
     res
       .status(500)
       .json({ success: false, message: "Failed to fetch products" });
@@ -257,7 +258,7 @@ export const getProductsByCategory = async (req, res) => {
       products,
     });
   } catch (error) {
-    console.error("❌ Error fetching products by category:", error);
+    logger.error("❌ Error fetching products by category:", error);
     res.status(500).json({ 
       success: false, 
       message: "Failed to fetch products",
@@ -323,7 +324,7 @@ export const getProductById = async (req, res) => {
             );
           }
         } catch (err) {
-          console.error("⚠️ Error tracking view:", err);
+          logger.error("⚠️ Error tracking view:", err);
         }
       })();
     }
@@ -368,7 +369,7 @@ export const getProductById = async (req, res) => {
       product: normalized,
     });
   } catch (error) {
-    console.error("❌ Error fetching product:", error);
+    logger.error("❌ Error fetching product:", error);
     res.status(500).json({
       success: false,
       message: "Failed to fetch product",
@@ -480,7 +481,7 @@ export const updateProduct = async (req, res) => {
       product: updatedProduct,
     });
   } catch (error) {
-    console.error("❌ Error updating product:", error);
+    logger.error("❌ Error updating product:", error);
     res.status(500).json({
       success: false,
       message: "Failed to update product",
@@ -506,20 +507,17 @@ export const deleteProduct = async (req, res) => {
         .json({ success: false, message: "Not authorized" });
     }
 
-    // Delete all images from Cloudinary before deleting product
-    for (const image of product.images || []) {
-      await cloudinary.uploader.destroy(image.publicId, {
-        resource_type: "image",
-      });
-    }
-
-    await product.deleteOne();
+    // Soft-delete: keep the document (and its images) so active orders still
+    // reference their product. The pre-find middleware hides it from all normal
+    // queries automatically.
+    product.deletedAt = new Date();
+    await product.save();
 
     res
       .status(200)
       .json({ success: true, message: "Product deleted successfully" });
   } catch (error) {
-    console.error("❌ Error deleting product:", error);
+    logger.error("❌ Error deleting product:", error);
     res
       .status(500)
       .json({ success: false, message: "Failed to delete product" });
@@ -550,7 +548,7 @@ export const addReview = async (req, res) => {
 
     res.status(201).json({ success: true, message: "Review added", review });
   } catch (error) {
-    console.error("❌ Error adding review:", error);
+    logger.error("❌ Error adding review:", error);
     res.status(500).json({ success: false, message: "Failed to add review" });
   }
 };
@@ -571,7 +569,7 @@ export const getRelatedProducts = async (req, res) => {
 
     res.json(related);
   } catch (err) {
-    console.error("❌ Error fetching related products:", err);
+    logger.error("❌ Error fetching related products:", err);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -584,7 +582,7 @@ export const getAdvertisedProducts = async (req, res) => {
     );
     res.json(advertisedProducts);
   } catch (error) {
-    console.error("Error fetching advertised products:", error);
+    logger.error("Error fetching advertised products:", error);
     res
       .status(500)
       .json({ message: "Server error while fetching advertised products" });
@@ -652,7 +650,7 @@ export const filterAndSortProducts = async (req, res) => {
 
     res.status(200).json(products);
   } catch (error) {
-    console.error("Error filtering/sorting products:", error);
+    logger.error("Error filtering/sorting products:", error);
     res.status(500).json({ message: "Error filtering/sorting products" });
   }
 };
@@ -692,7 +690,7 @@ export const trackProductView = async (req, res) => {
 
     res.status(200).json({ success: true, views: product.views });
   } catch (err) {
-    console.error("❌ Error tracking view:", err);
+    logger.error("❌ Error tracking view:", err);
     res.status(500).json({ message: "Server error tracking view" });
   }
 };

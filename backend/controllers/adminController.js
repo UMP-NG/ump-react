@@ -10,6 +10,7 @@ import csv from "csv-parser";
 import bcrypt from "bcryptjs";
 import generateToken from "../utils/generateToken.js";
 import cloudinary from "../config/cloudinary.js";
+import logger from "../utils/logger.js";
 
 // ===============================
 // LOGIN
@@ -49,7 +50,7 @@ export const adminLogin = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Login error:", error);
+    logger.error("Login error:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -181,10 +182,11 @@ export const updateProduct = async (req, res) => {
 
 export const deleteProduct = async (req, res) => {
   try {
-    const product = await Product.findById(req.params.productId);
+    const product = await Product.findById(req.params.productId).setOptions({ includeDeleted: true });
     if (!product) return res.status(404).json({ message: "Product not found" });
 
-    await product.deleteOne();
+    product.deletedAt = new Date();
+    await product.save();
     res.json({ message: "Product deleted successfully" });
   } catch (error) {
     res.status(500).json({ message: "Server error" });
@@ -218,10 +220,11 @@ export const updateListing = async (req, res) => {
 
 export const deleteListing = async (req, res) => {
   try {
-    const listing = await Listing.findById(req.params.listingId);
+    const listing = await Listing.findById(req.params.listingId).setOptions({ includeDeleted: true });
     if (!listing) return res.status(404).json({ message: "Listing not found" });
 
-    await listing.deleteOne();
+    listing.deletedAt = new Date();
+    await listing.save();
     res.json({ message: "Listing deleted successfully" });
   } catch (error) {
     res.status(500).json({ message: "Server error" });
@@ -255,10 +258,11 @@ export const updateService = async (req, res) => {
 
 export const deleteService = async (req, res) => {
   try {
-    const service = await Service.findById(req.params.serviceId);
+    const service = await Service.findById(req.params.serviceId).setOptions({ includeDeleted: true });
     if (!service) return res.status(404).json({ message: "Service not found" });
 
-    await service.deleteOne();
+    service.deletedAt = new Date();
+    await service.save();
     res.json({ message: "Service deleted successfully" });
   } catch (error) {
     res.status(500).json({ message: "Server error" });
@@ -315,7 +319,7 @@ export const bulkImportProducts = async (req, res) => {
           const inserted = await Product.insertMany(results);
           // Clean up temporary file from disk
           fs.unlink(req.file.path, (err) => {
-            if (err) console.warn("⚠️ Could not delete temp file:", err);
+            if (err) logger.warn("⚠️ Could not delete temp file:", err);
           });
           res.status(201).json({
             message: `✅ ${inserted.length} products imported successfully.`,
@@ -324,13 +328,13 @@ export const bulkImportProducts = async (req, res) => {
         } catch (insertErr) {
           // Clean up file on error
           fs.unlink(req.file.path, (err) => {
-            if (err) console.warn("⚠️ Could not delete temp file:", err);
+            if (err) logger.warn("⚠️ Could not delete temp file:", err);
           });
           throw insertErr;
         }
       });
   } catch (err) {
-    console.error(err);
+    logger.error(err);
     res.status(500).json({ message: "Import failed", error: err.message });
   }
 };

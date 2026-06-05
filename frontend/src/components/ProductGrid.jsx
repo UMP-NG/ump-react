@@ -1,6 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import useReveal from "../hooks/useReveal";
-import { apiFetch } from "../utils/api";
+import { useCart } from "../context/CartContext";
 
 function getImageUrl(img, fallback = "/images/placeholder.png") {
   if (!img) return fallback;
@@ -10,19 +10,16 @@ function getImageUrl(img, fallback = "/images/placeholder.png") {
 
 export default function ProductGrid({ products, onQuickView }) {
   const navigate = useNavigate();
+  const { addToCart } = useCart();
   useReveal(".product-card", [products.length]);
 
-  const addToCart = async (e, productId) => {
+  const handleAddToCart = async (e, productId) => {
     e.stopPropagation();
     try {
-      await apiFetch("/api/cart/add", {
-        method: "POST",
-        body: { productId, quantity: 1 },
-      });
-      alert("Added to cart!");
+      await addToCart(productId);
+      navigate("/cart");
     } catch (err) {
-      if (err.status === 401) navigate("/login");
-      else alert("Failed to add to cart.");
+      if (err?.status === 401) navigate("/login");
     }
   };
 
@@ -68,7 +65,7 @@ export default function ProductGrid({ products, onQuickView }) {
             >
               👁
             </button>
-            <button onClick={(e) => addToCart(e, p._id)} title="Add to cart">
+            <button onClick={(e) => handleAddToCart(e, p._id)} title="Add to cart">
               🛒
             </button>
           </div>

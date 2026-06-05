@@ -25,5 +25,11 @@ export function cloudVideo(url) {
   if (!url || !url.includes("res.cloudinary.com")) return url;
   // Idempotency guard
   if (/\/upload\/vc_/.test(url)) return url;
-  return url.replace("/upload/", "/upload/vc_auto,ac_aac/");
+  // vc_auto: Cloudinary picks H.264/MP4 for Safari/iOS, VP9/WebM for Chrome.
+  // ac_aac: ensures AAC audio track — required for iOS playback.
+  // Replace .webm extension with .mp4 so the URL the browser sees signals H.264;
+  // Cloudinary serves the correct codec regardless of the stored file extension.
+  return url
+    .replace("/upload/", "/upload/vc_auto,ac_aac/")
+    .replace(/\.webm(\?|$)/, ".mp4$1");
 }

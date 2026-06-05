@@ -1,5 +1,6 @@
 import Follow from "../models/Follow.js";
 import User from "../models/User.js";
+import logger from "../utils/logger.js";
 
 // ✅ Follow a user
 export const followUser = async (req, res) => {
@@ -30,7 +31,7 @@ export const followUser = async (req, res) => {
 
     res.status(201).json({ success: true, follow });
   } catch (error) {
-    console.error("Error following user:", error);
+    logger.error("Error following user:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -51,7 +52,7 @@ export const unfollowUser = async (req, res) => {
 
     res.json({ success: true, message: "Unfollowed successfully" });
   } catch (error) {
-    console.error("Error unfollowing user:", error);
+    logger.error("Error unfollowing user:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -67,7 +68,7 @@ export const getFollowers = async (req, res) => {
 
     res.json({ count: followers.length, followers });
   } catch (error) {
-    console.error("Error fetching followers:", error);
+    logger.error("Error fetching followers:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -83,7 +84,7 @@ export const getFollowing = async (req, res) => {
 
     res.json({ count: following.length, following });
   } catch (error) {
-    console.error("Error fetching following list:", error);
+    logger.error("Error fetching following list:", error);
     res.status(500).json({ message: "Server error" });
   }
 };

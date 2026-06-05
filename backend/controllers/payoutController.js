@@ -4,6 +4,7 @@ import User from "../models/User.js";
 import Seller from "../models/Seller.js";
 import Config from "../models/Config.js";
 import paystack from "../utils/paystack.js";
+import logger from "../utils/logger.js";
 
 // Fix #10a: read bank details from Seller model where they are actually stored
 export const getPayoutDetails = async (req, res) => {
@@ -20,7 +21,7 @@ export const getPayoutDetails = async (req, res) => {
       },
     });
   } catch (err) {
-    console.error("Payout fetch error:", err);
+    logger.error("Payout fetch error:", err);
     res.status(500).json({ success: false, message: "Server error" });
   }
 };
@@ -88,17 +89,16 @@ export const requestPayout = async (req, res) => {
           payoutData.status = transferData?.status === "success" ? "completed" : "processing";
           payoutData.reference = transferRef;
         } catch (transferErr) {
-          console.error("Paystack transfer error:", transferErr.response?.data || transferErr.message);
+          logger.error("Paystack transfer error:", transferErr.response?.data || transferErr.message);
           // Refund wallet if transfer failed to initiate
           await Seller.findOneAndUpdate({ user: userId }, { $inc: { pendingPayout: amount } });
           return res.status(500).json({ message: "Transfer failed — please try again or contact support" });
         }
       }
       // No bank registered: stays pending for admin to process manually
-    } else if (roles.includes("walker")) {
-      payoutData.walker = userId;
-    } else if (roles.includes("service_provider")) {
-      payoutData.provider = userId;
+    } else if (roles.includes("walker") || roles.includes("service_provider")) {
+      // Service providers have no separate wallet model yet — block payouts until implemented
+      return res.status(400).json({ message: "Payout for this account type requires manual admin processing. Please contact support." });
     } else {
       return res.status(403).json({ message: "Unauthorized role" });
     }
@@ -111,7 +111,7 @@ export const requestPayout = async (req, res) => {
       : "Payout request submitted — please add your bank details to enable instant transfers";
     res.json({ success: true, message: statusMsg, payout });
   } catch (err) {
-    console.error("requestPayout error:", err);
+    logger.error("requestPayout error:", err);
     res.status(500).json({ message: "Payout request failed. Please try again." });
   }
 };
@@ -146,7 +146,7 @@ export const retryPayout = async (req, res) => {
 
     res.json({ success: true, message: "Transfer initiated successfully", payout });
   } catch (err) {
-    console.error("retryPayout error:", err.response?.data || err.message);
+    logger.error("retryPayout error:", err.response?.data || err.message);
     res.status(500).json({ message: err.response?.data?.message || err.message || "Transfer failed — please try again" });
   }
 };
@@ -159,7 +159,7 @@ export const getPayoutsForSeller = async (req, res) => {
       .lean();
     res.json({ payouts });
   } catch (err) {
-    console.error("getPayoutsForSeller error:", err);
+    logger.error("getPayoutsForSeller error:", err);
     res.status(500).json({ message: err.message });
   }
 };
@@ -220,12 +220,12 @@ export const getPayoutSummary = async (req, res) => {
     ]);
 
     if (result._timedOut) {
-      console.warn(`[payoutController] getPayoutSummary timed out for ${role}`);
+      logger.warn(`[payoutController] getPayoutSummary timed out for ${role}`);
       return res.json({ success: true, summary: { available: 0, nextPayout: null } });
     }
     return res.json({ success: true, summary: result });
   } catch (err) {
-    console.error("getPayoutSummary error:", err);
+    logger.error("getPayoutSummary error:", err);
     res.status(500).json({ message: "Failed to load payout summary" });
   }
 };

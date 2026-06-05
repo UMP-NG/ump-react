@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import BottomNav from "../components/BottomNav";
-import { apiFetch } from "../utils/api";
+import { apiFetch, bustCache } from "../utils/api";
 import { socket } from "../utils/socket";
 import Skel from "../components/Skel";
 
@@ -33,6 +33,10 @@ export default function Notifications() {
   const [markingAll, setMarkingAll]       = useState(false);
 
   useEffect(() => {
+    // Always bust the cache on mount so we never show stale read/unread state
+    // after a mark-read operation done in a previous session.
+    bustCache("/api/notifications");
+
     apiFetch("/api/notifications")
       .then((d) => setNotifications(d.notifications || []))
       .catch((err) => setError(err?.message || "Failed to load notifications"))
@@ -49,10 +53,15 @@ export default function Notifications() {
   const unreadCount = notifications.filter((n) => !n.read).length;
 
   async function markRead(id) {
+    // Optimistic update first so the UI feels instant
     setNotifications((prev) =>
       prev.map((n) => (n._id === id ? { ...n, read: true } : n))
     );
-    apiFetch(`/api/notifications/${id}/read`, { method: "PATCH" }).catch(() => {});
+    try {
+      await apiFetch(`/api/notifications/${id}/read`, { method: "PATCH" });
+    } catch { /* ignore network errors — optimistic state already applied */ }
+    // Bust cache so any subsequent page load fetches fresh data from the server
+    bustCache("/api/notifications");
   }
 
   async function markAllRead() {
@@ -60,14 +69,25 @@ export default function Notifications() {
     try {
       await apiFetch("/api/notifications/read-all", { method: "PATCH" });
       setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+      bustCache("/api/notifications");
+      // Tell the Navbar to reset its badge counter immediately
+      window.dispatchEvent(new CustomEvent("notifications:all-read"));
     } catch { /* ignore */ }
     finally { setMarkingAll(false); }
   }
 
-  function handleClick(n) {
-    if (!n.read) markRead(n._id);
+  async function handleClick(n) {
+    // Await the mark-read so the server state is updated BEFORE navigation.
+    // Without this, navigating away before the PATCH completes means the next
+    // page mount can hit the stale cache and show the notification as unread again.
+    if (!n.read) await markRead(n._id);
     const link = n.link;
-    if (link) navigate(link);
+    if (!link) return;
+    if (link.startsWith("http://") || link.startsWith("https://")) {
+      window.open(link, "_blank", "noopener,noreferrer");
+    } else {
+      navigate(link);
+    }
   }
 
   // Group today vs earlier
@@ -126,12 +146,13 @@ export default function Notifications() {
       <Navbar />
 
       {/* Header */}
-      <div style={{ padding: "12px 16px 0", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+      <div style={{ padding: "12px 16px 0" }}>
+        {/* Title row */}
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: unreadCount > 0 ? 10 : 0 }}>
           <button className="icon-btn" onClick={() => navigate(-1)}>
             <i className="fas fa-arrow-left" />
           </button>
-          <h1 style={{ fontSize: "2.4rem", fontWeight: 800, letterSpacing: "-0.02em", margin: 0 }}>
+          <h1 style={{ fontSize: "2.4rem", fontWeight: 800, letterSpacing: "-0.02em", margin: 0, flex: 1, minWidth: 0 }}>
             Notifications
             {unreadCount > 0 && (
               <span style={{ fontSize: "1.3rem", background: "var(--accent)", color: "#fff", borderRadius: "var(--r-pill)", padding: "1px 9px", marginLeft: 8, verticalAlign: "middle" }}>
@@ -140,9 +161,18 @@ export default function Notifications() {
             )}
           </h1>
         </div>
+
+        {/* Mark all read — own full-width row so it's always reachable on mobile */}
         {unreadCount > 0 && (
-          <button className="btn btn-sm btn-ghost" disabled={markingAll} onClick={markAllRead}>
-            {markingAll ? <i className="fas fa-spinner fa-spin" /> : "Mark all read"}
+          <button
+            className="btn btn-ghost btn-block"
+            disabled={markingAll}
+            onClick={markAllRead}
+            style={{ height: 44, fontSize: "1.3rem", fontWeight: 600, borderRadius: "var(--r-md)", border: "1px solid var(--line)" }}
+          >
+            {markingAll
+              ? <><i className="fas fa-spinner fa-spin" /> Marking as read…</>
+              : <><i className="fas fa-check-double" style={{ marginRight: 7 }} />Mark all as read</>}
           </button>
         )}
       </div>

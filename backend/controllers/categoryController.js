@@ -1,6 +1,7 @@
 import Category from "../models/Category.js";
 import Subcategory from "../models/Subcategory.js";
 import slugify from "slugify";
+import logger from "../utils/logger.js";
 
 /**
  * Category controllers:
@@ -29,7 +30,7 @@ export const createCategory = async (req, res) => {
     const cat = await Category.create({ name, slug, description, image });
     res.status(201).json(cat);
   } catch (err) {
-    console.error("createCategory", err);
+    logger.error("createCategory", err);
     res.status(500).json({ message: err.message });
   }
 };
@@ -129,7 +130,7 @@ export const listSubcategories = async (req, res) => {
 
     res.json(subs);
   } catch (err) {
-    console.error("❌ listSubcategories error:", err);
+    logger.error("❌ listSubcategories error:", err);
     res.status(500).json({ message: "Failed to load subcategories" });
   }
 };

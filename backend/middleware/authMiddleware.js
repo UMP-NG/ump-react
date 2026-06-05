@@ -5,11 +5,6 @@ import cookie from "cookie";
 
 export const protect = async (req, res, next) => {
   try {
-    // ✅ Skip if user already authenticated in this request
-    if (req.user) {
-      return next();
-    }
-    
     // ===== 1️⃣ Check Authorization header =====
     let token = req.header("Authorization")?.replace("Bearer ", "");
 
@@ -42,7 +37,7 @@ export const protect = async (req, res, next) => {
     }
     try {
       const user = await User.findById(decoded.id)
-        .select("-password -wishlist -cart -orders -services -following -otp -otpExpire -resetPasswordToken -resetPasswordExpire -schoolEmailOtp -schoolEmailOtpExpire")
+        .select("-password -wishlist -cart -orders -services -following -otp -otpExpire -resetPasswordToken -resetPasswordExpire -schoolEmailOtp -schoolEmailOtpExpire -fcmToken")
         .maxTimeMS(8000)
         .lean();
       

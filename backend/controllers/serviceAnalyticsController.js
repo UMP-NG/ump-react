@@ -1,6 +1,7 @@
 // controllers/serviceAnalytics.js
 import ServiceSession from "../models/ServiceSession.js";
 import Service from "../models/Service.js";
+import logger from "../utils/logger.js";
 
 export const getKpiData = async (req, res) => {
   try {
@@ -30,7 +31,7 @@ export const getKpiData = async (req, res) => {
       avgRating: ratings[0]?.avgRating?.toFixed(1) || 0,
     });
   } catch (err) {
-    console.error(err);
+    logger.error(err);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -45,7 +46,7 @@ export const getRecentSessions = async (req, res) => {
 
     res.json(sessions);
   } catch (err) {
-    console.error(err);
+    logger.error(err);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -72,7 +73,7 @@ export const getDailyRevenue = async (req, res) => {
 
     res.json({ labels: days.map((d) => d.toDateString()), revenue });
   } catch (err) {
-    console.error(err);
+    logger.error(err);
     res.status(500).json({ message: "Server error" });
   }
 };

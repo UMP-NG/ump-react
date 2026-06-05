@@ -18,14 +18,29 @@ export default function ResetPassword() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const token = searchParams.get("token") || "";
+  // All hooks must be declared before any conditional returns (Rules of Hooks)
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const score = strength(password);
 
+  if (!token) {
+    return (
+      <div style={{ minHeight: "100vh", background: "var(--paper)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "40px 24px", textAlign: "center" }}>
+        <div style={{ width: 72, height: 72, borderRadius: 22, background: "#fef2f2", color: "#dc2626", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: "2.6rem", marginBottom: 20 }}>
+          <i className="fas fa-link-slash" />
+        </div>
+        <h1 style={{ fontSize: "2.2rem", fontWeight: 800, margin: "0 0 8px" }}>Invalid reset link</h1>
+        <p style={{ color: "var(--ink-2)", fontSize: "1.4rem", marginBottom: 24 }}>This password reset link is missing or has expired.</p>
+        <button className="btn btn-primary" onClick={() => navigate("/forgot-password")}>Request a new link</button>
+      </div>
+    );
+  }
+
   async function handleSubmit(e) {
     e.preventDefault();
+    if (password.length < 8) { setError("Password must be at least 8 characters"); return; }
     if (password !== confirm) { setError("Passwords don't match"); return; }
     setLoading(true);
     setError("");

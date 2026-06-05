@@ -23,9 +23,10 @@ const NAV_GROUPS = [
     { id: 'payouts',  path: '/admin/payouts',  icon: 'fa-money-bill-transfer', name: 'Payouts', badge: null, badgeKind: 'amber' },
   ]},
   { label: 'Moderation', items: [
-    { id: 'reviews',  path: '/admin/reviews',  icon: 'fa-star',          name: 'Reviews' },
-    { id: 'disputes', path: '/admin/disputes', icon: 'fa-scale-balanced', name: 'Disputes', badge: null, badgeKind: 'red' },
-    { id: 'reports',  path: '/admin/reports',  icon: 'fa-flag',           name: 'Reported Content', badge: null, badgeKind: 'red' },
+    { id: 'reviews',       path: '/admin/reviews',       icon: 'fa-star',          name: 'Reviews' },
+    { id: 'disputes',      path: '/admin/disputes',      icon: 'fa-scale-balanced', name: 'Disputes',            badge: null, badgeKind: 'red' },
+    { id: 'reports',       path: '/admin/reports',       icon: 'fa-flag',           name: 'Reported Content',    badge: null, badgeKind: 'red' },
+    { id: 'verifications', path: '/admin/verifications', icon: 'fa-id-card',        name: 'Identity Verifications', badge: null, badgeKind: 'amber' },
   ]},
   { label: 'Platform', items: [
     { id: 'analytics', path: '/admin/analytics', icon: 'fa-chart-line', name: 'Analytics' },

@@ -3,6 +3,7 @@ import User from "../models/User.js";
 import mongoose from "mongoose";
 import { getIO } from "../utils/socket.js";
 import cloudinary from "../config/cloudinary.js";
+import logger from "../utils/logger.js";
 
 // ---------- SEND MESSAGE ----------
 export const sendMessage = async (req, res) => {
@@ -49,12 +50,12 @@ export const sendMessage = async (req, res) => {
       io.to(receiver.toString()).emit("new_message", message);
       io.to(req.user._id.toString()).emit("new_message", message);
     } else if (process.env.NODE_ENV !== "production") {
-      console.warn("⚠️  Socket.io unavailable — real-time delivery skipped for message", message._id);
+      logger.warn("⚠️  Socket.io unavailable — real-time delivery skipped for message", message._id);
     }
 
     res.status(201).json({ success: true, message });
   } catch (error) {
-    console.error("Error sending message:", error);
+    logger.error("Error sending message:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -81,7 +82,7 @@ export const getUserMessages = async (req, res) => {
 
     res.json(messages);
   } catch (error) {
-    console.error("Error fetching paginated messages:", error);
+    logger.error("Error fetching paginated messages:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -101,7 +102,7 @@ export const markMessageRead = async (req, res) => {
 
     res.json({ message: "Message marked as read", data: message });
   } catch (error) {
-    console.error("Error marking message read:", error);
+    logger.error("Error marking message read:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -193,7 +194,7 @@ export const getUserConversations = async (req, res) => {
 
     res.json(conversations);
   } catch (error) {
-    console.error("❌ Error getting conversations:", error);
+    logger.error("❌ Error getting conversations:", error);
     res.status(500).json({ message: "Server error", error: error.message });
   }
 };
@@ -205,7 +206,7 @@ export const getUserConversationsLatest = async (req, res) => {
     // This endpoint is no longer needed but kept for backwards compatibility
     return getUserConversations(req, res);
   } catch (error) {
-    console.error("Error fetching latest conversations:", error);
+    logger.error("Error fetching latest conversations:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -226,7 +227,7 @@ export const getUnreadMessages = async (req, res) => {
 
     res.json(unreadMessages);
   } catch (error) {
-    console.error("Error fetching unread messages:", error);
+    logger.error("Error fetching unread messages:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -248,7 +249,7 @@ export const markConversationRead = async (req, res) => {
 
     res.json({ message: "Conversation marked as read" });
   } catch (error) {
-    console.error("Error marking conversation read:", error);
+    logger.error("Error marking conversation read:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -278,7 +279,7 @@ export const getUnreadCounts = async (req, res) => {
 
     res.json(counts);
   } catch (error) {
-    console.error("Error getting unread counts:", error);
+    logger.error("Error getting unread counts:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -295,7 +296,7 @@ export const getUnreadCount = async (req, res) => {
 
     res.json({ count });
   } catch (error) {
-    console.error("Error getting unread count:", error);
+    logger.error("Error getting unread count:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -319,7 +320,7 @@ export const getMessageById = async (req, res) => {
 
     res.json(message);
   } catch (error) {
-    console.error("Error fetching message:", error);
+    logger.error("Error fetching message:", error);
     res.status(500).json({ message: "Server error" });
   }
 };

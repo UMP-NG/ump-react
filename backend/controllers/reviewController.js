@@ -4,6 +4,7 @@ import Listing from "../models/Listing.js";
 import Service from "../models/Service.js";
 import Order from "../models/Order.js";
 import { notify } from "../utils/notify.js";
+import logger from "../utils/logger.js";
 
 // ✅ Create Review
 export const addReview = async (req, res) => {
@@ -16,7 +17,18 @@ export const addReview = async (req, res) => {
         .json({ success: false, message: "Invalid review target" });
     }
 
+    // Block duplicate reviews from the same user on the same item
+    const existing = await Review.findOne({ refModel, refId, author: req.user._id }).select("_id").lean();
+    if (existing) {
+      return res.status(409).json({ success: false, message: "You have already reviewed this item." });
+    }
+
     if (refModel === "Product") {
+      const product = await Product.findById(refId).select("seller").lean();
+      // Block self-reviews
+      if (product?.seller?.toString() === req.user._id.toString()) {
+        return res.status(403).json({ success: false, message: "You cannot review your own product." });
+      }
       const hasOrder = await Order.findOne({
         buyer: req.user._id,
         "items.product": refId,
@@ -24,6 +36,20 @@ export const addReview = async (req, res) => {
       }).select("_id");
       if (!hasOrder) {
         return res.status(403).json({ success: false, message: "Only verified buyers can review this product." });
+      }
+    }
+
+    if (refModel === "Service") {
+      const service = await Service.findById(refId).select("provider").lean();
+      if (service?.provider?.toString() === req.user._id.toString()) {
+        return res.status(403).json({ success: false, message: "You cannot review your own service." });
+      }
+    }
+
+    if (refModel === "Listing") {
+      const listing = await Listing.findById(refId).select("owner").lean();
+      if (listing?.owner?.toString() === req.user._id.toString()) {
+        return res.status(403).json({ success: false, message: "You cannot review your own listing." });
       }
     }
 
@@ -56,7 +82,7 @@ export const addReview = async (req, res) => {
 
     res.status(201).json({ success: true, review });
   } catch (error) {
-    console.error("Error adding review:", error);
+    logger.error("Error adding review:", error);
     res.status(500).json({ success: false, message: "Server error" });
   }
 };
@@ -72,7 +98,7 @@ export const getReviews = async (req, res) => {
 
     res.json({ success: true, count: reviews.length, reviews });
   } catch (error) {
-    console.error("Error fetching reviews:", error);
+    logger.error("Error fetching reviews:", error);
     res.status(500).json({ success: false, message: "Server error" });
   }
 };
@@ -98,7 +124,7 @@ export const updateReview = async (req, res) => {
     await review.save();
     res.json({ success: true, review });
   } catch (error) {
-    console.error("Error updating review:", error);
+    logger.error("Error updating review:", error);
     res.status(500).json({ success: false, message: "Server error" });
   }
 };
@@ -123,7 +149,7 @@ export const deleteReview = async (req, res) => {
     await review.deleteOne();
     res.json({ success: true, message: "Review deleted successfully" });
   } catch (error) {
-    console.error("Error deleting review:", error);
+    logger.error("Error deleting review:", error);
     res.status(500).json({ success: false, message: "Server error" });
   }
 };
@@ -137,7 +163,7 @@ export const getAllReviews = async (req, res) => {
 
     res.json({ success: true, count: reviews.length, reviews });
   } catch (error) {
-    console.error("Error fetching all reviews:", error);
+    logger.error("Error fetching all reviews:", error);
     res.status(500).json({ success: false, message: "Server error" });
   }
 };

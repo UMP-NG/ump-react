@@ -47,6 +47,11 @@ const bookingSchema = new mongoose.Schema(
       trim: true,
     },
 
+    // Negotiated price (services only) — set when buyer books after a negotiation is accepted
+    negotiatedRate:  { type: Number, default: null },
+    negotiationId:   { type: mongoose.Schema.Types.ObjectId, ref: "Negotiation", default: null },
+    creditUsed:      { type: Number, default: 0, min: 0 },
+
     status: {
       type: String,
       enum: ["pending", "confirmed", "completed", "cancelled"],

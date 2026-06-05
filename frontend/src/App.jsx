@@ -1,4 +1,4 @@
-import { lazy, Suspense, Component } from "react";
+import { lazy, Suspense, Component, useEffect } from "react";
 import { Routes, Route, useLocation } from "react-router-dom";
 import FloatingChat from "./components/FloatingChat";
 import PrivateRoute from "./components/PrivateRoute";
@@ -96,6 +96,19 @@ function MaintenanceGate({ children }) {
 }
 
 export default function App() {
+  useEffect(() => {
+    function handleImgError(e) {
+      const img = e.target;
+      if (img.tagName !== "IMG") return;
+      if (img.dataset.fbApplied) return; // prevent infinite loop if placeholder itself 404s
+      img.dataset.fbApplied = "1";
+      img.src = "/images/placeholder.png";
+    }
+    // Capture phase so we catch error events before they reach any component-level onError handler
+    document.addEventListener("error", handleImgError, true);
+    return () => document.removeEventListener("error", handleImgError, true);
+  }, []);
+
   return (
     <AppConfigProvider>
     <MaintenanceGate>

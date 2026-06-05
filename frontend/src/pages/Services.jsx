@@ -95,10 +95,19 @@ export default function Services() {
         {/* Sort + price + availability row */}
         <div style={{ padding: "10px 0 0", display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
           <select
-            className="input"
             value={sort}
             onChange={(e) => setSort(e.target.value)}
-            style={{ width: 130, height: 40, paddingLeft: 10, flexShrink: 0 }}
+            style={{
+              width: 140, height: 40, flexShrink: 0,
+              padding: "0 32px 0 12px",
+              border: "1px solid var(--line-strong)", borderRadius: "var(--r-md)",
+              background: "var(--white)", color: "var(--ink-1)",
+              fontSize: "1.4rem", fontFamily: "var(--font-sans)",
+              appearance: "none", WebkitAppearance: "none",
+              backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%2394a3b8' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E\")",
+              backgroundRepeat: "no-repeat", backgroundPosition: "right 10px center",
+              cursor: "pointer", outline: "none",
+            }}
           >
             {SORTS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
           </select>

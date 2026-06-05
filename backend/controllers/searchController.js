@@ -2,6 +2,7 @@ import Product from "../models/Product.js";
 import Listing from "../models/Listing.js";
 import Service from "../models/Service.js";
 import Seller from "../models/Seller.js";
+import logger from "../utils/logger.js";
 
 const escapeRegex = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const coerceStr = (v) => (typeof v === "string" ? v : Array.isArray(v) ? v[0] || "" : "");
@@ -30,7 +31,7 @@ export const searchProducts = async (req, res) => {
 
     res.json(products);
   } catch (error) {
-    console.error("Product search error:", error);
+    logger.error("Product search error:", error);
     res.status(500).json({ message: "Server error while searching products" });
   }
 };
@@ -44,11 +45,14 @@ export const searchListings = async (req, res) => {
     const searchRegex = new RegExp(escapeRegex(query.trim()), "i");
     const listings = await Listing.find({
       $or: [{ name: searchRegex }, { description: searchRegex }, { location: searchRegex }],
-    }).limit(20);
+    })
+      .select("name type images location price rate beds baths distance available amenities")
+      .limit(20)
+      .lean();
 
     res.json(listings);
   } catch (error) {
-    console.error("Listing search error:", error);
+    logger.error("Listing search error:", error);
     res.status(500).json({ message: "Server error while searching listings" });
   }
 };
@@ -60,11 +64,16 @@ export const searchServices = async (req, res) => {
     if (!validateQuery(query, res)) return;
 
     const searchRegex = new RegExp(escapeRegex(query.trim()), "i");
-    const services = await Service.find({ title: searchRegex }).limit(20);
+    const services = await Service.find({
+      $or: [{ title: searchRegex }, { name: searchRegex }, { major: searchRegex }, { desc: searchRegex }],
+    })
+      .select("title name images major desc rate rating provider available")
+      .limit(20)
+      .lean();
 
     res.json(services);
   } catch (error) {
-    console.error("Service search error:", error);
+    logger.error("Service search error:", error);
     res.status(500).json({ message: "Server error while searching services" });
   }
 };
@@ -87,7 +96,7 @@ export const searchSellers = async (req, res) => {
 
     res.json(sellers);
   } catch (error) {
-    console.error("Seller search error:", error);
+    logger.error("Seller search error:", error);
     res.status(500).json({ message: "Server error while searching sellers" });
   }
 };
@@ -102,8 +111,10 @@ export const siteSearch = async (req, res) => {
 
     const [products, listings, services, sellers] = await Promise.all([
       Product.find({ name: searchRegex }).limit(10),
-      Listing.find({ $or: [{ name: searchRegex }, { description: searchRegex }, { location: searchRegex }] }).limit(10),
-      Service.find({ title: searchRegex }).limit(10),
+      Listing.find({ $or: [{ name: searchRegex }, { description: searchRegex }, { location: searchRegex }] })
+        .select("name type images location price rate beds baths distance available amenities").limit(10).lean(),
+      Service.find({ $or: [{ title: searchRegex }, { name: searchRegex }, { major: searchRegex }] })
+        .select("title name images major desc rate rating provider available").limit(10).lean(),
       Seller.find({
         $or: [
           { storeName: searchRegex },
@@ -116,7 +127,7 @@ export const siteSearch = async (req, res) => {
 
     res.json({ products, listings, services, sellers });
   } catch (error) {
-    console.error("Site search error:", error);
+    logger.error("Site search error:", error);
     res.status(500).json({ message: "Server error while searching" });
   }
 };

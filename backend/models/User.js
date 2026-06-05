@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import bcrypt from "bcrypt";
+import crypto from "crypto";
 
 const userSchema = new mongoose.Schema(
   {
@@ -145,8 +146,6 @@ const userSchema = new mongoose.Schema(
       promotions: { type: Boolean, default: false },
     },
 
-    fcmToken: { type: String, default: null },
-
     // Support role for admin users (null = not a support contact)
     supportRole: {
       type: String,
@@ -159,6 +158,14 @@ const userSchema = new mongoose.Schema(
       enum: ["active", "inactive", "banned"],
       default: "active",
     },
+
+    // ===============================
+    // REFERRAL
+    // ===============================
+    referralCode:   { type: String, unique: true, sparse: true },
+    referredBy:     { type: mongoose.Schema.Types.ObjectId, ref: "User", default: null },
+    // Site credit earned from referrals — spendable at checkout/booking, NOT withdrawable
+    referralCredit: { type: Number, default: 0, min: 0 },
   },
   { timestamps: true }
 );
@@ -196,6 +203,21 @@ userSchema.pre("save", async function (next) {
 });
 
 // ===============================
+// REFERRAL CODE GENERATION
+// ===============================
+userSchema.pre("save", function (next) {
+  if (!this.referralCode) {
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    let code = "UMP-";
+    for (let i = 0; i < 8; i++) {
+      code += chars[crypto.randomInt(chars.length)]; // cryptographically secure
+    }
+    this.referralCode = code;
+  }
+  next();
+});
+
+// ===============================
 // METHODS
 // ===============================
 userSchema.methods.comparePassword = function (candidatePassword) {
@@ -203,7 +225,7 @@ userSchema.methods.comparePassword = function (candidatePassword) {
 };
 
 userSchema.methods.createOTP = function () {
-  const otp = Math.floor(100000 + Math.random() * 900000).toString();
+  const otp = String(crypto.randomInt(100000, 1000000)); // cryptographically secure 6-digit OTP
   this.otp = otp;
   this.otpExpire = Date.now() + 10 * 60 * 1000;
   return otp;

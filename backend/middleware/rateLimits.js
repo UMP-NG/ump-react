@@ -1,10 +1,9 @@
-import rateLimit from "express-rate-limit";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 
 // Key by authenticated user ID when available, falling back to IP.
-// This prevents shared IPs (campus WiFi, proxies) from incorrectly
-// throttling one user because another on the same network hit the limit.
+// Uses ipKeyGenerator so IPv6 addresses are normalised correctly.
 function keyByUser(req) {
-  return req.user?._id?.toString() || req.ip;
+  return req.user?._id?.toString() || ipKeyGenerator(req);
 }
 
 const make = (windowMs, max, message) =>
@@ -38,3 +37,9 @@ export const uploadLimiter = make(5 * 60 * 1000, 20, "Too many uploads. Please s
 
 // 5 req / 15 min — delivery code confirmation (brute-force protection on escrow release)
 export const deliveryCodeLimiter = make(15 * 60 * 1000, 5, "Too many delivery confirmation attempts. Try again in 15 minutes.");
+
+// 3 req / 60 min — identity verification submit & dispute (prevents queue flooding)
+export const identityLimiter = make(60 * 60 * 1000, 3, "Too many verification attempts. Try again in 1 hour.");
+
+// 20 req / 15 min — referral code lookups (prevents enumeration of user identities)
+export const referralLimiter = make(15 * 60 * 1000, 20, "Too many referral lookups. Please slow down.");

@@ -2,6 +2,7 @@ import crypto from "crypto";
 import Payment from "../models/Payment.js";
 import Order from "../models/Order.js";
 import Seller from "../models/Seller.js";
+import logger from "../utils/logger.js";
 
 export const paystackWebhook = async (req, res) => {
   try {
@@ -25,6 +26,14 @@ export const paystackWebhook = async (req, res) => {
 
       const payment = await Payment.findOne({ reference });
       if (payment) {
+        // Guard against amount mismatch — only confirm if Paystack amount matches what we recorded
+        const paidKobo     = Math.round(data.amount);          // Paystack sends kobo
+        const expectedKobo = Math.round(payment.amount * 100); // stored in naira
+        if (Math.abs(paidKobo - expectedKobo) > 100) {         // allow ±₦1 rounding tolerance
+          logger.error(`[paystackWebhook] Amount mismatch on ${reference}: expected ${expectedKobo} kobo, got ${paidKobo}`);
+          return res.sendStatus(200); // ack to prevent Paystack retries; do NOT confirm
+        }
+
         payment.status = "success";
         payment.paidAt = new Date();
         payment.metadata = data;
@@ -82,21 +91,19 @@ export const paystackWebhook = async (req, res) => {
           deliveryCodeUsed: false,
         });
 
-        console.error(`⚠️ Transfer failed for order ${orderId}, ref ${ref}. Reverted to paid/shipped for retry.`);
+        logger.error(`⚠️ Transfer failed for order ${orderId}, ref ${ref}. Reverted to paid/shipped for retry.`);
 
-        const seller = await Seller.findOne({});
-        if (seller) {
-          await Seller.findOneAndUpdate(
-            { "payoutHistory.referenceId": ref },
-            { $set: { "payoutHistory.$.status": "failed" } }
-          );
-        }
+        // Update the matching payout history entry directly (no stray findOne({}) with no filter)
+        await Seller.findOneAndUpdate(
+          { "payoutHistory.referenceId": ref },
+          { $set: { "payoutHistory.$.status": "failed" } }
+        );
       }
     }
 
     return res.sendStatus(200);
   } catch (err) {
-    console.error("Webhook error:", err.message);
+    logger.error("Webhook error:", err.message);
     return res.sendStatus(500);
   }
 };

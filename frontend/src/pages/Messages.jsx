@@ -143,7 +143,7 @@ export default function Messages() {
   const [filter, setFilter]           = useState("All");
   const [showPicker, setShowPicker]   = useState(false);
   const [activeThread, setActiveThread] = useState(
-    withId ? { receiverId: withId, otherUser: { _id: withId, name: decodeURIComponent(withName) } } : null
+    withId ? { receiverId: withId, otherUser: { _id: withId, name: withName } } : null
   );
 
   function loadConvos() {
@@ -363,6 +363,26 @@ export default function Messages() {
   );
 }
 
+// ─── Book at negotiated rate button (buyer / service) ────────────────────────
+function BookAtNegotiatedRateButton({ meta }) {
+  const navigate = useNavigate();
+  const fmt = (n) => "₦" + Number(n).toLocaleString("en-NG");
+  return (
+    <button
+      onClick={() => navigate(`/services/${meta.itemId}`, { state: { negotiationId: meta.negotiationId, negotiatedRate: meta.proposedPrice } })}
+      style={{
+        width: "100%", padding: "9px 0", borderRadius: 8,
+        background: "var(--accent)", color: "#fff",
+        border: "none", cursor: "pointer",
+        fontSize: "1.25rem", fontWeight: 700, fontFamily: "var(--font-sans)",
+        display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+      }}
+    >
+      <i className="fas fa-calendar-check" /> Book at {fmt(meta.proposedPrice)}
+    </button>
+  );
+}
+
 // ─── Negotiation card rendered inside a chat bubble ───────────────────────────
 function NegotiationCard({ msg, iAmSeller, onRespond, onApply }) {
   const meta = msg.meta || {};
@@ -466,7 +486,7 @@ function NegotiationCard({ msg, iAmSeller, onRespond, onApply }) {
         </div>
       )}
 
-      {/* Apply-to-cart button — seller sees this on the response card after accepting */}
+      {/* Apply-to-cart button — seller sees this on the response card after accepting a Product negotiation */}
       {iAmSeller && meta.isResponse && meta.canApply && meta.itemType === "Product" && (
         <div style={{ padding: "10px 12px", borderTop: "1px solid var(--line)" }}>
           <button
@@ -486,6 +506,18 @@ function NegotiationCard({ msg, iAmSeller, onRespond, onApply }) {
               ? <><i className="fas fa-check" /> Price applied to cart</>
               : <><i className="fas fa-cart-plus" /> Apply price to buyer's cart</>}
           </button>
+        </div>
+      )}
+
+      {/* Book-at-negotiated-rate button — buyer sees this on the response card after a Service negotiation is accepted */}
+      {!iAmSeller && meta.isResponse && meta.canApply && meta.itemType === "Service" && !meta._applied && (
+        <div style={{ padding: "10px 12px", borderTop: "1px solid var(--line)" }}>
+          <BookAtNegotiatedRateButton meta={meta} />
+        </div>
+      )}
+      {!iAmSeller && meta.isResponse && meta.itemType === "Service" && meta._applied && (
+        <div style={{ padding: "8px 12px 10px", borderTop: "1px solid var(--line)", fontSize: "1.15rem", color: "#16a34a", display: "flex", alignItems: "center", gap: 5 }}>
+          <i className="fas fa-check-circle" /> Booked at negotiated rate
         </div>
       )}
 

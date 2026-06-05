@@ -1,20 +1,29 @@
 // controllers/bookingController.js
+import mongoose from "mongoose";
 import Booking from "../models/Booking.js";
 import Service from "../models/Service.js";
 import Listing from "../models/Listing.js";
 import Message from "../models/Message.js";
 import User from "../models/User.js";
+import Negotiation from "../models/Negotiation.js";
 import { notify } from "../utils/notify.js";
+import logger from "../utils/logger.js";
 
 // ===============================
 // CREATE BOOKING
 // ===============================
 export const createBooking = async (req, res) => {
   try {
-    const { itemId, itemType, date, timeSlot, notes } = req.body;
+    const { itemId, itemType, date, timeSlot, notes, negotiationId, creditToUse } = req.body;
 
     if (!itemId || !itemType || !date || !timeSlot) {
       return res.status(400).json({ message: "Missing required fields." });
+    }
+
+    // Reject past dates — compare date strings in YYYY-MM-DD format (server local date)
+    const todayStr = new Date().toLocaleDateString("en-CA");
+    if (date < todayStr) {
+      return res.status(400).json({ message: "Booking date cannot be in the past." });
     }
 
     let item, provider, providerModel;
@@ -43,6 +52,42 @@ export const createBooking = async (req, res) => {
       return res.status(409).json({ message: "This time slot is already booked. Please choose a different slot or date." });
     }
 
+    // Resolve negotiated rate for service bookings
+    let negotiatedRate = null;
+    let resolvedNegotiationId = null;
+    if (itemType === "service" && negotiationId) {
+      if (!mongoose.Types.ObjectId.isValid(negotiationId)) {
+        return res.status(400).json({ message: "Invalid negotiation ID." });
+      }
+      const neg = await Negotiation.findById(negotiationId);
+      if (neg && neg.status === "accepted" && neg.buyer.toString() === req.user._id.toString() && neg.item.toString() === item._id.toString()) {
+        negotiatedRate = neg.proposedPrice;
+        resolvedNegotiationId = neg._id;
+        neg.status = "applied";
+        await neg.save();
+        if (neg.messageId) {
+          await Message.findByIdAndUpdate(neg.messageId, { "meta.status": "applied" });
+        }
+      }
+    }
+
+    // ── Referral credit ────────────────────────────────────────────────────────
+    const booker        = await User.findById(req.user._id).select("referralCredit").lean();
+    const available     = booker?.referralCredit || 0;
+    const itemRate      = negotiatedRate ?? item.rate ?? 0;
+    const creditApplied = Math.min(Math.max(0, Number(creditToUse) || 0), available, itemRate);
+    if (creditApplied > 0) {
+      // Atomic deduction with $gte guard — prevents double-spend across concurrent requests
+      const updated = await User.findOneAndUpdate(
+        { _id: req.user._id, referralCredit: { $gte: creditApplied } },
+        { $inc: { referralCredit: -creditApplied } },
+        { new: false }
+      );
+      if (!updated) {
+        return res.status(400).json({ message: "Insufficient referral credit — it may have been used in another request." });
+      }
+    }
+
     let booking;
     try {
       booking = await Booking.create({
@@ -54,6 +99,8 @@ export const createBooking = async (req, res) => {
         date,
         timeSlot,
         notes,
+        creditUsed: creditApplied,
+        ...(negotiatedRate !== null && { negotiatedRate, negotiationId: resolvedNegotiationId }),
       });
     } catch (createErr) {
       // Unique index violation — two requests raced past the findOne check
@@ -65,18 +112,19 @@ export const createBooking = async (req, res) => {
 
     // --- Send confirmation message to service provider ---
     try {
-      const user = await User.findById(req.user._id);
+      const user = await User.findById(req.user._id).lean();
+      if (user) {
       const itemName = item.name || item.title || "Service/Listing";
-      const bookingMessage = `📅 New Booking Request\n\nName: ${user.name}\nEmail: ${user.email}\nService: ${itemName}\nDate: ${date}\nTime: ${timeSlot}\n${notes ? `Notes: ${notes}` : ""}`;
+      const bookingMessage = `📅 New Booking Request\n\nName: ${user.name}\nEmail: ${user.email}\nService: ${itemName}\nDate: ${date}\nTime: ${timeSlot}${negotiatedRate !== null ? `\nAgreed rate: ₦${Number(negotiatedRate).toLocaleString()}` : ""}\n${notes ? `Notes: ${notes}` : ""}`;
 
-      const message = await Message.create({
+      await Message.create({
         sender: req.user._id,
         receiver: provider,
         text: bookingMessage,
       });
-
+      } // end if (user)
     } catch (msgErr) {
-      console.error("⚠️ Error sending booking confirmation message:", msgErr);
+      logger.error("⚠️ Error sending booking confirmation message:", msgErr);
       // Don't fail the booking if message fails
     }
 
@@ -103,7 +151,7 @@ export const createBooking = async (req, res) => {
       booking,
     });
   } catch (error) {
-    console.error("❌ Error creating booking:", error);
+    logger.error("❌ Error creating booking:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -123,7 +171,7 @@ export const getUserBookings = async (req, res) => {
       bookings,
     });
   } catch (error) {
-    console.error("❌ Error fetching user bookings:", error);
+    logger.error("❌ Error fetching user bookings:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -151,7 +199,7 @@ export const getProviderBookings = async (req, res) => {
       bookings,
     });
   } catch (error) {
-    console.error("❌ Error fetching provider bookings:", error);
+    logger.error("❌ Error fetching provider bookings:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -192,7 +240,7 @@ export const acceptBooking = async (req, res) => {
         });
       }
     } catch (msgErr) {
-      console.warn("⚠️ Could not send acceptance notification:", msgErr);
+      logger.warn("⚠️ Could not send acceptance notification:", msgErr);
     }
 
     res.json({
@@ -201,7 +249,7 @@ export const acceptBooking = async (req, res) => {
       booking,
     });
   } catch (error) {
-    console.error("❌ Error accepting booking:", error);
+    logger.error("❌ Error accepting booking:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -242,7 +290,7 @@ export const rejectBooking = async (req, res) => {
         });
       }
     } catch (msgErr) {
-      console.warn("⚠️ Could not send rejection notification:", msgErr);
+      logger.warn("⚠️ Could not send rejection notification:", msgErr);
     }
 
     res.json({
@@ -251,7 +299,7 @@ export const rejectBooking = async (req, res) => {
       booking,
     });
   } catch (error) {
-    console.error("❌ Error rejecting booking:", error);
+    logger.error("❌ Error rejecting booking:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -265,14 +313,17 @@ export const getBookedSlots = async (req, res) => {
     if (!itemId || !date) {
       return res.status(400).json({ message: "itemId and date are required" });
     }
+    if (!mongoose.Types.ObjectId.isValid(itemId)) {
+      return res.status(400).json({ message: "Invalid itemId" });
+    }
     const bookings = await Booking.find({
-      item: itemId,
+      item: new mongoose.Types.ObjectId(itemId),
       date,
       status: { $in: ["pending", "confirmed"] },
     }).select("timeSlot");
     res.json({ bookedSlots: bookings.map((b) => b.timeSlot) });
   } catch (error) {
-    console.error("❌ Error fetching booked slots:", error);
+    logger.error("❌ Error fetching booked slots:", error);
     res.status(500).json({ message: "Server error" });
   }
 };

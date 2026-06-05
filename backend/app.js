@@ -1,4 +1,17 @@
 // app.js
+import * as Sentry from "@sentry/node";
+import logger from "./utils/logger.js";
+
+// Initialise Sentry before anything else so it can instrument the app.
+// Set SENTRY_DSN in your environment to enable it; omit to skip silently.
+if (process.env.SENTRY_DSN) {
+  Sentry.init({
+    dsn:              process.env.SENTRY_DSN,
+    environment:      process.env.NODE_ENV || "development",
+    tracesSampleRate: 0.2, // capture 20% of transactions for performance monitoring
+  });
+}
+
 import express from "express";
 import cors from "cors";
 import helmet from "helmet";
@@ -18,7 +31,7 @@ function _sanitizeDoc(doc) {
   for (const k of Object.keys(doc)) {
     const clean = k.replace(/[$.]/g, "_");
     if (clean !== k && process.env.NODE_ENV !== "production")
-      console.warn(`⚠️  Sanitized key: ${k}`);
+      logger.warn(`⚠️  Sanitized key: ${k}`);
     out[clean] = _sanitizeValue(doc[k]);
   }
   return out;
@@ -122,10 +135,10 @@ app.use(
           allowedOrigins.some(allowed => allowed.replace(/\/$/, '') === normalizedOrigin);
 
         if (isAllowed) {
-          console.log("✅ CORS allowed:", origin);
+          logger.debug("✅ CORS allowed:", origin);
           callback(null, true);
         } else {
-          console.warn("❌ Blocked by CORS:", origin);
+          logger.warn("❌ Blocked by CORS:", origin);
           callback(new Error("Not allowed by CORS"));
         }
       }
@@ -273,7 +286,7 @@ if (hasFrontendBuild) app.use(express.static(STATIC_DIR));
 app.use("/api", (req, res, next) => {
   const state = mongoose.connection.readyState; // 0=disconnected 1=connected 2=connecting
   if (state === 0) {
-    console.warn(`⚠️  [DB guard] DB disconnected on ${req.method} ${req.path}`);
+    logger.warn(`⚠️  [DB guard] DB disconnected on ${req.method} ${req.path}`);
     return res.status(503).json({ message: "Service temporarily unavailable, please retry in a moment" });
   }
   next();
@@ -307,6 +320,23 @@ app.use("/api/reports", reportRoutes);
 app.use("/api/push",   pushRoutes);
 app.use("/api/upload", uploadRoute);
 app.use("/api/negotiations", negotiationRoutes);
+
+// ── Health check ─────────────────────────────────────────────────────────────
+// Used by Render's health-check pings and uptime monitors.
+// Returns DB state so you can tell apart "app running but DB down" from "app down".
+app.get("/api/health", (req, res) => {
+  const dbState = ["disconnected", "connected", "connecting", "disconnecting"];
+  const db = mongoose.connection.readyState;
+  res.status(db === 1 ? 200 : 503).json({
+    status: db === 1 ? "ok" : "degraded",
+    db:     dbState[db] || "unknown",
+    uptime: Math.floor(process.uptime()),
+    ts:     new Date().toISOString(),
+  });
+});
+
+// Sentry must capture errors before the generic error handler
+if (process.env.SENTRY_DSN) Sentry.setupExpressErrorHandler(app);
 
 // 🧯 Centralized error handler
 app.use(errorHandler);

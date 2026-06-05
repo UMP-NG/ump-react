@@ -6,6 +6,21 @@ import { useUser } from "../context/UserContext";
 import { apiFetch } from "../utils/api";
 import { socket } from "../utils/socket";
 
+export function useTheme() {
+  const [dark, setDark] = useState(
+    () => (typeof document !== "undefined"
+      ? document.documentElement.getAttribute("data-theme") === "dark"
+      : false)
+  );
+  function toggle() {
+    const next = dark ? "light" : "dark";
+    document.documentElement.setAttribute("data-theme", next);
+    localStorage.setItem("ump-theme", next);
+    setDark(!dark);
+  }
+  return [dark, toggle];
+}
+
 const NAV_LINKS = [
   { path: "/",         label: "Home" },
   { path: "/market",   label: "Marketplace" },
@@ -19,6 +34,7 @@ export default function Navbar({ frosted = false, dark = false }) {
   const { pathname } = useLocation();
   const { user } = useUser();
   const [showProfile, setShowProfile] = useState(false);
+  const [isDark, toggleTheme] = useTheme();
   const [search, setSearch] = useState("");
   const [mobSearch, setMobSearch] = useState(false);
   const [mobQ, setMobQ] = useState("");
@@ -44,6 +60,13 @@ export default function Navbar({ frosted = false, dark = false }) {
     socket.on("new_notification", onNewNotif);
     return () => socket.off("new_notification", onNewNotif);
   }, [user]);
+
+  // Reset badge when user marks all as read on the Notifications page
+  useEffect(() => {
+    function onAllRead() { setNotifCount(0); }
+    window.addEventListener("notifications:all-read", onAllRead);
+    return () => window.removeEventListener("notifications:all-read", onAllRead);
+  }, []);
   const mobInputRef = useRef(null);
 
   const cls = ["nav", frosted ? "frosted" : "", dark ? "dark" : ""].filter(Boolean).join(" ");
@@ -156,6 +179,16 @@ export default function Navbar({ frosted = false, dark = false }) {
               {/* Mobile search icon */}
               <button className="icon-btn mob-only" onClick={openMobSearch} title="Search">
                 <i className="fas fa-magnifying-glass" />
+              </button>
+
+              {/* Theme toggle — always visible */}
+              <button
+                className="icon-btn"
+                onClick={toggleTheme}
+                title={isDark ? "Switch to light mode" : "Switch to dark mode"}
+                style={{ color: isDark ? "#fbbf24" : "var(--ink-2)" }}
+              >
+                <i className={`fas fa-${isDark ? "sun" : "moon"}`} />
               </button>
 
               {user ? (

@@ -5,6 +5,7 @@ import Cart from "../models/Cart.js";
 import Product from "../models/Product.js";
 import Service from "../models/Service.js";
 import { getIO } from "../utils/socket.js";
+import logger from "../utils/logger.js";
 
 // Normalise image data which may be stored as a string URL or as { url, publicId }
 function extractImage(img) {
@@ -103,7 +104,7 @@ export const createNegotiation = async (req, res) => {
 
     res.status(201).json({ success: true, negotiation, message });
   } catch (err) {
-    console.error("❌ Error creating negotiation:", err);
+    logger.error("❌ Error creating negotiation:", err);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -177,7 +178,7 @@ export const respondToNegotiation = async (req, res) => {
 
     res.json({ success: true, negotiation });
   } catch (err) {
-    console.error("❌ Error responding to negotiation:", err);
+    logger.error("❌ Error responding to negotiation:", err);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -241,7 +242,7 @@ export const applyNegotiatedPrice = async (req, res) => {
 
     res.json({ success: true, message: "Negotiated price applied to buyer's cart" });
   } catch (err) {
-    console.error("❌ Error applying negotiated price:", err);
+    logger.error("❌ Error applying negotiated price:", err);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -260,7 +261,7 @@ export const getMyNegotiations = async (req, res) => {
 
     res.json(negotiations);
   } catch (err) {
-    console.error("❌ Error fetching negotiations:", err);
+    logger.error("❌ Error fetching negotiations:", err);
     res.status(500).json({ message: "Server error" });
   }
 };

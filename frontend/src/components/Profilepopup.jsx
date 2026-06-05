@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useUser } from "../context/UserContext";
 import { apiFetch, clearToken } from "../utils/api";
+import { useTheme } from "./Navbar";
 
 export default function ProfilePopup({ onClose }) {
   const navigate = useNavigate();
@@ -26,6 +27,7 @@ export default function ProfilePopup({ onClose }) {
     { icon: "circle-question",    label: "Help & support",      path: "/help" },
   ];
 
+  const [isDark, toggleTheme] = useTheme();
   const initials = user
     ? (user.name || user.email || "U").split(" ").map((p) => p[0]).join("").slice(0, 2).toUpperCase()
     : "?";
@@ -58,7 +60,7 @@ export default function ProfilePopup({ onClose }) {
   return (
     <>
       <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.4)", zIndex: 70 }} />
-      <div style={{ position: "fixed", top: 70, right: 12, width: 280, background: "#fff", borderRadius: "var(--r-xl)", boxShadow: "var(--shadow-deep)", overflow: "hidden", zIndex: 80, animation: "fadeUp .25s" }}>
+      <div style={{ position: "fixed", top: 70, right: 12, width: 280, background: "var(--paper)", borderRadius: "var(--r-xl)", boxShadow: "var(--shadow-deep)", overflow: "hidden", zIndex: 80, animation: "fadeUp .25s", border: "1px solid var(--line)" }}>
         <div style={{ padding: 16, display: "flex", alignItems: "center", gap: 12, background: "linear-gradient(135deg, var(--navy-800), #1e1b4b)", color: "#fff" }}>
           <div className="avatar" style={{ width: 44, height: 44, overflow: "hidden", padding: avatarUrl && !avatarBroken ? 0 : undefined }}>
               {avatarUrl && !avatarBroken
@@ -81,7 +83,7 @@ export default function ProfilePopup({ onClose }) {
                 width: "100%", padding: "12px 14px", display: "flex", alignItems: "center",
                 gap: 12, border: "none", cursor: "pointer", fontSize: "1.4rem",
                 borderRadius: "var(--r-md)", textAlign: "left",
-                background: it.admin ? "linear-gradient(135deg,#fff7ed,#fff)" : "transparent",
+                background: it.admin ? "rgba(249,115,22,.08)" : "transparent",
                 color: it.admin ? "var(--accent)" : it.accent ? "var(--accent)" : "var(--ink-1)",
                 fontWeight: it.admin || it.accent ? 700 : 500,
               }}
@@ -89,6 +91,35 @@ export default function ProfilePopup({ onClose }) {
               <i className={`fas fa-${it.icon}`} style={{ width: 20, textAlign: "center" }} /> {it.label}
             </button>
           ))}
+          <div style={{ height: 1, background: "var(--line)", margin: "6px 0" }} />
+
+          {/* Dark / Light mode toggle */}
+          <button
+            onClick={toggleTheme}
+            style={{
+              width: "100%", padding: "12px 14px", display: "flex", alignItems: "center", justifyContent: "space-between",
+              gap: 12, border: "none", background: "transparent", cursor: "pointer", fontSize: "1.4rem",
+              borderRadius: "var(--r-md)", color: "var(--ink-1)", fontWeight: 500, textAlign: "left",
+            }}
+          >
+            <span style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <i className={`fas fa-${isDark ? "sun" : "moon"}`} style={{ width: 20, textAlign: "center", color: isDark ? "#fbbf24" : "var(--ink-3)" }} />
+              {isDark ? "Light mode" : "Dark mode"}
+            </span>
+            {/* pill toggle */}
+            <span style={{
+              width: 36, height: 20, borderRadius: 10, flexShrink: 0,
+              background: isDark ? "var(--accent)" : "var(--line)",
+              position: "relative", transition: "background .2s",
+            }}>
+              <span style={{
+                position: "absolute", top: 3, left: isDark ? 18 : 3,
+                width: 14, height: 14, borderRadius: "50%", background: "#fff",
+                transition: "left .2s", boxShadow: "0 1px 3px rgba(0,0,0,.25)",
+              }} />
+            </span>
+          </button>
+
           <div style={{ height: 1, background: "var(--line)", margin: "6px 0" }} />
           <button
             onClick={handleLogout}

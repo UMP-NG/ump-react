@@ -5,6 +5,7 @@ import Footer from "../components/Footer";
 import Ph from "../components/Ph";
 import { getImageUrl, naira } from "../components/ProductCard";
 import { apiFetch } from "../utils/api";
+import { useCart } from "../context/CartContext";
 import Skel from "../components/Skel";
 import ReportModal from "../components/ReportModal";
 import NegotiationModal from "../components/NegotiationModal";
@@ -40,6 +41,7 @@ function Stars({ value, onChange, readonly }) {
 export default function ProductDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { addToCart } = useCart();
   const [product, setProduct]   = useState(null);
   const [tab, setTab]           = useState("description");
   const [showReport, setShowReport] = useState(false);
@@ -77,7 +79,7 @@ export default function ProductDetail() {
         setProduct(p);
         setFollowing(p.seller?.isFollowing || false);
         return Promise.all([
-          apiFetch(`/api/products?limit=6`),
+          apiFetch(`/api/products/${id}/related`).catch(() => apiFetch(`/api/products?limit=6`)),
           apiFetch(`/api/reviews/Product/${id}`).catch(() => ({ reviews: [] })),
         ]);
       })
@@ -160,9 +162,10 @@ export default function ProductDetail() {
   }
 
   async function handleAddToCart() {
+    if (cartLoading) return;
     setCartLoading(true);
     try {
-      await apiFetch("/api/cart/add", { method: "POST", body: { productId: id, quantity: qty } });
+      await addToCart(id, qty);
       navigate("/cart");
     } catch (err) {
       if (err?.status === 401) navigate("/login");
@@ -230,19 +233,19 @@ export default function ProductDetail() {
 
         {/* back / share / heart overlaid on image */}
         <div style={{ position: "absolute", top: 10, left: 10, right: 10, display: "flex", justifyContent: "space-between", zIndex: 5 }}>
-          <button className="icon-btn" style={{ background: "rgba(255,255,255,.92)", border: "none", boxShadow: "0 2px 8px rgba(0,0,0,.12)" }} onClick={() => navigate(-1)}>
+          <button className="icon-btn icon-btn-overlay" onClick={() => navigate(-1)}>
             <i className="fas fa-arrow-left" />
           </button>
           <div style={{ display: "flex", gap: 8 }}>
-            <button className="icon-btn" style={{ background: "rgba(255,255,255,.92)", border: "none", boxShadow: "0 2px 8px rgba(0,0,0,.12)" }} onClick={handleShare}>
+            <button className="icon-btn icon-btn-overlay" onClick={handleShare}>
               <i className="fas fa-share-nodes" />
             </button>
-            <button className="icon-btn" style={{ background: "rgba(255,255,255,.92)", border: "none", boxShadow: "0 2px 8px rgba(0,0,0,.12)", color: wishlisted ? "#ef4444" : undefined }} onClick={handleWishlist} disabled={wishlistLoading}>
+            <button className="icon-btn icon-btn-overlay" style={{ color: wishlisted ? "#ef4444" : undefined }} onClick={handleWishlist} disabled={wishlistLoading}>
               {wishlistLoading
                 ? <i className="fas fa-spinner fa-spin" style={{ fontSize: "1rem" }} />
                 : <i className={wishlisted ? "fas fa-heart" : "far fa-heart"} />}
             </button>
-            <button className="icon-btn" style={{ background: "rgba(255,255,255,.92)", border: "none", boxShadow: "0 2px 8px rgba(0,0,0,.12)", color: "var(--ink-3)" }} onClick={() => setShowReport(true)} title="Report this listing">
+            <button className="icon-btn icon-btn-overlay" style={{ color: "var(--ink-3)" }} onClick={() => setShowReport(true)} title="Report this listing">
               <i className="fas fa-flag" style={{ fontSize: "0.9rem" }} />
             </button>
           </div>

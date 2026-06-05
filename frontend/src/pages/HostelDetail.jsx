@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import Navbar from "../components/Navbar";
+import Navbar, { useTheme } from "../components/Navbar";
 import Footer from "../components/Footer";
 import Ph from "../components/Ph";
 import { naira } from "../components/ProductCard";
@@ -20,6 +20,7 @@ export default function HostelDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const showToast = useToast();
+  const [isDark] = useTheme();
   const [listing, setListing] = useState(null);
   const [related, setRelated] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -71,7 +72,7 @@ export default function HostelDetail() {
 
   if (loading) return (
     <div className="page">
-      <div style={{ position: "sticky", top: 0, zIndex: 50, padding: "12px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", background: "rgba(250,250,247,.85)", backdropFilter: "blur(12px)" }}>
+      <div style={{ position: "sticky", top: 0, zIndex: 50, padding: "12px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", background: isDark ? "rgba(10,18,36,.88)" : "rgba(250,250,247,.85)", backdropFilter: "blur(12px)" }}>
         <Skel w={40} h={40} r={12} />
         <div style={{ display: "flex", gap: 8 }}><Skel w={40} h={40} r={12} /><Skel w={40} h={40} r={12} /></div>
       </div>
@@ -90,11 +91,11 @@ export default function HostelDetail() {
 
   return (
     <div className="page">
-      <div style={{ position: "sticky", top: 0, zIndex: 50, padding: "12px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", background: "rgba(250,250,247,.85)", backdropFilter: "blur(12px)" }}>
-        <button className="icon-btn" style={{ background: "var(--white)", border: "1px solid var(--line)" }} onClick={() => navigate(-1)}><i className="fas fa-arrow-left" /></button>
+      <div style={{ position: "sticky", top: 0, zIndex: 50, padding: "12px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", background: isDark ? "rgba(10,18,36,.88)" : "rgba(250,250,247,.85)", backdropFilter: "blur(12px)" }}>
+        <button className="icon-btn icon-btn-overlay" onClick={() => navigate(-1)}><i className="fas fa-arrow-left" /></button>
         <div style={{ display: "flex", gap: 8 }}>
-          <button className="icon-btn" style={{ background: "var(--white)", border: "1px solid var(--line)" }} onClick={handleShare}><i className="fas fa-share-nodes" /></button>
-          <button className="icon-btn" style={{ background: "var(--white)", border: "1px solid var(--line)" }} onClick={toggleSaved}>
+          <button className="icon-btn icon-btn-overlay" onClick={handleShare}><i className="fas fa-share-nodes" /></button>
+          <button className="icon-btn icon-btn-overlay" onClick={toggleSaved}>
             <i className={`${saved ? "fas" : "far"} fa-heart`} style={{ color: saved ? "#ef4444" : undefined }} />
           </button>
         </div>
@@ -125,7 +126,8 @@ export default function HostelDetail() {
         <div style={{ margin: "12px 16px 0" }}>
           <div style={{ fontSize: "1.2rem", fontWeight: 700, color: "var(--ink-3)", textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 6 }}><i className="fas fa-video" style={{ marginRight: 6, color: "var(--accent)" }} />Video tour</div>
           <video controls playsInline preload="metadata" style={{ width: "100%", borderRadius: "var(--r-xl)", maxHeight: 220, background: "#000" }}>
-              <source src={cloudVideo(listing.videos[0].url)} />
+              {/* type="video/mp4" is required for iOS Safari to recognise the source */}
+              <source src={cloudVideo(listing.videos[0].url)} type="video/mp4" />
             </video>
         </div>
       )}

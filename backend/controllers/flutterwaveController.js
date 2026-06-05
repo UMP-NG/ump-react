@@ -5,6 +5,7 @@ import Order from "../models/Order.js";
 import Seller from "../models/Seller.js";
 import { audit } from "../utils/auditLog.js";
 import { confirmAllOrders } from "../utils/confirmOrders.js";
+import logger from "../utils/logger.js";
 
 const FLW_BASE = "https://api.flutterwave.com/v3";
 
@@ -73,7 +74,7 @@ export const initializeFlwPayment = async (req, res) => {
 
     return res.json({ success: true, payment_link: paymentLink, reference });
   } catch (err) {
-    console.error("💥 Flutterwave init error:", err.response?.data || err.message);
+    logger.error("💥 Flutterwave init error:", err.response?.data || err.message);
     return res.status(500).json({
       success: false,
       message: "Payment initialization failed",
@@ -169,7 +170,7 @@ export const verifyFlwPayment = async (req, res) => {
       orders: orderSummaries,
     });
   } catch (err) {
-    console.error("💥 Flutterwave verify error:", err.response?.data || err.message);
+    logger.error("💥 Flutterwave verify error:", err.response?.data || err.message);
     return res.status(500).json({
       success: false,
       message: "Payment verification failed",
@@ -184,8 +185,11 @@ export const verifyFlwPayment = async (req, res) => {
 export const flutterwaveWebhook = async (req, res) => {
   try {
     const secret = process.env.FLW_WEBHOOK_SECRET;
-    const hash = req.headers["verif-hash"];
-    if (!hash || hash !== secret) {
+    const hash   = req.headers["verif-hash"];
+    // Use constant-time comparison to prevent timing side-channel leaks
+    if (!hash || !secret ||
+        hash.length !== secret.length ||
+        !crypto.timingSafeEqual(Buffer.from(hash), Buffer.from(secret))) {
       return res.status(401).send("Invalid signature");
     }
 
@@ -220,7 +224,7 @@ export const flutterwaveWebhook = async (req, res) => {
 
     res.sendStatus(200);
   } catch (err) {
-    console.error("💥 Flutterwave webhook error:", err);
+    logger.error("💥 Flutterwave webhook error:", err);
     res.sendStatus(500);
   }
 };

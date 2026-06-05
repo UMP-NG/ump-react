@@ -669,11 +669,15 @@ function ListingModal({ listing, onClose, onSave, showToast }) {
           <div style={{ marginBottom: 4 }}>
             <label style={lSty}>Video Tour <span style={{ fontWeight: 400, color: "var(--ink-4)" }}>(optional)</span></label>
             {!videoPreview && listing?.videos?.[0]?.url && (
-              <video src={cloudVideo(listing.videos[0].url)} controls playsInline preload="metadata" style={{ width: "100%", borderRadius: 8, maxHeight: 160, marginBottom: 8 }} />
+              <video controls playsInline preload="metadata" style={{ width: "100%", borderRadius: 8, maxHeight: 160, marginBottom: 8 }}>
+                <source src={cloudVideo(listing.videos[0].url)} type="video/mp4" />
+              </video>
             )}
             {videoPreview ? (
               <div style={{ position: "relative" }}>
-                <video src={videoPreview} controls playsInline preload="metadata" style={{ width: "100%", borderRadius: 8, maxHeight: 160 }} />
+                <video controls playsInline preload="metadata" style={{ width: "100%", borderRadius: 8, maxHeight: 160 }}>
+                  <source src={videoPreview} type={videoFile?.type || "video/mp4"} />
+                </video>
                 <button onClick={() => { setVideoFile(null); setVideoPreview(null); }} style={{ position: "absolute", top: 8, right: 8, background: "#dc2626", color: "#fff", border: "none", borderRadius: "50%", width: 26, height: 26, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1rem" }}>
                   <i className="fas fa-xmark" />
                 </button>
@@ -1079,7 +1083,7 @@ export default function SellerDashboard() {
     ]).then(([dash, prods, ords, pays, unread, bankDets, listingsRes]) => {
       if (!dash && isManual) showToast('Failed to refresh dashboard data', 'error');
       setKpis(dash?.kpis || dash);
-      setProfile(dash?.profile || null);
+      setProfile((prev) => dash?.profile || prev);
       setProductPerformance(dash?.productPerformance || []);
       setProducts(prods.products || prods || []);
       setOrders(ords.orders || ords || []);
@@ -1115,7 +1119,11 @@ export default function SellerDashboard() {
     }).finally(() => { setLoading(false); setRefreshing(false); });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => { if (user?._id) loadDashboard(false); }, [user?._id]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (user === null) { navigate("/login", { replace: true }); return; }
+    if (user && !user.roles?.includes("seller")) { navigate("/partner", { replace: true }); return; }
+    if (user?._id) loadDashboard(false);
+  }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Load banks when Payouts tab opens ───────────────────────────────────────
   useEffect(() => {

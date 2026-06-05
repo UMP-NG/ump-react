@@ -2,19 +2,20 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Ph from "./Ph";
 import { getImageUrl, naira } from "./ProductCard";
-import { apiFetch } from "../utils/api";
 import { useToast } from "../context/ToastContext";
+import { useCart } from "../context/CartContext";
 
 export default function QuickViewModal({ product, onClose }) {
   const navigate = useNavigate();
   const showToast = useToast();
+  const { addToCart } = useCart();
   const allImgs = (product.images || []).map(getImageUrl).filter(Boolean);
   const [activeIdx, setActiveIdx] = useState(0);
   const activeImg = allImgs[activeIdx] || null;
 
   async function handleAddToCart() {
     try {
-      await apiFetch("/api/cart/add", { method: "POST", body: { productId: product._id, quantity: 1 } });
+      await addToCart(product._id);
       showToast("Added to cart!", "success");
     } catch (err) {
       if (err?.status === 401) {

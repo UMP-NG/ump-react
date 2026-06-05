@@ -366,12 +366,13 @@ function ServiceModal({ service, onClose, onSave, showToast }) {
           {videoPreview
             ? <div style={{ position: "relative", borderRadius: "var(--r-md)", overflow: "hidden", background: "#000" }}>
                 <video
-                  src={cloudVideo(videoPreview)}
                   controls
                   playsInline
                   preload="metadata"
                   style={{ width: "100%", maxHeight: 180, display: "block" }}
-                />
+                >
+                  <source src={cloudVideo(videoPreview)} type={videoFile?.type || "video/mp4"} />
+                </video>
                 <button
                   type="button"
                   onClick={() => { setVideoFile(null); setVideoPreview(null); vidInputRef.current && (vidInputRef.current.value = ""); }}
@@ -585,6 +586,12 @@ export default function ProviderAnalytics() {
       }
     }).finally(() => setLoading(false));
   }, []);
+
+  // Role guard — redirect non-providers
+  useEffect(() => {
+    if (user === null) { navigate("/login", { replace: true }); return; }
+    if (user && !user.roles?.includes("service_provider")) { navigate("/provider", { replace: true }); }
+  }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Initialise profile form from user context when user loads
   useEffect(() => {

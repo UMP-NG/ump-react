@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback } from "react";
-import { apiFetch, getToken } from "../utils/api";
+import { apiFetch } from "../utils/api";
 import { socket } from "../utils/socket";
 import { useUser } from "./UserContext";
 
@@ -25,7 +25,6 @@ export function CartProvider({ children }) {
   };
 
   const refreshCart = useCallback(() => {
-    if (!getToken()) { setCartItems(new Map()); return; }
     apiFetch("/api/cart")
       .then((d) => setCartItems(buildMap(d.items || [])))
       .catch(() => setCartItems(new Map()));
@@ -64,9 +63,28 @@ export function CartProvider({ children }) {
     }
   }
 
-  async function addToCart(productId) {
-    await apiFetch("/api/cart/add", { method: "POST", body: { productId, quantity: 1 } });
-    refreshCart();
+  async function addToCart(productId, quantity = 1) {
+    const pid = productId.toString();
+
+    // Optimistic update — reflect the addition immediately so the UI feels instant
+    setCartItems((prev) => {
+      const m = new Map(prev);
+      const existing = m.get(pid);
+      if (existing) {
+        m.set(pid, { ...existing, quantity: existing.quantity + quantity });
+      } else {
+        m.set(pid, { product: productId, quantity, price: 0 });
+      }
+      return m;
+    });
+
+    try {
+      await apiFetch("/api/cart/add", { method: "POST", body: { productId, quantity } });
+      refreshCart(); // background sync to get accurate price / server state
+    } catch (err) {
+      refreshCart(); // revert optimistic update to real server state
+      throw err;
+    }
   }
 
   return (

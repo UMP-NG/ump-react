@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
 import Ph from "../components/Ph";
@@ -39,6 +39,9 @@ import NegotiationModal from "../components/NegotiationModal";
 export default function ServiceDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { state: locationState } = useLocation();
+  const negotiationId = locationState?.negotiationId || null;
+  const negotiatedRate = locationState?.negotiatedRate || null;
   const [service, setService] = useState(null);
   const [loading, setLoading] = useState(true);
   const [bookingOpen, setBookingOpen] = useState(false);
@@ -48,12 +51,16 @@ export default function ServiceDetail() {
   const [bookingLoading, setBookingLoading] = useState(false);
   const [bookedSlots, setBookedSlots] = useState([]);
   const [toast, setToast] = useState(null);
+  const [availableCredit, setAvailableCredit] = useState(0);
+  const [applyCredit, setApplyCredit] = useState(false);
   const [showReport, setShowReport] = useState(false);
   const [negotiateOpen, setNegotiateOpen] = useState(false);
   const [activeImg, setActiveImg] = useState(0);   // must be here — before any early returns
   const toastTimer = useRef(null);
 
-  const today = new Date().toISOString().split("T")[0];
+  // Use local date (not UTC) so users in Nigeria (UTC+1) can't accidentally
+  // select yesterday — toISOString() returns UTC which can be a day behind at night.
+  const today = new Date().toLocaleDateString("en-CA"); // gives YYYY-MM-DD in local tz
 
   function showToast(msg, type = "success") {
     clearTimeout(toastTimer.current);
@@ -67,6 +74,18 @@ export default function ServiceDetail() {
       .catch(() => setService(null))
       .finally(() => setLoading(false));
   }, [id]);
+
+  // Fetch referral credit balance once
+  useEffect(() => {
+    apiFetch("/api/users/me")
+      .then((d) => setAvailableCredit(d?.referralCredit || d?.user?.referralCredit || 0))
+      .catch(() => {});
+  }, []);
+
+  // Auto-open booking modal when arriving from an accepted negotiation
+  useEffect(() => {
+    if (negotiationId && !loading && service) setBookingOpen(true);
+  }, [negotiationId, loading, service]);
 
   useEffect(() => {
     if (!bookingDate || !id) return;
@@ -89,11 +108,14 @@ export default function ServiceDetail() {
     e.preventDefault();
     if (!selectedSlot) { showToast("Please select a time slot", "error"); return; }
     if (!bookingDate) { showToast("Please pick a date", "error"); return; }
+    if (bookingDate < today) { showToast("Please select today or a future date", "error"); return; }
     setBookingLoading(true);
     try {
+      const effectiveRate = negotiatedRate ?? service?.rate ?? 0;
+      const creditToUse = applyCredit ? Math.min(availableCredit, effectiveRate) : 0;
       await apiFetch("/api/bookings", {
         method: "POST",
-        body: { itemId: id, itemType: "service", date: bookingDate, timeSlot: selectedSlot, notes: bookingNotes },
+        body: { itemId: id, itemType: "service", date: bookingDate, timeSlot: selectedSlot, notes: bookingNotes, ...(negotiationId && { negotiationId }), ...(creditToUse > 0 && { creditToUse }) },
       });
       setBookingOpen(false);
       setSelectedSlot(null);
@@ -146,10 +168,10 @@ export default function ServiceDetail() {
         {imgUrl
           ? <img src={imgUrl} alt={service.title || service.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
           : <Ph kind={service.major?.toLowerCase() || "default"} label={service.major || ""} />}
-        <button className="icon-btn" style={{ position: "absolute", top: 12, left: 12, background: "rgba(255,255,255,.85)", backdropFilter: "blur(8px)" }} onClick={() => navigate(-1)}>
+        <button className="icon-btn icon-btn-overlay" style={{ position: "absolute", top: 12, left: 12 }} onClick={() => navigate(-1)}>
           <i className="fa-solid fa-arrow-left" />
         </button>
-        <button className="icon-btn" style={{ position: "absolute", top: 12, right: 12, background: "rgba(255,255,255,.85)", backdropFilter: "blur(8px)" }} onClick={handleShare}>
+        <button className="icon-btn icon-btn-overlay" style={{ position: "absolute", top: 12, right: 12 }} onClick={handleShare}>
           <i className="fa-solid fa-share-nodes" />
         </button>
         {images.length > 1 && (
@@ -177,7 +199,9 @@ export default function ServiceDetail() {
       {/* Video */}
       {service.video?.url && (
         <div style={{ margin: "12px 16px 0", borderRadius: "var(--r-xl)", overflow: "hidden", background: "#000" }}>
-          <video src={cloudVideo(service.video.url)} controls playsInline preload="metadata" style={{ width: "100%", maxHeight: 220, display: "block" }} />
+          <video controls playsInline preload="metadata" style={{ width: "100%", maxHeight: 220, display: "block" }}>
+            <source src={cloudVideo(service.video.url)} type="video/mp4" />
+          </video>
         </div>
       )}
 
@@ -307,11 +331,23 @@ export default function ServiceDetail() {
       )}
 
       {/* Sticky book bar */}
-      <div style={{ position: "fixed", left: 16, right: 16, bottom: 16, background: "var(--white)", border: "1px solid var(--line)", borderRadius: "var(--r-pill)", padding: "10px 16px", display: "flex", alignItems: "center", gap: 10, boxShadow: "var(--shadow-pop)", zIndex: 40 }}>
+      <div style={{ position: "fixed", left: 16, right: 16, bottom: 16, background: "var(--white)", border: `1.5px solid ${negotiatedRate ? "var(--accent)" : "var(--line)"}`, borderRadius: "var(--r-pill)", padding: "10px 16px", display: "flex", alignItems: "center", gap: 10, boxShadow: "var(--shadow-pop)", zIndex: 40 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: "1.8rem", fontWeight: 800, color: price.accent !== false ? "var(--accent)" : "var(--ink-1)" }}>
-            {price.label}<span style={{ fontSize: "1.1rem", color: "var(--ink-3)", fontWeight: 500 }}>{price.sub}</span>
-          </div>
+          {negotiatedRate ? (
+            <div style={{ display: "flex", flexDirection: "column" }}>
+              <div style={{ fontSize: "1.8rem", fontWeight: 800, color: "var(--accent)" }}>
+                ₦{Number(negotiatedRate).toLocaleString()}
+                <span style={{ fontSize: "1rem", color: "var(--ink-3)", fontWeight: 500 }}> negotiated</span>
+              </div>
+              <div style={{ fontSize: "1.05rem", color: "var(--ink-3)", textDecoration: "line-through" }}>
+                {price.label}{price.sub}
+              </div>
+            </div>
+          ) : (
+            <div style={{ fontSize: "1.8rem", fontWeight: 800, color: price.accent !== false ? "var(--accent)" : "var(--ink-1)" }}>
+              {price.label}<span style={{ fontSize: "1.1rem", color: "var(--ink-3)", fontWeight: 500 }}>{price.sub}</span>
+            </div>
+          )}
         </div>
         {service.rate && service.pricingType !== "free" && service.provider && (
           <button
@@ -340,7 +376,15 @@ export default function ServiceDetail() {
           <div onClick={() => setBookingOpen(false)} style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.5)", zIndex: 70 }} />
           <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: "var(--white)", borderRadius: "24px 24px 0 0", padding: "24px 20px 40px", zIndex: 80, maxHeight: "90vh", overflowY: "auto" }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
-              <h3 style={{ margin: 0, fontSize: "1.8rem", fontWeight: 800 }}>Book a session</h3>
+              <div>
+                <h3 style={{ margin: 0, fontSize: "1.8rem", fontWeight: 800 }}>Book a session</h3>
+                {negotiatedRate && (
+                  <div style={{ fontSize: "1.2rem", color: "#16a34a", fontWeight: 600, marginTop: 2 }}>
+                    <i className="fas fa-handshake" style={{ marginRight: 5 }} />
+                    Negotiated rate: ₦{Number(negotiatedRate).toLocaleString()}
+                  </div>
+                )}
+              </div>
               <button className="icon-btn" onClick={() => { setBookingOpen(false); setSelectedSlot(null); setBookingDate(""); }}>
                 <i className="fas fa-xmark" />
               </button>
@@ -390,6 +434,12 @@ export default function ServiceDetail() {
                 onChange={(e) => setBookingNotes(e.target.value)}
                 style={{ marginBottom: 16 }}
               />
+              {availableCredit > 0 && (
+                <label style={{ display: "flex", alignItems: "center", gap: 10, fontSize: "1.3rem", marginBottom: 16, cursor: "pointer" }}>
+                  <input type="checkbox" checked={applyCredit} onChange={(e) => setApplyCredit(e.target.checked)} style={{ width: 18, height: 18 }} />
+                  <span>Apply ₦{Number(Math.min(availableCredit, negotiatedRate ?? service?.rate ?? 0)).toLocaleString()} referral credit</span>
+                </label>
+              )}
               <button className="btn btn-primary btn-block btn-lg" type="submit" disabled={bookingLoading}>
                 {bookingLoading ? <i className="fa-solid fa-spinner fa-spin" /> : "Confirm booking"}
               </button>

@@ -25,6 +25,16 @@ export default function StoreDetail() {
 
   useReveal(".product-card", [seller?.products?.length]);
 
+  function handleShare() {
+    const url  = window.location.href;
+    const name = seller?.storeName || seller?.name || "this store";
+    if (navigator.share) {
+      navigator.share({ title: name, text: `Check out ${name} on UMP`, url }).catch(() => {});
+    } else {
+      navigator.clipboard?.writeText(url).then(() => showToast("Link copied!", "success")).catch(() => {});
+    }
+  }
+
   useEffect(() => {
     apiFetch(`/api/sellers/${id}`)
       .then((d) => {
@@ -106,11 +116,28 @@ export default function StoreDetail() {
       <Navbar />
 
       {/* Banner */}
-      <div style={{ position: "relative", height: 160, background: "linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%)", overflow: "hidden" }}>
+      <div style={{ position: "relative", height: 160, overflow: "hidden",
+        background: banner ? undefined : "linear-gradient(135deg, var(--accent) 0%, #ea580c 40%, #7c2d12 100%)" }}>
         {banner
           ? <img src={banner} alt="banner" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-          : <Ph kind="campus" label="" />}
-        <div style={{ position: "absolute", inset: 0, background: "rgba(15,23,42,.35)" }} />
+          : (
+            <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 8, opacity: 0.35 }}>
+              <i className="fas fa-store" style={{ fontSize: "3.6rem", color: "#fff" }} />
+              <span style={{ fontSize: "1.2rem", fontWeight: 700, color: "#fff", letterSpacing: ".1em", textTransform: "uppercase" }}>
+                {(seller.storeName || seller.name || "Store")[0]}
+              </span>
+            </div>
+          )}
+        <div style={{ position: "absolute", inset: 0, background: "rgba(15,23,42,.25)" }} />
+        {/* Back + Share overlaid on banner */}
+        <div style={{ position: "absolute", top: 12, left: 12, right: 12, display: "flex", justifyContent: "space-between", zIndex: 5 }}>
+          <button className="icon-btn icon-btn-overlay" onClick={() => navigate(-1)}>
+            <i className="fas fa-arrow-left" />
+          </button>
+          <button className="icon-btn icon-btn-overlay" onClick={handleShare}>
+            <i className="fas fa-share-nodes" />
+          </button>
+        </div>
       </div>
 
       {/* Avatar — overlaps bottom of banner */}

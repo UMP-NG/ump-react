@@ -39,6 +39,10 @@
 </head>
   <body>
     <div id="root"></div>
+    <!-- Apply saved theme before React mounts to avoid flash of wrong theme -->
+    <script>
+      (function(){var t=localStorage.getItem('ump-theme');if(t)document.documentElement.setAttribute('data-theme',t);})();
+    </script>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

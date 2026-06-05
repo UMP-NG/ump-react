@@ -1,4 +1,5 @@
 import Wishlist from "../models/Wishlist.js";
+import logger from "../utils/logger.js";
 
 export const getWishlist = async (req, res) => {
   try {
@@ -7,7 +8,7 @@ export const getWishlist = async (req, res) => {
       .populate({ path: "listings", select: "name price location type rate images amenities" });
     res.json({ items: wishlist?.items || [], listings: wishlist?.listings || [] });
   } catch (err) {
-    console.error("❌ Wishlist fetch error:", err);
+    logger.error("❌ Wishlist fetch error:", err);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -34,7 +35,7 @@ export const toggleListing = async (req, res) => {
     await wishlist.save();
     res.status(200).json({ message: "Added to saved", inWishlist: true });
   } catch (err) {
-    console.error("❌ Listing wishlist error:", err);
+    logger.error("❌ Listing wishlist error:", err);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -69,7 +70,7 @@ export const toggleWishlist = async (req, res) => {
 
     res.status(200).json({ message: "Added to wishlist", inWishlist: true });
   } catch (err) {
-    console.error("❌ Wishlist error:", err);
+    logger.error("❌ Wishlist error:", err);
     res.status(500).json({ message: "Server error" });
   }
 };

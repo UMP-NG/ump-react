@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useState, useEffect, useRef } from "react";
+import { useNavigate, useLocation, useSearchParams } from "react-router-dom";
 import Logo from "../components/Logo";
 import { apiFetch, setToken } from "../utils/api";
 import { useUser } from "../context/UserContext";
@@ -11,8 +11,8 @@ const DOMAIN = "@live.unilag.edu.ng";
 function getStrength(pwd) {
   if (!pwd) return 0;
   let s = 0;
-  if (pwd.length >= 6) s++;
-  if (pwd.length >= 10) s++;
+  if (pwd.length >= 8) s++;
+  if (pwd.length >= 12) s++;
   if (/[A-Z]/.test(pwd)) s++;
   if (/[0-9]/.test(pwd)) s++;
   if (/[^A-Za-z0-9]/.test(pwd)) s++;
@@ -46,9 +46,137 @@ function Rule({ ok, text }) {
   );
 }
 
+// Extract a referral code from either a plain code or a pasted referral link
+function extractCode(raw) {
+  const trimmed = raw.trim();
+  if (!trimmed) return "";
+  // Looks like a URL or contains a query param
+  if (trimmed.includes("ref=") || trimmed.startsWith("http")) {
+    try {
+      const url = new URL(trimmed.startsWith("http") ? trimmed : `https://x.com/?${trimmed}`);
+      const ref = url.searchParams.get("ref");
+      if (ref) return ref.toUpperCase();
+    } catch {
+      const m = trimmed.match(/[?&]ref=([^&\s]+)/i);
+      if (m) return m[1].toUpperCase();
+    }
+  }
+  return trimmed.toUpperCase().replace(/[^A-Z0-9-]/g, "");
+}
+
+function ReferralInput({ value, onChange }) {
+  const [raw, setRaw] = useState(value || "");
+  const [status, setStatus] = useState(null); // null | "checking" | "valid" | "invalid"
+  const [referrerName, setReferrerName] = useState("");
+  const timerRef = useRef(null);
+
+  // Keep parent state in sync
+  useEffect(() => {
+    if (value !== raw) { setRaw(value || ""); }
+  }, [value]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function handleChange(e) {
+    const raw = e.target.value;
+    setRaw(raw);
+    const code = extractCode(raw);
+    onChange(code);
+    clearTimeout(timerRef.current);
+    if (!code) { setStatus(null); setReferrerName(""); return; }
+    if (code.length < 6) { setStatus(null); return; }
+    setStatus("checking");
+    timerRef.current = setTimeout(async () => {
+      try {
+        const data = await apiFetch(`/api/auth/referral/${encodeURIComponent(code)}`);
+        setReferrerName(data.name || "");
+        setStatus("valid");
+      } catch {
+        setStatus("invalid");
+        setReferrerName("");
+      }
+    }, 500);
+  }
+
+  const displayCode = extractCode(raw);
+
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <div className="label" style={{ marginBottom: 6 }}>
+        Referral code or link{" "}
+        <span style={{ fontWeight: 400, color: "var(--ink-3)" }}>(optional)</span>
+      </div>
+      <div style={{ position: "relative" }}>
+        <input
+          className="input"
+          placeholder="Paste a code like UMP-A1B2C3D4 or a referral link"
+          value={raw}
+          onChange={handleChange}
+          style={{ paddingRight: status === "checking" ? 40 : 14 }}
+        />
+        {status === "checking" && (
+          <i className="fas fa-spinner fa-spin" style={{ position: "absolute", right: 14, top: "50%", transform: "translateY(-50%)", color: "var(--ink-3)", fontSize: "1.2rem" }} />
+        )}
+      </div>
+      {status === "valid" && displayCode && (
+        <div style={{ marginTop: 6, display: "flex", alignItems: "center", gap: 6, fontSize: "1.2rem", color: "#16a34a" }}>
+          <i className="fas fa-circle-check" />
+          <span>Valid code <strong>{displayCode}</strong>{referrerName ? ` — referred by ${referrerName}` : ""}</span>
+        </div>
+      )}
+      {status === "invalid" && displayCode && (
+        <div style={{ marginTop: 6, display: "flex", alignItems: "center", gap: 6, fontSize: "1.2rem", color: "var(--ink-3)" }}>
+          <i className="fas fa-circle-xmark" />
+          <span>Code not found — you can still sign up without one</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const SCHOOL_MAIL_STEPS = [
+  { n: 1, text: "Go to portal.office.com and click Sign in" },
+  { n: 2, text: "Enter your matric number as your email, e.g. 190401234@live.unilag.edu.ng" },
+  { n: 3, text: "Use the temporary password sent to you by UNILAG (ABS-CITS)" },
+  { n: 4, text: "You'll be asked to change your password and set up recovery options" },
+  { n: 5, text: "Once in, open Outlook — your OTP from UMP will arrive there" },
+];
+
+function SchoolMailGuide() {
+  const [open, setOpen] = useState(false);
+  return (
+    <div style={{ marginTop: 6, marginBottom: 4 }}>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        style={{ background: "none", border: "none", padding: 0, cursor: "pointer", color: "var(--accent)", fontSize: "1.2rem", fontWeight: 600, display: "flex", alignItems: "center", gap: 5 }}
+      >
+        <i className={`fas fa-chevron-${open ? "up" : "down"}`} style={{ fontSize: "0.9rem" }} />
+        How do I get my UNILAG school email?
+      </button>
+      {open && (
+        <div style={{ marginTop: 10, padding: "14px 16px", background: "rgba(249,115,22,.06)", border: "1px solid rgba(249,115,22,.2)", borderRadius: "var(--r-lg)" }}>
+          <div style={{ fontSize: "1.25rem", fontWeight: 700, color: "var(--ink-1)", marginBottom: 10 }}>
+            <i className="fas fa-graduation-cap" style={{ marginRight: 7, color: "var(--accent)" }} />
+            Setting up your UNILAG student email
+          </div>
+          <ol style={{ margin: 0, paddingLeft: 18, display: "flex", flexDirection: "column", gap: 8 }}>
+            {SCHOOL_MAIL_STEPS.map((s) => (
+              <li key={s.n} style={{ fontSize: "1.25rem", color: "var(--ink-2)", lineHeight: 1.5 }}>{s.text}</li>
+            ))}
+          </ol>
+          <div style={{ marginTop: 10, padding: "8px 12px", background: "rgba(249,115,22,.1)", borderRadius: "var(--r-md)", fontSize: "1.15rem", color: "var(--ink-2)" }}>
+            <i className="fas fa-info-circle" style={{ marginRight: 5, color: "var(--accent)" }} />
+            Your matric number is on your UNILAG ID card or admission letter.
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function Login() {
   const navigate = useNavigate();
   const { state: routeState } = useLocation();
+  const [searchParams] = useSearchParams();
   const { setUser } = useUser();
   const [tab, setTab] = useState("signin");
   const [show, setShow] = useState(false);
@@ -57,6 +185,7 @@ export default function Login() {
   const [matric, setMatric] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
+  const [referralCode, setReferralCode] = useState(searchParams.get("ref") || "");
   const [remember, setRemember] = useState(true);
   const [termsAgreed, setTermsAgreed] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -66,7 +195,7 @@ export default function Login() {
   const email = matric.trim() ? `${matric.trim()}${DOMAIN}` : "";
 
   function validatePassword() {
-    if (password.length < 6) return "Password must be at least 6 characters";
+    if (password.length < 8) return "Password must be at least 8 characters";
     if (!/[A-Z]/.test(password)) return "Password must include an uppercase letter";
     if (!/[0-9]/.test(password)) return "Password must include a number";
     if (!/[^A-Za-z0-9]/.test(password)) return "Password must include a special character";
@@ -88,9 +217,13 @@ export default function Login() {
     setLoading(true);
     try {
       const endpoint = tab === "signin" ? "/api/auth/login" : "/api/auth/signup";
-      const body = tab === "signin" ? { email, password } : { name, email, password };
+      const body = tab === "signin" ? { email, password } : { name, email, password, ...(referralCode.trim() && { referralCode: referralCode.trim().toUpperCase() }) };
       const data = await apiFetch(endpoint, { method: "POST", body });
-      if (tab === "signup") { navigate("/auth", { state: { email } }); return; }
+      if (tab === "signup") {
+        try { sessionStorage.setItem("ump_otp_email", email); } catch { /* ignore */ }
+        navigate("/auth", { state: { email } });
+        return;
+      }
       if (data.token) setToken(data.token);
       setUser(data.user || data);
       navigate("/");
@@ -101,11 +234,13 @@ export default function Login() {
     }
   }
 
-  function switchTab(t) { setTab(t); setError(""); setPassword(""); setConfirm(""); setTermsAgreed(false); }
+  function switchTab(t) { setTab(t); setError(""); setPassword(""); setConfirm(""); setTermsAgreed(false); if (t === "signin") setReferralCode(""); }
 
   async function finishGoogleAuth(result) {
     const idToken = await result.user.getIdToken();
-    const data = await apiFetch("/api/auth/google", { method: "POST", body: { idToken } });
+    const body = { idToken };
+    if (referralCode?.trim()) body.referralCode = referralCode.trim().toUpperCase();
+    const data = await apiFetch("/api/auth/google", { method: "POST", body });
     if (data.token) setToken(data.token);
     setUser(data.user || data);
     if (data.user?.isLimitedAccount || data.isLimitedAccount) {
@@ -163,7 +298,7 @@ export default function Login() {
   }
 
   const pwOk = {
-    len: password.length >= 6,
+    len: password.length >= 8,
     upper: /[A-Z]/.test(password),
     num: /[0-9]/.test(password),
     special: /[^A-Za-z0-9]/.test(password),
@@ -258,6 +393,7 @@ export default function Login() {
                 </div>
               </div>
             </div>
+            {tab === "signup" && <SchoolMailGuide />}
 
             {/* Password */}
             <div style={{ marginBottom: 16 }}>
@@ -283,7 +419,7 @@ export default function Login() {
                 <>
                   <StrengthBar pwd={password} />
                   <div style={{ marginTop: 10, padding: "10px 14px", background: "var(--surface)", borderRadius: "var(--r-lg)", display: "flex", flexDirection: "column", gap: 6 }}>
-                    <Rule ok={pwOk.len}     text="At least 6 characters" />
+                    <Rule ok={pwOk.len}     text="At least 8 characters" />
                     <Rule ok={pwOk.upper}   text="One uppercase letter (A–Z)" />
                     <Rule ok={pwOk.num}     text="One number (0–9)" />
                     <Rule ok={pwOk.special} text="One special character (!@#$…)" />
@@ -334,12 +470,12 @@ export default function Login() {
 
             {/* Error / limited-account warning */}
             {error === "__limited__" ? (
-              <div style={{ marginBottom: 16, padding: "14px 16px", background: "#fff7ed", border: "1px solid #fed7aa", borderRadius: "var(--r-md)", fontSize: "1.3rem" }}>
+              <div style={{ marginBottom: 16, padding: "14px 16px", background: "rgba(249,115,22,.08)", border: "1px solid rgba(249,115,22,.3)", borderRadius: "var(--r-md)", fontSize: "1.3rem" }}>
                 <div style={{ display: "flex", gap: 8, alignItems: "flex-start", marginBottom: 10 }}>
-                  <i className="fa-solid fa-triangle-exclamation" style={{ color: "#f97316", marginTop: 2, flexShrink: 0 }} />
+                  <i className="fa-solid fa-triangle-exclamation" style={{ color: "var(--accent)", marginTop: 2, flexShrink: 0 }} />
                   <div>
-                    <div style={{ fontWeight: 700, color: "#9a3412", marginBottom: 4 }}>Limited account</div>
-                    <div style={{ color: "#c2410c", lineHeight: 1.5 }}>
+                    <div style={{ fontWeight: 700, color: "var(--accent)", marginBottom: 4 }}>Limited account</div>
+                    <div style={{ color: "var(--ink-2)", lineHeight: 1.5 }}>
                       You're signed in, but this is not a UNILAG student email. You can <strong>browse and buy</strong> products, but you <strong>cannot sell, list, or offer services</strong> until you link your school email.
                     </div>
                   </div>
@@ -364,11 +500,16 @@ export default function Login() {
                 </div>
               </div>
             ) : error ? (
-              <div style={{ marginBottom: 16, padding: "10px 14px", background: "#fef2f2", color: "#dc2626", borderRadius: "var(--r-md)", fontSize: "1.3rem", display: "flex", alignItems: "center", gap: 8 }}>
+              <div style={{ marginBottom: 16, padding: "10px 14px", background: "rgba(220,38,38,.08)", border: "1px solid rgba(220,38,38,.25)", color: "var(--danger)", borderRadius: "var(--r-md)", fontSize: "1.3rem", display: "flex", alignItems: "center", gap: 8 }}>
                 <i className="fas fa-circle-exclamation" />
                 {error}
               </div>
             ) : null}
+
+            {/* Referral code / link — signup only */}
+            {tab === "signup" && (
+              <ReferralInput value={referralCode} onChange={setReferralCode} />
+            )}
 
             {/* T&C checkbox — signup only */}
             {tab === "signup" && (

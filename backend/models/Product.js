@@ -109,6 +109,10 @@ const productSchema = new mongoose.Schema(
     baths: Number,
     amenities: [String],
     distance: String,
+
+    // Soft-delete: set instead of destroying the document.
+    // Orders referencing this product keep their product snapshot intact.
+    deletedAt: { type: Date, default: null },
   },
   { timestamps: true }
 );
@@ -131,8 +135,18 @@ productSchema.pre("save", function (next) {
   next();
 });
 
-productSchema.index({ seller: 1, createdAt: -1 });           // seller product list + count agg
-productSchema.index({ isFlagged: 1, isRemoved: 1, createdAt: -1 }); // admin product filter
+productSchema.index({ seller: 1, createdAt: -1 });
+productSchema.index({ isFlagged: 1, isRemoved: 1, createdAt: -1 });
+productSchema.index({ deletedAt: 1 });
+
+// Automatically exclude soft-deleted products from all find queries.
+// Admin code that needs to see deleted items should call .setOptions({ includeDeleted: true }).
+productSchema.pre(/^find/, function (next) {
+  if (!this.getOptions().includeDeleted) {
+    this.where({ deletedAt: null });
+  }
+  next();
+});
 
 export default mongoose.model("Product", productSchema);
 

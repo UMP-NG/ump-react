@@ -1,21 +1,26 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import Navbar from "../components/Navbar";
+import Navbar, { useTheme } from "../components/Navbar";
 import Footer from "../components/Footer";
 import Ph from "../components/Ph";
 import { getImageUrl, naira } from "../components/ProductCard";
 import { apiFetch } from "../utils/api";
 import { useToast } from "../context/ToastContext";
+import { useUser } from "../context/UserContext";
 import Skel from "../components/Skel";
 
 export default function Cart() {
   const navigate = useNavigate();
   const showToast = useToast();
+  const { user } = useUser();
   const [step, setStep] = useState(1);
+  const [applyCredit, setApplyCredit] = useState(false);
+  const creditBalance = user?.referralCredit || 0;
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [delivery, setDelivery] = useState({ name: "", phone: "", address: "", landmark: "", notes: "" });
+  const [delivery, setDelivery] = useState({ name: "", phone: "", street: "", building: "", area: "", city: "Lagos", state: "Lagos", landmark: "", notes: "" });
   const [placing, setPlacing] = useState(false);
+  const [isDark] = useTheme();
   const [stepError, setStepError] = useState("");
   const [promoCode, setPromoCode] = useState("");
   const [provider, setProvider] = useState("flutterwave");
@@ -86,8 +91,12 @@ export default function Cart() {
     });
   }, [deliveryMethod, items]);
 
-  const sub = items.reduce((s, i) => s + (i.product?.price || i.price || 0) * (i.quantity || i.qty || 1), 0);
-  const orderTotal = sub; // delivery is paid in cash to the rider — not part of in-app payment
+  const sub = items.reduce((s, i) => {
+    const unitPrice = i.negotiatedPrice || i.product?.price || i.price || 0;
+    return s + unitPrice * (i.quantity || i.qty || 1);
+  }, 0);
+  const creditToApply = applyCredit ? Math.min(creditBalance, sub) : 0;
+  const orderTotal = Math.max(0, sub - creditToApply);
 
   function getProductId(it) {
     return typeof it.product === "object" ? it.product?._id : it.product;
@@ -95,7 +104,11 @@ export default function Cart() {
 
   async function removeItem(itemId, productId) {
     setItems((prev) => prev.filter((i) => (i._id || i.id) !== itemId));
-    try { await apiFetch(`/api/cart/remove/${productId}`, { method: "DELETE" }); } catch { /* ignore */ }
+    try {
+      await apiFetch(`/api/cart/remove/${productId}`, { method: "DELETE" });
+    } catch {
+      apiFetch("/api/cart").then((d) => setItems(d.items || d || [])).catch(() => {});
+    }
   }
 
   async function updateQty(itemId, productId, qty) {
@@ -104,16 +117,27 @@ export default function Cart() {
     try { await apiFetch("/api/cart/update", { method: "PUT", body: { productId, quantity: qty } }); } catch { /* ignore */ }
   }
 
+  function fullAddress() {
+    return [delivery.building, delivery.street, delivery.area, delivery.city, delivery.state]
+      .map((s) => s?.trim()).filter(Boolean).join(", ");
+  }
+
   function validateDelivery() {
-    if (!delivery.name.trim()) return "Please enter your full name";
-    if (!delivery.phone.trim()) return "Please enter your phone number";
-    if (!delivery.address.trim()) return "Please enter your delivery address";
+    if (!delivery.name.trim())   return "Please enter your full name";
+    if (!delivery.phone.trim())  return "Please enter your phone number";
+    if (!delivery.street.trim()) return "Please enter your street address";
+    if (!delivery.area.trim())   return "Please enter your area or neighbourhood";
+    if (!delivery.city.trim())   return "Please enter your city";
     return null;
   }
 
   function goToPayment() {
     const err = validateDelivery();
     if (err) { setStepError(err); return; }
+    if (deliveryMethod === "delivery" && bbxFee === 0) {
+      setStepError("Please select your delivery area above to see the dispatch rate before continuing.");
+      return;
+    }
     setStepError("");
     setShowDeliveryConfirm(true);
   }
@@ -127,15 +151,21 @@ export default function Cart() {
         body: {
           paymentMethod: provider,
           shippingAddress: {
-            name: delivery.name,
-            phone: delivery.phone,
-            address: delivery.address,
+            name:     delivery.name,
+            phone:    delivery.phone,
+            address:  fullAddress(),
+            building: delivery.building,
+            street:   delivery.street,
+            area:     delivery.area,
+            city:     delivery.city,
+            state:    delivery.state,
             landmark: delivery.landmark,
           },
           notes: delivery.notes,
           deliveryMethod,
           blackboxFee: deliveryMethod === "delivery" ? bbxFee : 0,
           dropoffArea: bbxDropoffArea || "",
+          creditToUse: creditToApply,
         },
       });
       const createdOrders = orderRes.orders || (orderRes.order ? [orderRes.order] : [orderRes]);
@@ -230,16 +260,23 @@ export default function Cart() {
                           </div>
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ fontSize: "1.3rem", fontWeight: 600, lineHeight: 1.3 }}>{p.name}</div>
-                            <div style={{ fontSize: "1.5rem", fontWeight: 700, marginTop: 6, color: "var(--accent)" }}>{naira(p.price)}</div>
+                            <div style={{ fontSize: "1.5rem", fontWeight: 700, marginTop: 6, color: "var(--accent)" }}>
+                            {it.negotiatedPrice ? (
+                              <>
+                                {naira(it.negotiatedPrice)}
+                                <span style={{ fontSize: "1.1rem", fontWeight: 400, color: "var(--ink-3)", textDecoration: "line-through", marginLeft: 6 }}>{naira(p.price)}</span>
+                              </>
+                            ) : naira(p.price)}
+                          </div>
                           </div>
                           <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8 }}>
                             <button className="icon-btn" style={{ color: "var(--ink-3)", width: 28, height: 28 }} onClick={() => removeItem(itemId, productId)}>
                               <i className="far fa-trash-can" />
                             </button>
                             <div style={{ display: "flex", alignItems: "center", gap: 4, padding: 4, background: "var(--surface)", borderRadius: "var(--r-pill)" }}>
-                              <button className="icon-btn" style={{ width: 24, height: 24, background: "#fff", fontSize: "1rem" }} onClick={() => updateQty(itemId, productId, qty - 1)}><i className="fas fa-minus" /></button>
+                              <button className="icon-btn" style={{ width: 24, height: 24, background: "var(--white)", fontSize: "1rem" }} onClick={() => updateQty(itemId, productId, qty - 1)}><i className="fas fa-minus" /></button>
                               <span style={{ width: 18, textAlign: "center", fontWeight: 700, fontSize: "1.2rem" }}>{qty}</span>
-                              <button className="icon-btn" style={{ width: 24, height: 24, background: "#fff", fontSize: "1rem" }} onClick={() => updateQty(itemId, productId, qty + 1)}><i className="fas fa-plus" /></button>
+                              <button className="icon-btn" style={{ width: 24, height: 24, background: "var(--white)", fontSize: "1rem" }} onClick={() => updateQty(itemId, productId, qty + 1)}><i className="fas fa-plus" /></button>
                             </div>
                           </div>
                         </div>
@@ -247,19 +284,17 @@ export default function Cart() {
                     })}
                   </div>
 
-                  {/* Promo code */}
-                  <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+                  {/* Promo code — coming soon */}
+                  <div style={{ display: "flex", gap: 8, marginBottom: 12, opacity: 0.55 }}>
                     <input
                       className="input"
-                      placeholder="Promo / coupon code"
+                      placeholder="Promo / coupon code (coming soon)"
                       value={promoCode}
                       onChange={(e) => setPromoCode(e.target.value)}
                       style={{ flex: 1 }}
+                      disabled
                     />
-                    <button
-                      className="btn btn-ghost"
-                      onClick={() => showToast("Promo codes coming soon!", "info")}
-                    >Apply</button>
+                    <button className="btn btn-ghost" disabled>Apply</button>
                   </div>
 
                   {/* Order total — hidden on desktop (sidebar shows it) */}
@@ -286,6 +321,27 @@ export default function Cart() {
                     </div>
                   </div>
 
+                  {/* Referral credit toggle */}
+                  {creditBalance > 0 && (
+                    <div
+                      onClick={() => setApplyCredit((v) => !v)}
+                      style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 14px", marginBottom: 12, borderRadius: "var(--r-md)", border: `1.5px solid ${applyCredit ? "var(--accent)" : "var(--line)"}`, background: applyCredit ? "rgba(249,115,22,.06)" : "var(--surface)", cursor: "pointer", userSelect: "none" }}
+                    >
+                      <i className="fas fa-wallet" style={{ color: applyCredit ? "var(--accent)" : "var(--ink-3)", fontSize: "1.4rem", flexShrink: 0 }} />
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: 700, fontSize: "1.3rem", color: applyCredit ? "var(--accent)" : "var(--ink-1)" }}>
+                          Use referral credit — {naira(creditBalance)} available
+                        </div>
+                        <div style={{ fontSize: "1.15rem", color: "var(--ink-3)", marginTop: 1 }}>
+                          {applyCredit ? `Saving ${naira(creditToApply)} on this order` : "Tap to apply to this order"}
+                        </div>
+                      </div>
+                      <span style={{ width: 36, height: 20, borderRadius: 10, flexShrink: 0, background: applyCredit ? "var(--accent)" : "var(--line)", position: "relative", transition: "background .2s" }}>
+                        <span style={{ position: "absolute", top: 3, left: applyCredit ? 18 : 3, width: 14, height: 14, borderRadius: "50%", background: "#fff", transition: "left .2s", boxShadow: "0 1px 3px rgba(0,0,0,.2)" }} />
+                      </span>
+                    </div>
+                  )}
+
                   <button className="btn btn-primary btn-block btn-lg" style={{ borderRadius: "var(--r-pill)", marginBottom: 24 }} onClick={() => setStep(2)}>
                     Proceed to delivery <i className="fas fa-arrow-right" />
                   </button>
@@ -304,11 +360,28 @@ export default function Cart() {
                 <div className="label">Phone number *</div>
                 <input className="input" value={delivery.phone} onChange={(e) => setDelivery({ ...delivery, phone: e.target.value })} placeholder="+234 813 555 7724" />
                 <div style={{ height: 12 }} />
-                <div className="label">Delivery address *</div>
-                <textarea className="textarea" value={delivery.address} onChange={(e) => setDelivery({ ...delivery, address: e.target.value })} placeholder="Moremi Hall, Block C, Room 214, UNILAG" />
+                <div className="label">Street address *</div>
+                <input className="input" value={delivery.street} onChange={(e) => setDelivery({ ...delivery, street: e.target.value })} placeholder="12 Herbert Macaulay Way" />
+                <div style={{ height: 12 }} />
+                <div className="label">Building / Floor / Room (optional)</div>
+                <input className="input" value={delivery.building} onChange={(e) => setDelivery({ ...delivery, building: e.target.value })} placeholder="Moremi Hall, Block C, Room 214" />
+                <div style={{ height: 12 }} />
+                <div className="label">Area / Neighbourhood *</div>
+                <input className="input" value={delivery.area} onChange={(e) => setDelivery({ ...delivery, area: e.target.value })} placeholder="Akoka, Yaba" />
+                <div style={{ height: 12 }} />
+                <div style={{ display: "flex", gap: 10 }}>
+                  <div style={{ flex: 1 }}>
+                    <div className="label">City *</div>
+                    <input className="input" value={delivery.city} onChange={(e) => setDelivery({ ...delivery, city: e.target.value })} placeholder="Lagos" />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div className="label">State</div>
+                    <input className="input" value={delivery.state} onChange={(e) => setDelivery({ ...delivery, state: e.target.value })} placeholder="Lagos" />
+                  </div>
+                </div>
                 <div style={{ height: 12 }} />
                 <div className="label">Landmark (optional)</div>
-                <input className="input" value={delivery.landmark} onChange={(e) => setDelivery({ ...delivery, landmark: e.target.value })} placeholder="Near 1004 quarters" />
+                <input className="input" value={delivery.landmark} onChange={(e) => setDelivery({ ...delivery, landmark: e.target.value })} placeholder="Near 1004 Estate gate" />
                 <div style={{ height: 12 }} />
                 <div className="label">Delivery note (optional)</div>
                 <textarea className="textarea" value={delivery.notes} onChange={(e) => setDelivery({ ...delivery, notes: e.target.value })} placeholder="Leave at the gate, call on arrival, etc." />
@@ -359,8 +432,8 @@ export default function Cart() {
                 {/* Delivery notice */}
                 {deliveryMethod === "delivery" && (
                   <div style={{ marginTop: 12, padding: "12px 14px", background: "rgba(245,158,11,.09)", border: "1px solid rgba(245,158,11,.35)", borderRadius: "var(--r-md)", display: "flex", gap: 10, alignItems: "flex-start" }}>
-                    <i className="fas fa-motorcycle" style={{ color: "#d97706", flexShrink: 0, marginTop: 2 }} />
-                    <div style={{ fontSize: "1.2rem", color: "#92400e", lineHeight: 1.55 }}>
+                    <i className="fas fa-motorcycle" style={{ color: "#f59e0b", flexShrink: 0, marginTop: 2 }} />
+                    <div style={{ fontSize: "1.2rem", color: "var(--ink-2)", lineHeight: 1.55 }}>
                       The delivery fee is <strong>paid directly to the dispatch rider via transfer</strong> — it is <strong>not</strong> included in your UMP payment.
                     </div>
                   </div>
@@ -373,7 +446,7 @@ export default function Cart() {
                       ref={bbxRef}
                       id="blackbox-delivery"
                       data-pickup-area="Yaba"
-                      data-theme="light"
+                      data-theme={isDark ? "dark" : "light"}
                       data-show-express="true"
                     />
                     {bbxFee > 0 && (
@@ -416,7 +489,7 @@ export default function Cart() {
               <div className="card" style={{ padding: "12px 16px", marginBottom: 12, fontSize: "1.2rem", color: "var(--ink-2)" }}>
                 <div style={{ fontWeight: 700, marginBottom: 4, fontSize: "1.3rem" }}>Delivering to</div>
                 <div>{delivery.name} · {delivery.phone}</div>
-                <div style={{ color: "var(--ink-3)", marginTop: 2 }}>{delivery.address}{delivery.landmark ? ` · ${delivery.landmark}` : ""}</div>
+                <div style={{ color: "var(--ink-3)", marginTop: 2 }}>{fullAddress()}{delivery.landmark ? ` · ${delivery.landmark}` : ""}</div>
               </div>
 
               {/* Payment provider selection */}
@@ -531,7 +604,7 @@ export default function Cart() {
                       <div style={{ fontSize: "1.2rem", fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</div>
                       <div style={{ fontSize: "1.1rem", color: "var(--ink-3)" }}>× {qty}</div>
                     </div>
-                    <div style={{ fontSize: "1.2rem", fontWeight: 700, flexShrink: 0 }}>{naira((p.price || 0) * qty)}</div>
+                    <div style={{ fontSize: "1.2rem", fontWeight: 700, flexShrink: 0 }}>{naira((it.negotiatedPrice || p.price || 0) * qty)}</div>
                   </div>
                 );
               })}
@@ -542,16 +615,22 @@ export default function Cart() {
                   <span style={{ color: "#f59e0b" }}>{naira(bbxFee)}</span>
                 </div>
               )}
+              {creditToApply > 0 && (
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "1.3rem", marginBottom: 4 }}>
+                  <span style={{ color: "var(--accent)" }}><i className="fas fa-wallet" style={{ marginRight: 5 }} />Credit applied</span>
+                  <span style={{ color: "var(--accent)", fontWeight: 700 }}>−{naira(creditToApply)}</span>
+                </div>
+              )}
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <span style={{ fontSize: "1.4rem", fontWeight: 700 }}>Total</span>
                 <span style={{ fontSize: "2rem", fontWeight: 800, color: "var(--accent)" }}>{naira(orderTotal)}</span>
               </div>
-              {delivery.address && (
+              {delivery.street && (
                 <>
                   <div style={{ height: 1, background: "var(--line)", margin: "10px 0" }} />
                   <div style={{ fontSize: "1.1rem", color: "var(--ink-3)", fontWeight: 600, marginBottom: 4 }}>DELIVERING TO</div>
                   <div style={{ fontSize: "1.2rem", fontWeight: 600 }}>{delivery.name}</div>
-                  <div style={{ fontSize: "1.1rem", color: "var(--ink-3)", marginTop: 2 }}>{delivery.address}</div>
+                  <div style={{ fontSize: "1.1rem", color: "var(--ink-3)", marginTop: 2 }}>{fullAddress()}</div>
                 </>
               )}
             </div>
@@ -601,11 +680,13 @@ export default function Cart() {
             {/* Detail rows */}
             <div style={{ background: "var(--surface)", borderRadius: "var(--r-md)", overflow: "hidden", marginBottom: 18 }}>
               {[
-                { icon: "user", label: "Name", value: delivery.name },
-                { icon: "phone", label: "Phone", value: delivery.phone },
-                { icon: "location-dot", label: "Address", value: delivery.address },
+                { icon: "user",         label: "Name",     value: delivery.name },
+                { icon: "phone",        label: "Phone",    value: delivery.phone },
+                { icon: "road",         label: "Street",   value: delivery.street },
+                delivery.building && { icon: "building", label: "Building", value: delivery.building },
+                { icon: "location-dot", label: "Area",     value: [delivery.area, delivery.city, delivery.state].filter(Boolean).join(", ") },
                 delivery.landmark && { icon: "signs-post", label: "Landmark", value: delivery.landmark },
-                delivery.notes && { icon: "note-sticky", label: "Note", value: delivery.notes },
+                delivery.notes && { icon: "note-sticky",   label: "Note",     value: delivery.notes },
               ].filter(Boolean).map((row, i, arr) => (
                 <div key={row.label} style={{
                   display: "flex", alignItems: "flex-start", gap: 12,
@@ -683,7 +764,7 @@ function MobileOrderSummary({ items, sub, deliveryFeeTotal, orderTotal }) {
 
       {/* Expandable item list */}
       {open && (
-        <div style={{ background: "var(--card, #fff)", border: "1px solid var(--line)", borderTop: "none", borderRadius: "0 0 var(--r-lg) var(--r-lg)", padding: "12px 16px", display: "flex", flexDirection: "column", gap: 10 }}>
+        <div style={{ background: "var(--white)", border: "1px solid var(--line)", borderTop: "none", borderRadius: "0 0 var(--r-lg) var(--r-lg)", padding: "12px 16px", display: "flex", flexDirection: "column", gap: 10 }}>
           {items.map((it) => {
             const p = it.product || it;
             const qty = it.quantity || it.qty || 1;

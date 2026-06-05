@@ -253,7 +253,7 @@ export default function Provider() {
                     {" "}and{" "}
                     <span
                       style={{ color: "var(--accent)", fontWeight: 700, cursor: "pointer" }}
-                      onClick={(e) => { e.preventDefault(); navigate("/terms#seller-terms"); }}
+                      onClick={(e) => { e.preventDefault(); navigate("/terms"); }}
                     >
                       Seller & Service Provider Policy
                     </span>

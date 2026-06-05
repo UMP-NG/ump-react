@@ -107,20 +107,26 @@ export default function Search() {
             <span className="more" style={{ cursor: "pointer" }} onClick={() => navigate(`/services?search=${encodeURIComponent(q)}`)}>See all</span>
           </div>
           <div style={{ padding: "0 16px", display: "flex", flexDirection: "column", gap: 10 }}>
-            {services.map((s) => (
-              <div key={s._id} className="card" style={{ padding: 16, display: "flex", gap: 12, alignItems: "center", cursor: "pointer" }} onClick={() => navigate(`/services/${s._id}`)}>
-                <div style={{ width: 52, height: 52, borderRadius: "var(--r-md)", overflow: "hidden", flexShrink: 0, background: "var(--surface)" }}>
-                  <Ph kind="services" />
+            {services.map((s) => {
+              const sImg = s.images?.[0]?.url || null;
+              return (
+                <div key={s._id} className="card" style={{ padding: 14, display: "flex", gap: 12, alignItems: "center", cursor: "pointer" }} onClick={() => navigate(`/services/${s._id}`)}>
+                  <div style={{ width: 56, height: 56, borderRadius: "var(--r-md)", overflow: "hidden", flexShrink: 0, background: "var(--surface)" }}>
+                    {sImg ? <img src={sImg} alt={s.title || s.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <Ph kind="services" />}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 700, fontSize: "1.4rem", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.title || s.name}</div>
+                    <div style={{ fontSize: "1.2rem", color: "var(--ink-3)", marginTop: 2 }}>
+                      {s.major || s.category || ""}
+                      {s.rating > 0 && <span style={{ marginLeft: 8 }}><i className="fas fa-star" style={{ color: "#f59e0b", fontSize: "1rem" }} /> {s.rating.toFixed(1)}</span>}
+                    </div>
+                  </div>
+                  <div style={{ fontWeight: 700, color: "var(--accent)", fontSize: "1.4rem", flexShrink: 0, textAlign: "right" }}>
+                    {s.rate ? `₦${Number(s.rate).toLocaleString("en-NG")}` : <span style={{ color: "var(--ink-4)", fontSize: "1.2rem" }}>Free</span>}
+                  </div>
                 </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 700, fontSize: "1.4rem", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.title || s.name}</div>
-                  <div style={{ fontSize: "1.2rem", color: "var(--ink-3)" }}>{s.category}</div>
-                </div>
-                <div style={{ fontWeight: 700, color: "var(--accent)", fontSize: "1.4rem", flexShrink: 0 }}>
-                  {s.rate ? `₦${Number(s.rate).toLocaleString("en-NG")}` : ""}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </>
       )}
@@ -157,21 +163,44 @@ export default function Search() {
             <h2>Hostels <span style={{ color: "var(--ink-3)", fontWeight: 400, fontSize: "1.4rem" }}>({hostels.length})</span></h2>
             <span className="more" style={{ cursor: "pointer" }} onClick={() => navigate(`/hostel?search=${encodeURIComponent(q)}`)}>See all</span>
           </div>
-          <div style={{ padding: "0 16px 24px", display: "flex", flexDirection: "column", gap: 10 }}>
-            {hostels.map((h) => (
-              <div key={h._id} className="card" style={{ padding: 14, display: "flex", gap: 12, alignItems: "center", cursor: "pointer" }} onClick={() => navigate(`/hostel/${h._id}`)}>
-                <div style={{ width: 64, height: 64, borderRadius: "var(--r-md)", overflow: "hidden", flexShrink: 0, background: "var(--surface)" }}>
-                  <Ph kind="hostel-1" label="" />
+          <div style={{ padding: "0 16px 24px", display: "flex", flexDirection: "column", gap: 12 }}>
+            {hostels.map((h) => {
+              const hImg = h.images?.[0]?.url || null;
+              return (
+                <div key={h._id} className="card" style={{ overflow: "hidden", cursor: "pointer" }} onClick={() => navigate(`/hostel/${h._id}`)}>
+                  {/* Image */}
+                  <div style={{ height: 140, background: "var(--surface)", position: "relative", flexShrink: 0 }}>
+                    {hImg
+                      ? <img src={hImg} alt={h.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                      : <Ph kind="hostel-1" label="" />}
+                    {h.type && (
+                      <span style={{ position: "absolute", top: 10, left: 10, background: "var(--navy-800)", color: "#fff", fontSize: "1.1rem", fontWeight: 700, padding: "3px 10px", borderRadius: 20 }}>{h.type}</span>
+                    )}
+                    {h.available === false && (
+                      <span style={{ position: "absolute", top: 10, right: 10, background: "#6b7280", color: "#fff", fontSize: "1.1rem", fontWeight: 700, padding: "3px 10px", borderRadius: 20 }}>Unavailable</span>
+                    )}
+                  </div>
+                  {/* Details */}
+                  <div style={{ padding: "12px 14px" }}>
+                    <div style={{ fontWeight: 700, fontSize: "1.5rem", marginBottom: 4, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{h.name}</div>
+                    <div style={{ fontSize: "1.2rem", color: "var(--ink-3)", marginBottom: 8 }}>
+                      <i className="fas fa-location-dot" style={{ marginRight: 4 }} />{h.location}
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 6 }}>
+                      <div style={{ display: "flex", gap: 12, fontSize: "1.2rem", color: "var(--ink-3)" }}>
+                        {h.beds > 0 && <span><i className="fas fa-bed" style={{ marginRight: 4 }} />{h.beds} bed{h.beds !== 1 ? "s" : ""}</span>}
+                        {h.baths > 0 && <span><i className="fas fa-shower" style={{ marginRight: 4 }} />{h.baths} bath{h.baths !== 1 ? "s" : ""}</span>}
+                        {h.distance && <span><i className="fas fa-route" style={{ marginRight: 4 }} />{h.distance}</span>}
+                      </div>
+                      <div style={{ fontWeight: 800, color: "var(--accent)", fontSize: "1.5rem" }}>
+                        {h.price ? `₦${Number(h.price).toLocaleString("en-NG")}` : ""}
+                        {h.rate && <span style={{ fontSize: "1.1rem", fontWeight: 500, color: "var(--ink-3)", marginLeft: 3 }}>{h.rate}</span>}
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 700, fontSize: "1.4rem", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{h.title}</div>
-                  <div style={{ fontSize: "1.2rem", color: "var(--ink-3)" }}><i className="fas fa-location-dot" /> {h.location || h.address}</div>
-                </div>
-                <div style={{ fontWeight: 700, color: "var(--accent)", fontSize: "1.4rem", flexShrink: 0 }}>
-                  {h.price ? `₦${Number(h.price).toLocaleString("en-NG")}` : ""}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </>
       )}

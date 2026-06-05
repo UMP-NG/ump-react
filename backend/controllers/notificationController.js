@@ -1,5 +1,6 @@
 import Notification from "../models/Notification.js";
 import User from "../models/User.js";
+import logger from "../utils/logger.js";
 
 // ✅ Get notification preferences
 export const getNotificationPreferences = async (req, res) => {
@@ -14,7 +15,7 @@ export const getNotificationPreferences = async (req, res) => {
 
     res.json({ preferences: user.notificationPreferences || {} });
   } catch (err) {
-    console.error("❌ Error loading notification preferences:", err);
+    logger.error("❌ Error loading notification preferences:", err);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -38,7 +39,7 @@ export const updateNotificationPreferences = async (req, res) => {
 
     res.json({ message: "Notification preference updated successfully" });
   } catch (err) {
-    console.error("❌ Error updating notification preferences:", err);
+    logger.error("❌ Error updating notification preferences:", err);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -53,7 +54,7 @@ export const getNotifications = async (req, res) => {
       .lean();
     res.json({ notifications: notifs });
   } catch (err) {
-    console.error(err);
+    logger.error(err);
     res.status(500).json({ message: err.message });
   }
 };
@@ -69,7 +70,7 @@ export const markNotificationRead = async (req, res) => {
     );
     res.json({ success: true });
   } catch (err) {
-    console.error(err);
+    logger.error(err);
     res.status(500).json({ message: err.message });
   }
 };
@@ -83,7 +84,7 @@ export const markAllNotificationsRead = async (req, res) => {
     );
     res.json({ success: true });
   } catch (err) {
-    console.error(err);
+    logger.error(err);
     res.status(500).json({ message: err.message });
   }
 };

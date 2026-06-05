@@ -5,6 +5,8 @@ import Order from "../models/Order.js";
 import Product from "../models/Product.js";
 import Seller from "../models/Seller.js";
 import Cart from "../models/Cart.js";
+import User from "../models/User.js";
+import Negotiation from "../models/Negotiation.js";
 import path from "path";
 import { fileURLToPath } from "url";
 import PDFDocument from "pdfkit";
@@ -12,10 +14,11 @@ import cloudinary from "../config/cloudinary.js";
 import axios from "axios";
 import { audit } from "../utils/auditLog.js";
 import { notify } from "../utils/notify.js";
+import logger from "../utils/logger.js";
 
 // Fix #6: use cryptographically secure random bytes instead of Math.random()
 function generateDeliveryCode() {
-  return crypto.randomBytes(3).toString("hex").toUpperCase(); // 3 bytes = 6 hex chars
+  return crypto.randomBytes(5).toString("hex").toUpperCase(); // 5 bytes = 10 hex chars ≈ 10^12 combinations
 }
 
 const __filename = fileURLToPath(import.meta.url);
@@ -79,7 +82,7 @@ export const createOrder = async (req, res) => {
 
     res.status(201).json({ success: true, order });
   } catch (error) {
-    console.error("Error creating order:", error);
+    logger.error("Error creating order:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -104,7 +107,7 @@ export const checkoutCart = async (req, res) => {
       return res.status(400).json({ message: "Cart is empty" });
     }
 
-    let { paymentMethod, shippingAddress, deliveryMethod, blackboxFee, dropoffArea } = req.body;
+    let { paymentMethod, shippingAddress, deliveryMethod, blackboxFee, dropoffArea, creditToUse } = req.body;
     deliveryMethod = deliveryMethod === "delivery" ? "delivery" : "pickup";
     blackboxFee = deliveryMethod === "delivery" ? Math.max(0, Number(blackboxFee) || 0) : 0;
     if (deliveryMethod === "delivery" && blackboxFee === 0) {
@@ -143,29 +146,61 @@ export const checkoutCart = async (req, res) => {
     if (sellerGroups.size === 0)
       return res.status(400).json({ message: "No valid items to order" });
 
+    // ── Referral credit deduction ─────────────────────────────────────────────
+    const buyer      = await User.findById(userId).select("referralCredit").lean();
+    const available  = buyer?.referralCredit || 0;
+    // Use negotiatedPrice if set (server-stored when negotiation was accepted), else canonical product price
+    const cartTotal  = [...sellerGroups.values()].flat().reduce(
+      (s, i) => s + (i.negotiatedPrice ?? i.product.price) * (i.quantity || 1), 0
+    );
+    const creditApplied = Math.min(Math.max(0, Number(creditToUse) || 0), available, cartTotal);
+    let creditRemaining = creditApplied;
+
+    if (creditApplied > 0) {
+      // Atomic deduction with $gte guard — prevents double-spend in concurrent requests
+      const updated = await User.findOneAndUpdate(
+        { _id: userId, referralCredit: { $gte: creditApplied } },
+        { $inc: { referralCredit: -creditApplied } },
+        { new: false }
+      );
+      if (!updated) {
+        return res.status(400).json({ message: "Insufficient referral credit — it may have been used in another request." });
+      }
+    }
+
     const createdOrders = [];
     let isFirstOrder = true;
     for (const [sid, sellerItems] of sellerGroups) {
       const orderItems = sellerItems.map((i) => ({
-        product: i.product._id,
-        quantity: i.quantity,
-        price: i.product.price,
-        variant: i.variant || {},
+        product:         i.product._id,
+        quantity:        i.quantity,
+        // Use server-stored negotiatedPrice if present (set when buyer's negotiation was accepted)
+        price:           i.negotiatedPrice ?? i.product.price,
+        negotiatedPrice: i.negotiatedPrice || undefined,
+        negotiationId:   i.negotiationId   || undefined,
+        variant:         i.variant || {},
       }));
 
       const subtotal = orderItems.reduce((s, i) => s + i.price * i.quantity, 0);
-      // Delivery fee is always 0 — buyer pays the rider directly in cash, not through UMP
+      // Distribute credit proportionally; last order gets the remainder
+      const isLastOrder = createdOrders.length === sellerGroups.size - 1;
+      const orderCredit = isLastOrder
+        ? creditRemaining
+        : Math.min(Math.round((subtotal / cartTotal) * creditApplied), creditRemaining);
+      creditRemaining -= orderCredit;
+
       const order = new Order({
         buyer: userId,
         seller: new mongoose.Types.ObjectId(sid),
         items: orderItems,
         subtotal,
         deliveryFee: 0,
-        totalAmount: subtotal,
+        totalAmount: Math.max(0, subtotal - orderCredit),
+        creditUsed: orderCredit,
         shippingAddress: shippingAddress || {},
         paymentMethod,
         deliveryMethod,
-        blackboxFee: isFirstOrder ? blackboxFee : 0, // stored for display on orders page
+        blackboxFee: isFirstOrder ? blackboxFee : 0,
         dropoffArea: dropoffArea || "",
         status: "pending",
         deliveryCode: generateDeliveryCode(),
@@ -188,7 +223,7 @@ export const checkoutCart = async (req, res) => {
 
     return res.status(201).json({ success: true, orders: createdOrders, order: createdOrders[0] });
   } catch (err) {
-    console.error("❌ Checkout error:", err);
+    logger.error("❌ Checkout error:", err);
     return res.status(500).json({ success: false, message: err.message });
   }
 };
@@ -215,7 +250,7 @@ export const getMyOrders = async (req, res) => {
 
     res.json({ success: true, count: orders.length, orders });
   } catch (error) {
-    console.error("Error fetching orders:", error);
+    logger.error("Error fetching orders:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -267,7 +302,7 @@ export const getSellerOrders = async (req, res) => {
 
     res.json({ orders });
   } catch (err) {
-    console.error("getSellerOrders error:", err);
+    logger.error("getSellerOrders error:", err);
     res.status(500).json({ message: err.message });
   }
 };
@@ -299,7 +334,7 @@ export const getOrderById = async (req, res) => {
 
     res.json({ success: true, order });
   } catch (err) {
-    console.error("getOrderById error:", err);
+    logger.error("getOrderById error:", err);
     res.status(500).json({ message: err.message });
   }
 };
@@ -441,7 +476,7 @@ export const updateOrderStatus = async (req, res) => {
       },
     });
   } catch (err) {
-    console.error("updateOrderStatus error:", err);
+    logger.error("updateOrderStatus error:", err);
     res.status(500).json({ message: "Server error" }); // fix #16: don't leak err.message
   }
 };
@@ -475,7 +510,7 @@ export const updateOrder = async (req, res) => {
     await order.save();
     res.json({ success: true, order });
   } catch (error) {
-    console.error("Error updating order:", error);
+    logger.error("Error updating order:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -494,7 +529,7 @@ export const hasPurchased = async (req, res) => {
     }).select("_id");
     res.json({ purchased: !!order });
   } catch (err) {
-    console.error("hasPurchased:", err);
+    logger.error("hasPurchased:", err);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -534,7 +569,7 @@ export const raiseDispute = async (req, res) => {
 
     res.json({ success: true, orderId: order._id });
   } catch (err) {
-    console.error("raiseDispute:", err);
+    logger.error("raiseDispute:", err);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -571,7 +606,7 @@ export const cancelOrder = async (req, res) => {
       order,
     });
   } catch (error) {
-    console.error("Error canceling order:", error);
+    logger.error("Error canceling order:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -596,46 +631,12 @@ export const downloadInvoice = async (req, res) => {
     const pdfPath = await generateInvoicePDF(order);
     res.download(pdfPath);
   } catch (error) {
-    console.error("downloadInvoice error:", error);
+    logger.error("downloadInvoice error:", error);
     res.status(500).json({ message: "Failed to generate invoice" });
   }
 };
 
-export const markOrderAsPaid = async (req, res) => {
-  try {
-    const { orderId } = req.params;
-    const order = await Order.findById(orderId).populate("items.product");
-
-    if (!order) return res.status(404).json({ message: "Order not found" });
-
-    order.paymentStatus = "paid";
-    order.status = "processing";
-    await order.save();
-
-    // ✅ Update seller and product analytics
-    for (const item of order.items) {
-      const product = await Product.findById(item.product._id);
-      if (product) {
-        product.purchases += item.quantity;
-        await product.save();
-
-        // Update seller total sales
-        const seller = await Seller.findOne({ user: product.seller });
-        if (seller) {
-          seller.totalSalesValue += item.price * item.quantity;
-          seller.sold += item.quantity;
-          await seller.save();
-        }
-      }
-    }
-
-    res.json({ message: "Order marked as paid and analytics updated", order });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-};
-
-// Add this in orderController.js
+// markOrderAsPaid removed — was never mounted in any route (dead export)
 export const getIncomingOrders = async (req, res) => {
   try {
     const userId = req.user._id;
@@ -659,7 +660,7 @@ export const getIncomingOrders = async (req, res) => {
 
     res.json({ success: true, count: orders.length, orders });
   } catch (err) {
-    console.error("getIncomingOrders error:", err);
+    logger.error("getIncomingOrders error:", err);
     res.status(500).json({ message: err.message });
   }
 };
@@ -828,7 +829,7 @@ export const confirmDelivery = async (req, res) => {
         : "Delivery confirmed. Payout credited to seller balance.",
     });
   } catch (err) {
-    console.error("confirmDelivery error:", err.response?.data || err.message);
+    logger.error("confirmDelivery error:", err.response?.data || err.message);
     res.status(500).json({ message: err.response?.data?.message || "Failed to confirm delivery" });
   }
 };
@@ -855,7 +856,7 @@ export const getCurrentOrder = async (req, res) => {
 
     res.status(200).json(order);
   } catch (err) {
-    console.error("💥 getCurrentOrder error:", err);
+    logger.error("💥 getCurrentOrder error:", err);
     res.status(500).json({ message: "Failed to fetch current order" });
   }
 };
@@ -921,7 +922,7 @@ export const bookDispatch = async (req, res) => {
     try {
       await order.save();
     } catch (saveErr) {
-      console.error("bookDispatch: API succeeded but DB save failed", saveErr.message);
+      logger.error("bookDispatch: API succeeded but DB save failed", saveErr.message);
       return res.status(207).json({
         success: false,
         trackingId,
@@ -938,7 +939,7 @@ export const bookDispatch = async (req, res) => {
 
     return res.json({ success: true, trackingId, message: "Dispatch booked successfully" });
   } catch (err) {
-    console.error("bookDispatch error:", err.response?.data || err.message);
+    logger.error("bookDispatch error:", err.response?.data || err.message);
     return res.status(500).json({ message: err.response?.data?.message || "Failed to book dispatch" });
   }
 };
@@ -982,22 +983,42 @@ export const confirmTransfer = async (req, res) => {
 
     // Create an order per seller
     for (const [sellerId, sellerItems] of Object.entries(itemsBySeller)) {
-      const subtotal = sellerItems.reduce(
-        (sum, item) => sum + item.price * item.quantity,
-        0
-      );
-
-      // Batch-fetch product fees to avoid N+1 queries; charge each product once
+      // Always fetch authoritative price + deliveryFee from DB — never trust client-submitted prices
       const productIds = [...new Set(sellerItems.map(i => i.product).filter(Boolean).map(String))];
-      const productDocs = await Product.find({ _id: { $in: productIds } }).select("_id deliveryFee").lean();
-      const feeMap = new Map(productDocs.map(p => [p._id.toString(), p.deliveryFee || 0]));
-      const deliveryFee = productIds.reduce((s, pid) => s + Math.max(0, feeMap.get(pid) || 0), 0);
+      const productDocs = await Product.find({ _id: { $in: productIds } }).select("_id price deliveryFee").lean();
+      const priceMap = new Map(productDocs.map(p => [p._id.toString(), { price: p.price, fee: p.deliveryFee || 0 }]));
+
+      // Resolve per-item price: verify negotiation from DB when present, fall back to canonical price
+      const resolvedItems = await Promise.all(sellerItems.map(async (item) => {
+        const canonical = priceMap.get(String(item.product))?.price || 0;
+        if (item.negotiationId && mongoose.Types.ObjectId.isValid(item.negotiationId)) {
+          const neg = await Negotiation.findOne({
+            _id:    item.negotiationId,
+            item:   item.product,
+            buyer:  req.user._id,
+            status: "accepted",
+          }).select("proposedPrice").lean();
+          if (neg) return { ...item, resolvedPrice: neg.proposedPrice };
+        }
+        return { ...item, resolvedPrice: canonical };
+      }));
+
+      const subtotal = resolvedItems.reduce((sum, item) => sum + item.resolvedPrice * (item.quantity || 1), 0);
+      const deliveryFee = productIds.reduce((s, pid) => s + Math.max(0, priceMap.get(pid)?.fee || 0), 0);
       const totalAmount = subtotal + deliveryFee;
+
+      // Build order items using DB-verified prices
+      const orderItems = resolvedItems.map(item => ({
+        product:  item.product,
+        quantity: item.quantity || 1,
+        price:    item.resolvedPrice,
+        ...(item.negotiationId && { negotiationId: item.negotiationId }),
+      }));
 
       const order = new Order({
         buyer: req.user._id,
         seller: sellerId,
-        items: sellerItems,
+        items: orderItems,
         subtotal,
         deliveryFee,
         totalAmount,
@@ -1026,7 +1047,7 @@ export const confirmTransfer = async (req, res) => {
       proof: paymentProofPath,
     });
   } catch (err) {
-    console.error("❌ Transfer confirmation failed:", err);
+    logger.error("❌ Transfer confirmation failed:", err);
     res.status(500).json({
       success: false,
       message: "Failed to confirm transfer",
@@ -1045,7 +1066,7 @@ export const getEscrowDetails = async (req, res) => {
 
     res.json({ success: true, data: escrowDetails });
   } catch (err) {
-    console.error("❌ Failed to load escrow details:", err);
+    logger.error("❌ Failed to load escrow details:", err);
     res
       .status(500)
       .json({ success: false, message: "Failed to fetch escrow info" });

@@ -27,7 +27,7 @@ export const getSellerDashboard = async (req, res) => {
     }
     
     if (!seller) {
-      console.warn("⚠️  No seller profile and user doesn't have seller role:", userId);
+      logger.warn("⚠️  No seller profile and user doesn't have seller role:", userId);
       return res.status(403).json({ message: "User is not a seller" });
     }
 
@@ -188,7 +188,7 @@ export const getSellerDashboard = async (req, res) => {
       recentPayouts,
     });
   } catch (err) {
-    console.error("getSellerDashboard error:", err);
+    logger.error("getSellerDashboard error:", err);
     res.status(500).json({ message: err.message });
   }
 };
@@ -230,7 +230,7 @@ export const updateSellerSettings = async (req, res) => {
     await seller.save();
     res.json({ message: "Seller profile updated successfully.", seller });
   } catch (err) {
-    console.error("updateSellerSettings error:", err);
+    logger.error("updateSellerSettings error:", err);
     res.status(500).json({ message: err.message });
   }
 };
@@ -260,7 +260,7 @@ export const updateNotificationPreferences = async (req, res) => {
       notification,
     });
   } catch (err) {
-    console.error("updateNotificationPreferences error:", err);
+    logger.error("updateNotificationPreferences error:", err);
     res.status(500).json({ message: err.message });
   }
 };
@@ -287,7 +287,7 @@ export const updateSellerPolicies = async (req, res) => {
     await seller.save();
     res.json({ message: "Seller policies updated successfully.", seller });
   } catch (err) {
-    console.error("updateSellerPolicies error:", err);
+    logger.error("updateSellerPolicies error:", err);
     res.status(500).json({ message: err.message });
   }
 };
@@ -298,6 +298,7 @@ export const updateSellerPolicies = async (req, res) => {
  */
 import bcrypt from "bcrypt";
 import User from "../models/User.js";
+import logger from "../utils/logger.js";
 
 export const updatePassword = async (req, res) => {
   try {
@@ -317,7 +318,7 @@ export const updatePassword = async (req, res) => {
 
     res.json({ message: "Password updated successfully." });
   } catch (err) {
-    console.error("updatePassword error:", err);
+    logger.error("updatePassword error:", err);
     res.status(500).json({ message: err.message });
   }
 };
@@ -338,7 +339,7 @@ export const deactivateAccount = async (req, res) => {
 
     res.json({ message: "Your account has been deactivated." });
   } catch (err) {
-    console.error("deactivateAccount error:", err);
+    logger.error("deactivateAccount error:", err);
     res.status(500).json({ message: err.message });
   }
 };

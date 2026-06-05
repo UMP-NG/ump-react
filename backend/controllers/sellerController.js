@@ -1,10 +1,11 @@
 import Seller from "../models/Seller.js";
 import User from "../models/User.js";
+import logger from "../utils/logger.js";
 
 export const becomeSeller = async (req, res) => {
   try {
     if (!req.user) {
-      console.warn("⛔ No user");
+      logger.warn("⛔ No user");
       console.groupEnd();
       return res.status(401).json({ message: "Unauthorized" });
     }
@@ -49,7 +50,7 @@ export const becomeSeller = async (req, res) => {
     console.groupEnd();
     return res.json({ success: true, seller });
   } catch (err) {
-    console.error("❌ SELLER ERROR:", err);
+    logger.error("❌ SELLER ERROR:", err);
     console.groupEnd();
     return res.status(500).json({ message: err.message });
   }
@@ -72,14 +73,14 @@ export const requestSellerVerification = async (req, res) => {
 export const getSellerProfile = async (req, res) => {
   try {
     if (!req.user) {
-      console.warn("⛔ No user attached to request");
+      logger.warn("⛔ No user attached to request");
       return res.status(401).json({ message: "Unauthorized" });
     }
 
     const seller = await Seller.findOne({ user: req.user._id });
 
     if (!seller) {
-      console.warn("⚠️ Seller profile NOT found for user:", req.user._id);
+      logger.warn("⚠️ Seller profile NOT found for user:", req.user._id);
       return res.status(404).json({
         message: "Seller profile not found",
       });
@@ -90,7 +91,7 @@ export const getSellerProfile = async (req, res) => {
       seller,
     });
   } catch (err) {
-    console.error("❌ GET SELLER PROFILE ERROR:", err);
+    logger.error("❌ GET SELLER PROFILE ERROR:", err);
     return res.status(500).json({
       message: "Failed to load seller profile",
     });
@@ -185,7 +186,7 @@ export const followSeller = async (req, res) => {
       followersCount: updatedSeller.followers.length,
     });
   } catch (err) {
-    console.error("❌ Follow action error:", err);
+    logger.error("❌ Follow action error:", err);
     res.status(500).json({ message: "Server error" });
   }
 };

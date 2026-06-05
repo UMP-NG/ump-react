@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>You're offline — UMP</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Poppins', system-ui, sans-serif;
+      background: #fafaf7;
+      color: #0f172a;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      text-align: center;
+    }
+    .card {
+      background: #fff;
+      border-radius: 24px;
+      padding: 40px 32px;
+      max-width: 380px;
+      width: 100%;
+      box-shadow: 0 8px 40px rgba(15,23,42,.1);
+    }
+    .icon {
+      width: 80px; height: 80px;
+      border-radius: 24px;
+      background: rgba(249,115,22,.1);
+      color: #f97316;
+      font-size: 2.8rem;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 24px;
+    }
+    h1 { font-size: 2rem; font-weight: 800; letter-spacing: -0.02em; margin-bottom: 10px; }
+    p  { font-size: 1rem; color: #475569; line-height: 1.6; margin-bottom: 28px; }
+    button {
+      background: #f97316;
+      color: #fff;
+      border: none;
+      border-radius: 999px;
+      padding: 14px 32px;
+      font-size: 1rem;
+      font-weight: 700;
+      cursor: pointer;
+      font-family: inherit;
+      width: 100%;
+      transition: background .15s;
+    }
+    button:hover { background: #ea580c; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="icon">📡</div>
+    <h1>You're offline</h1>
+    <p>
+      It looks like you're not connected to the internet.
+      Check your connection and try again — UMP needs a network to load new content.
+    </p>
+    <button onclick="window.location.reload()">Try again</button>
+  </div>
+</body>
+</html>

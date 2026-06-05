@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import Cart from "../models/Cart.js";
 import Order from "../models/Order.js";
 import Product from "../models/Product.js";
+import logger from "../utils/logger.js";
 
 // ✅ Get current user's cart
 export const getCart = async (req, res) => {
@@ -20,7 +21,7 @@ export const getCart = async (req, res) => {
 
     res.json({ items: cart.items });
   } catch (error) {
-    console.error("❌ Error fetching cart:", error);
+    logger.error("❌ Error fetching cart:", error);
     res.status(500).json({ message: "Failed to load cart" });
   }
 };
@@ -33,20 +34,20 @@ export const addToCart = async (req, res) => {
     const userId = req.user?._id;
 
     if (!userId) {
-      console.warn("❌ Unauthorized attempt to add to cart");
+      logger.warn("❌ Unauthorized attempt to add to cart");
       return res.status(401).json({ message: "Unauthorized" });
     }
 
     // Validate productId
     if (!productId || !mongoose.Types.ObjectId.isValid(productId)) {
-      console.warn("❌ Invalid product ID:", productId);
+      logger.warn("❌ Invalid product ID:", productId);
       return res.status(400).json({ message: "Invalid product ID" });
     }
 
     // Validate quantity
     const qty = parseInt(quantity, 10);
     if (isNaN(qty) || qty < 1) {
-      console.warn("❌ Invalid quantity:", quantity);
+      logger.warn("❌ Invalid quantity:", quantity);
       return res
         .status(400)
         .json({ message: "Quantity must be a positive number" });
@@ -55,7 +56,7 @@ export const addToCart = async (req, res) => {
     // Check product existence
     const product = await Product.findById(productId);
     if (!product) {
-      console.warn("❌ Product not found:", productId);
+      logger.warn("❌ Product not found:", productId);
       return res.status(404).json({ message: "Product not found" });
     }
 
@@ -96,7 +97,7 @@ export const addToCart = async (req, res) => {
 
     res.json({ message: "✅ Product added to cart", cart });
   } catch (error) {
-    console.error("❌ Error adding to cart:", error);
+    logger.error("❌ Error adding to cart:", error);
     res.status(500).json({ message: "Failed to add to cart" });
   }
 };
@@ -119,7 +120,7 @@ export const updateQuantity = async (req, res) => {
 
     res.json({ message: "✅ Quantity updated", cart });
   } catch (error) {
-    console.error("❌ Error updating quantity:", error);
+    logger.error("❌ Error updating quantity:", error);
     res.status(500).json({ message: "Failed to update quantity" });
   }
 };
@@ -138,7 +139,7 @@ export const removeFromCart = async (req, res) => {
 
     res.json({ message: "🗑️ Item removed", cart });
   } catch (error) {
-    console.error("❌ Error removing item:", error);
+    logger.error("❌ Error removing item:", error);
     res.status(500).json({ message: "Failed to remove item" });
   }
 };
@@ -156,7 +157,7 @@ export const checkoutCart = async (req, res) => {
     const orderItems = cart.items.map((item) => ({
       product: item.product._id,
       quantity: item.quantity,
-      price: item.price,
+      price: item.negotiatedPrice ?? item.product?.price ?? item.price,
     }));
 
     const totalAmount = orderItems.reduce(
@@ -166,7 +167,7 @@ export const checkoutCart = async (req, res) => {
 
     const newOrder = new Order({
       buyer: userId,
-      seller: orderItems[0]?.product?.seller || null, // ✅ safe access
+      seller: cart.items[0]?.product?.seller || null,
       items: orderItems,
       totalAmount,
       shippingAddress: req.body.shippingAddress || "",
@@ -177,7 +178,7 @@ export const checkoutCart = async (req, res) => {
 
     res.json({ message: "✅ Order created successfully", order: newOrder });
   } catch (error) {
-    console.error("❌ Checkout failed:", error);
+    logger.error("❌ Checkout failed:", error);
     res.status(500).json({ message: "Checkout failed" });
   }
 };

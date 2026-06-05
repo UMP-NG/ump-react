@@ -77,7 +77,9 @@ export default function NegotiationModal({ itemType, itemId, itemName, itemImage
             </div>
             <h4 style={{ fontSize: "1.7rem", fontWeight: 800, margin: "0 0 8px" }}>Offer sent!</h4>
             <p style={{ fontSize: "1.3rem", color: "var(--ink-2)", margin: "0 0 20px" }}>
-              Your negotiation request has been sent. Check your messages for the {itemType === "Service" ? "provider's" : "seller's"} response.
+              {itemType === "Service"
+                ? "Your offer has been sent to the provider. Once they accept, you'll see a \"Book at negotiated price\" button in your messages to book the session at your agreed rate."
+                : "Your negotiation request has been sent. Check your messages for the seller's response."}
             </p>
             <div style={{ display: "flex", gap: 10 }}>
               <button className="btn btn-ghost" style={{ flex: 1 }} onClick={onClose}>Close</button>
@@ -136,7 +138,9 @@ export default function NegotiationModal({ itemType, itemId, itemName, itemImage
 
               <p style={{ fontSize: "1.15rem", color: "var(--ink-3)", marginBottom: 20, lineHeight: 1.6 }}>
                 <i className="fas fa-info-circle" style={{ marginRight: 5, color: "var(--accent)" }} />
-                If the {itemType === "Service" ? "provider" : "seller"} accepts, the original price remains until they apply the negotiated price to your cart.
+                {itemType === "Service"
+                  ? "If the provider accepts, you'll get a button in your messages to book the session at your negotiated rate."
+                  : "If the seller accepts, the original price remains until they apply the negotiated price to your cart."}
               </p>
 
               <button

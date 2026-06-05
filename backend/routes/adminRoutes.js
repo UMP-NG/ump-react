@@ -3,6 +3,7 @@ import Admin from "../models/Admin.js";
 import { bulkImportProducts, updateUserRole, deleteUser, updateProduct, deleteProduct, updateListing, deleteListing, updateService, deleteService, updateOrder, deleteOrder, updateSellerStatus } from "../controllers/adminController.js";
 import { protect, requireRole } from "../middleware/authMiddleware.js";
 import { uploadSingle } from "../middleware/upload.js";
+import logger from "../utils/logger.js";
 import {
   getAdminStats,
   getActivityChart,
@@ -31,6 +32,7 @@ import {
   getAdminListings,
   getAdminCategories,
   createCategory,
+  updateAdminCategory,
   deleteCategory,
   getSupportAdmins,
   setSupportRole,
@@ -44,36 +46,34 @@ import {
   getBroadcasts,
   createBroadcast,
   deleteBroadcast,
+  publicConfig,
   getConfig,
   saveConfig,
   inviteAdmin,
+  getIdentityVerifications,
+  approveIdentityVerification,
+  rejectIdentityVerification,
 } from "../controllers/adminDashboardController.js";
 
 const router = express.Router();
+const adm = [protect, requireRole("admin")];
 
-router.get("/", async (req, res) => {
+router.get("/", ...adm, async (req, res) => {
   try {
     const admins = await Admin.find({ isActive: true })
-      .select("_id name email avatar")
+      .select("_id name avatar")
       .lean();
-    
-    // Transform avatar object to match user format
-    const transformedAdmins = admins.map((admin) => ({
-      _id: admin._id,
-      name: admin.name,
-      email: admin.email,
-      avatar: admin.avatar && admin.avatar.url ? admin.avatar.url : "/images/admin-default.png",
-      role: "admin",
-    }));
-    
-    res.json(transformedAdmins);
+    res.json(admins.map((admin) => ({
+      _id:    admin._id,
+      name:   admin.name,
+      avatar: admin.avatar?.url || "/images/admin-default.png",
+      role:   "admin",
+    })));
   } catch (err) {
-    console.error("❌ Error fetching admins:", err);
+    logger.error("❌ Error fetching admins:", err);
     res.status(500).json({ message: "Server error fetching admins" });
   }
 });
-
-const adm = [protect, requireRole("admin")];
 
 // ── Dashboard ──────────────────────────────────────────────────────────────
 router.get("/stats",                  ...adm, getAdminStats);
@@ -136,13 +136,19 @@ router.post("/reports/:reportId/resolve",    ...adm, resolveReport);
 router.get ("/disputes",                      ...adm, getAdminDisputes);
 router.post("/disputes/:disputeId/resolve",   ...adm, resolveDispute);
 
+// ── Identity Verifications ─────────────────────────────────────────────────
+router.get  ("/identity-verifications",               ...adm, getIdentityVerifications);
+router.post ("/identity-verifications/:id/approve",   ...adm, approveIdentityVerification);
+router.post ("/identity-verifications/:id/reject",    ...adm, rejectIdentityVerification);
+
 // ── Broadcasts ─────────────────────────────────────────────────────────────
 router.get   ("/broadcasts",                  ...adm, getBroadcasts);
 router.post  ("/broadcasts",                  ...adm, createBroadcast);
 router.delete("/broadcasts/:broadcastId",     ...adm, deleteBroadcast);
 
 // ── Config ─────────────────────────────────────────────────────────────────
-router.get("/config", getConfig);          // public — needed for logo on frontend
+router.get("/config/public", publicConfig); // logo + slides only — safe for unauthenticated callers
+router.get("/config", ...adm, getConfig);  // full config — admin only
 router.put("/config", ...adm, saveConfig);
 
 // ── Listings ───────────────────────────────────────────────────────────────
@@ -153,10 +159,11 @@ router.delete("/listings/:listingId",     ...adm, deleteListing);
 // ── Categories ─────────────────────────────────────────────────────────────
 router.get   ("/categories",              ...adm, getAdminCategories);
 router.post  ("/categories",              ...adm, createCategory);
+router.put   ("/categories/:categoryId",  ...adm, updateAdminCategory);
 router.delete("/categories/:categoryId",  ...adm, deleteCategory);
 
 // ── Support roles ──────────────────────────────────────────────────────────
-router.get ("/support/team",                    getSupportTeam);   // public
+router.get ("/support/team",                    protect, getSupportTeam); // requires login
 router.get ("/support/admins",                  ...adm, getSupportAdmins);
 router.put ("/support/admins/:userId/role",     ...adm, setSupportRole);
 

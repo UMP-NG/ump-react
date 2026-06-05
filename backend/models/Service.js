@@ -51,10 +51,18 @@ const serviceSchema = new mongoose.Schema(
     provider: { type: mongoose.Schema.Types.ObjectId, required: true, ref: "User" },
     reviews:  [{ type: mongoose.Schema.Types.ObjectId, ref: "Review" }],
     likes:    [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+
+    deletedAt: { type: Date, default: null },
   },
   { timestamps: true }
 );
 
 serviceSchema.index({ name: "text", title: "text", desc: "text", major: "text", tags: "text" });
+serviceSchema.index({ deletedAt: 1 });
+
+serviceSchema.pre(/^find/, function (next) {
+  if (!this.getOptions().includeDeleted) this.where({ deletedAt: null });
+  next();
+});
 
 export default mongoose.model("Service", serviceSchema);

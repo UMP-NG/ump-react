@@ -8,6 +8,7 @@ import Config from "../models/Config.js";
 import crypto from "crypto";
 import { audit } from "../utils/auditLog.js";
 import { confirmAllOrders } from "../utils/confirmOrders.js";
+import logger from "../utils/logger.js";
 
 // ─── Subscription helpers ─────────────────────────────────────────────────────
 // Prices come from the Config document so admins can edit them without a deploy
@@ -97,7 +98,7 @@ export const initializeSubscriptionPayment = async (req, res) => {
       reference,
     });
   } catch (err) {
-    console.error("Subscription init error:", err.response?.data || err.message);
+    logger.error("Subscription init error:", err.response?.data || err.message);
     return res.status(500).json({ success: false, message: "Failed to initialize payment. Please try again." });
   }
 };
@@ -156,7 +157,7 @@ export const verifySubscriptionPayment = async (req, res) => {
       type:    payment.metadata?.subscriptionType,
     });
   } catch (err) {
-    console.error("Subscription verify error:", err.response?.data || err.message);
+    logger.error("Subscription verify error:", err.response?.data || err.message);
     return res.status(500).json({ success: false, message: "Verification failed. Please contact support." });
   }
 };
@@ -247,7 +248,7 @@ export const initializePayment = async (req, res) => {
       virtualAccount,
     });
   } catch (err) {
-    console.error(
+    logger.error(
       "💥 Payment initialization error:",
       err.response?.data || err.message
     );
@@ -343,7 +344,7 @@ export const verifyPayment = async (req, res) => {
       orders: orderSummaries,
     });
   } catch (err) {
-    console.error(
+    logger.error(
       "💥 Payment verification error:",
       err.response?.data || err.message
     );
@@ -367,7 +368,7 @@ export const getBanks = async (req, res) => {
     }));
     return res.json({ success: true, banks });
   } catch (err) {
-    console.error("getBanks error:", err.response?.data || err.message);
+    logger.error("getBanks error:", err.response?.data || err.message);
     return res.status(500).json({ success: false, message: "Failed to fetch banks" });
   }
 };
@@ -439,7 +440,7 @@ export const saveBankDetails = async (req, res) => {
 
     return res.json({ success: true, message: "Bank details saved", recipientCode });
   } catch (err) {
-    console.error("saveBankDetails error:", err.response?.data || err.message);
+    logger.error("saveBankDetails error:", err.response?.data || err.message);
     return res.status(500).json({
       success: false,
       message: err.response?.data?.message || "Failed to save bank details",
@@ -505,7 +506,7 @@ export const paystackWebhook = async (req, res) => {
 
     res.sendStatus(200);
   } catch (err) {
-    console.error("💥 Webhook error:", err);
+    logger.error("💥 Webhook error:", err);
     res.sendStatus(500);
   }
 };

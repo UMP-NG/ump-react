@@ -93,6 +93,7 @@ const orderSchema = new mongoose.Schema(
     paymentProof: { type: String },
     deliveryCode: { type: String },
     deliveryCodeUsed: { type: Boolean, default: false },
+    creditUsed: { type: Number, default: 0, min: 0 }, // referral credit applied at checkout
     escrowReleasedAt: Date,
     isReviewed: { type: Boolean, default: false },
 

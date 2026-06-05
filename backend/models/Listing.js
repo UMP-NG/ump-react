@@ -42,13 +42,21 @@ const listingSchema = new mongoose.Schema(
         text: String,
       },
     ],
-    likes: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+    likes:     [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
     favorites: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+
+    deletedAt: { type: Date, default: null },
   },
   { timestamps: true }
 );
 
 listingSchema.index({ name: "text", description: "text", location: "text" });
+listingSchema.index({ deletedAt: 1 });
+
+listingSchema.pre(/^find/, function (next) {
+  if (!this.getOptions().includeDeleted) this.where({ deletedAt: null });
+  next();
+});
 
 export default mongoose.model("Listing", listingSchema);
 

@@ -208,10 +208,14 @@ function DisputeModal({ order, onClose, onDone }) {
 
 function ReviewModal({ order, onClose, onDone }) {
   const showToast = useToast();
+  const items = order.items || [];
+  const [selectedIdx, setSelectedIdx] = useState(0);
   const [rating, setRating] = useState(5);
   const [comment, setComment] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const productId = order.items?.[0]?.product?._id || order.items?.[0]?.product || order.items?.[0]?._id;
+
+  const selectedItem = items[selectedIdx];
+  const productId = selectedItem?.product?._id || selectedItem?.product || selectedItem?._id;
 
   async function submit(e) {
     e.preventDefault();
@@ -220,8 +224,7 @@ function ReviewModal({ order, onClose, onDone }) {
     try {
       await apiFetch(`/api/products/${productId}/reviews`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rating, comment }),
+        body: { rating, comment },
       });
       showToast("Review submitted — thank you!", "success");
       onDone();
@@ -239,6 +242,39 @@ function ReviewModal({ order, onClose, onDone }) {
           <h3 style={{ margin: 0, fontSize: "1.8rem", fontWeight: 800 }}>Write a Review</h3>
           <button className="icon-btn" onClick={onClose}><i className="fas fa-xmark" /></button>
         </div>
+
+        {/* Product selector — shown when order has more than one item */}
+        {items.length > 1 && (
+          <div style={{ marginBottom: 16 }}>
+            <div className="label" style={{ marginBottom: 8 }}>Which item are you reviewing?</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {items.map((item, i) => {
+                const p = item.product || item;
+                const img = getImageUrl(p?.images?.[0]);
+                return (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => setSelectedIdx(i)}
+                    style={{
+                      display: "flex", alignItems: "center", gap: 10, padding: "10px 12px",
+                      border: `2px solid ${selectedIdx === i ? "var(--accent)" : "var(--line)"}`,
+                      borderRadius: "var(--r-md)", background: selectedIdx === i ? "rgba(249,115,22,.05)" : "var(--paper)",
+                      cursor: "pointer", textAlign: "left", transition: "border-color .15s",
+                    }}
+                  >
+                    <div style={{ width: 40, height: 40, borderRadius: 8, overflow: "hidden", flexShrink: 0, background: "var(--surface)" }}>
+                      {img ? <img src={img} alt={p?.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <Ph kind="default" />}
+                    </div>
+                    <span style={{ fontSize: "1.25rem", fontWeight: selectedIdx === i ? 700 : 400, color: "var(--ink-1)" }}>{p?.name || "Product"}</span>
+                    {selectedIdx === i && <i className="fas fa-check-circle" style={{ marginLeft: "auto", color: "var(--accent)" }} />}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         <form onSubmit={submit}>
           <div style={{ display: "flex", gap: 6, marginBottom: 20, justifyContent: "center" }}>
             {[1,2,3,4,5].map((s) => (

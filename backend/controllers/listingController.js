@@ -1,6 +1,7 @@
 // controllers/listingController.js
 import Listing from "../models/Listing.js";
 import cloudinary from "../config/cloudinary.js";
+import logger from "../utils/logger.js";
 
 // ===============================
 // Create Listing
@@ -68,7 +69,7 @@ export const createListing = async (req, res) => {
 
     res.status(201).json({ success: true, listing });
   } catch (error) {
-    console.error("Error creating listing:", error);
+    logger.error("Error creating listing:", error);
     res.status(500).json({ message: "Server error", error: error.message });
   }
 };
@@ -126,7 +127,7 @@ export const updateListing = async (req, res) => {
     await listing.save();
     res.json({ success: true, listing });
   } catch (error) {
-    console.error("Error updating listing:", error);
+    logger.error("Error updating listing:", error);
     res.status(500).json({ message: "Server error", error: error.message });
   }
 };
@@ -164,7 +165,7 @@ export const getAllListings = async (req, res) => {
 
     res.json({ success: true, count: listings.length, listings });
   } catch (error) {
-    console.error("Error fetching listings:", error);
+    logger.error("Error fetching listings:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -217,7 +218,7 @@ export const getListingById = async (req, res) => {
 
     res.status(200).json({ success: true, listing });
   } catch (error) {
-    console.error("❌ Error fetching listing:", error);
+    logger.error("❌ Error fetching listing:", error);
     res.status(500).json({
       success: false,
       message: "Failed to fetch listing",
@@ -237,17 +238,12 @@ export const deleteListing = async (req, res) => {
       return res.status(403).json({ message: "Not authorized" });
     }
 
-    for (const image of listing.images || []) {
-      if (image.publicId) await cloudinary.uploader.destroy(image.publicId, { resource_type: "image" });
-    }
-    for (const video of listing.videos || []) {
-      if (video.publicId) await cloudinary.uploader.destroy(video.publicId, { resource_type: "video" });
-    }
-
-    await listing.deleteOne();
+    // Soft-delete so active bookings/orders retain their listing reference.
+    listing.deletedAt = new Date();
+    await listing.save();
     res.json({ success: true, message: "Listing deleted successfully" });
   } catch (error) {
-    console.error("Error deleting listing:", error);
+    logger.error("Error deleting listing:", error);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -262,7 +258,7 @@ export const getMyListings = async (req, res) => {
       .lean();
     res.json({ success: true, listings });
   } catch (err) {
-    console.error("Error fetching my listings:", err);
+    logger.error("Error fetching my listings:", err);
     res.status(500).json({ message: "Server error" });
   }
 };

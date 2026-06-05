@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 import PushSub from "../models/PushSub.js";
 import User from "../models/User.js";
 import Broadcast from "../models/Broadcast.js";
+import logger from "../utils/logger.js";
 
 // In production, only use subscriptions that have a recorded origin AND
 // are NOT from localhost — filters out stale dev subscriptions that
@@ -23,7 +24,7 @@ try {
     _pushReady = true;
   }
 } catch (err) {
-  console.error("VAPID config error:", err.message);
+  logger.error("VAPID config error:", err.message);
 }
 
 // GET /api/push/vapid-key  — public key the browser needs to subscribe
@@ -60,7 +61,7 @@ export const subscribe = async (req, res) => {
 
     res.json({ success: true });
   } catch (err) {
-    console.error("subscribe:", err);
+    logger.error("subscribe:", err);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -74,7 +75,7 @@ export const sendTestPush = async (req, res) => {
     title: "UMP push test",
     body:  "Push notifications are working correctly.",
     url:   "/admin/broadcast",
-    icon:  "/icon-192.png",
+    icon:  "/images/ump-icon.svg",
   });
   if (delivered === 0) {
     return res.status(502).json({ message: `Push subscription found but delivery failed for all ${subs.length} device(s). The subscription may be stale — try revoking and re-granting notification permission, then test again.` });
@@ -115,7 +116,7 @@ export const cleanupLocalhostSubs = async (req, res) => {
     });
     res.json({ success: true, removed: result.deletedCount });
   } catch (err) {
-    console.error("cleanupLocalhostSubs:", err);
+    logger.error("cleanupLocalhostSubs:", err);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -150,7 +151,7 @@ export async function sendPushToUser(userId, payload) {
     const subs = await PushSub.find({ user: userId, ...PROD_SUB_FILTER });
     if (subs.length) await sendPushToSubs(subs, payload);
   } catch (err) {
-    console.error("sendPushToUser:", err.message);
+    logger.error("sendPushToUser:", err.message);
   }
 }
 
@@ -185,9 +186,9 @@ export async function sendPushToSubs(subs, payload) {
           // VAPID key mismatch — subscription was created with a different key;
           // treat as dead so the browser re-subscribes on next login
           dead.push(sub.endpoint);
-          console.error(`Push VAPID auth error (${code}) for endpoint ${sub.endpoint.slice(-20)} — removing stale subscription`);
+          logger.error(`Push VAPID auth error (${code}) for endpoint ${sub.endpoint.slice(-20)} — removing stale subscription`);
         } else {
-          console.error(`Push delivery error (${code ?? err.message}) for endpoint ${sub.endpoint.slice(-20)}`);
+          logger.error(`Push delivery error (${code ?? err.message}) for endpoint ${sub.endpoint.slice(-20)}`);
         }
       }
     })

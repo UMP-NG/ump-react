@@ -19,6 +19,7 @@ import Categories from './pages/Categories';
 import Bookings from './pages/Bookings';
 import Reviews from './pages/Reviews';
 import Reports from './pages/Reports';
+import Verifications from './pages/Verifications';
 import Placeholder from './pages/Placeholder';
 
 export default function AdminRoutes() {
@@ -38,7 +39,8 @@ export default function AdminRoutes() {
           <Route path="bookings"   element={<Bookings />} />
           <Route path="payouts"    element={<Payouts />} />
           <Route path="reviews"    element={<Reviews />} />
-          <Route path="disputes"   element={<Disputes />} />
+          <Route path="disputes"       element={<Disputes />} />
+          <Route path="verifications"  element={<Verifications />} />
           <Route path="reports"    element={<Reports />} />
           <Route path="analytics"  element={<Analytics />} />
           <Route path="broadcast"  element={<Broadcast />} />

@@ -3,6 +3,7 @@ import Product from "../models/Product.js";
 import Category from "../models/Category.js";
 import Subcategory from "../models/Subcategory.js";
 import slugify from "slugify";
+import logger from "../utils/logger.js";
 
 const MONGO_URI = process.env.MONGO_URI;
 
@@ -41,7 +42,7 @@ async function migrate() {
 }
 
 migrate().catch((err) => {
-  console.error(err);
+  logger.error(err);
   process.exit(1);
 });
 

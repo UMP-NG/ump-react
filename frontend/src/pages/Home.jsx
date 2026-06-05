@@ -126,10 +126,11 @@ export default function Home() {
       .then((data) => {
         const list = Array.isArray(data) ? data : data?.categories || [];
         if (list.length > 0) {
-          setCats(list.slice(0, 7).map((c) => ({
-            icon: SLUG_ICON[c.slug] || SLUG_ICON[c.name?.toLowerCase()] || "tag",
+          setCats(list.slice(0, 8).map((c) => ({
+            icon:  SLUG_ICON[c.slug] || SLUG_ICON[c.name?.toLowerCase()] || "tag",
             label: c.name,
-            slug: c.slug,
+            slug:  c.slug,
+            image: c.images?.[0]?.url || null,
           })));
         }
       })
@@ -188,11 +189,19 @@ export default function Home() {
                 {s.sub}
               </p>
               <div style={{ display: "flex", gap: 8 }}>
-                <button className="btn btn-primary" onClick={() => navigate(s.ctaPath)}>
+                <button className="btn btn-primary" onClick={() => {
+                  const p = s.ctaPath;
+                  if (p?.startsWith("http://") || p?.startsWith("https://")) window.open(p, "_blank", "noopener,noreferrer");
+                  else if (p) navigate(p);
+                }}>
                   {s.cta} <i className="fas fa-arrow-right" />
                 </button>
                 {s.cta2 && (
-                  <button className="btn" style={{ background: "rgba(255,255,255,.15)", color: "#fff", backdropFilter: "blur(10px)" }} onClick={() => navigate(s.cta2Path)}>
+                  <button className="btn" style={{ background: "rgba(255,255,255,.15)", color: "#fff", backdropFilter: "blur(10px)" }} onClick={() => {
+                    const p = s.cta2Path;
+                    if (p?.startsWith("http://") || p?.startsWith("https://")) window.open(p, "_blank", "noopener,noreferrer");
+                    else if (p) navigate(p);
+                  }}>
                     {s.cta2}
                   </button>
                 )}
@@ -223,7 +232,11 @@ export default function Home() {
       <div className="cat-row">
         {cats.map((c, i) => (
           <div key={c.slug} className={`cat-pill${activeCat === i ? " active" : ""}`} onClick={() => { setActiveCat(i); navigate(`/market?category=${c.slug}`); }}>
-            <div className="ico"><i className={`fas fa-${c.icon}`} /></div>
+            <div className="ico">
+              {c.image
+                ? <img src={c.image} alt={c.label} style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "inherit" }} />
+                : <i className={`fas fa-${c.icon}`} />}
+            </div>
             <span>{c.label}</span>
           </div>
         ))}

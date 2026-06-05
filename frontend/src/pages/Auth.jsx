@@ -7,7 +7,7 @@ export default function Auth() {
   const navigate = useNavigate();
   const { state } = useLocation();
   const { setUser } = useUser();
-  const email = state?.email || "";
+  const email = state?.email || (() => { try { return sessionStorage.getItem("ump_otp_email") || ""; } catch { return ""; } })();
   const [digits, setDigits] = useState(["", "", "", "", "", ""]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -40,6 +40,7 @@ export default function Auth() {
     try {
       const data = await apiFetch("/api/auth/verify-otp", { method: "POST", body: { email, otp: code } });
       if (data.token) setToken(data.token);
+      try { sessionStorage.removeItem("ump_otp_email"); } catch { /* ignore */ }
       navigate("/login", { state: { verified: true, email } });
     } catch (err) {
       setError(err.message || "Invalid code, try again");

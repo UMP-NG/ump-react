@@ -25,8 +25,8 @@ export function AppConfigProvider({ children }) {
   const [subscriptions, setSubscriptions] = useState(DEFAULT_SUBS);
 
   const refreshConfig = useCallback(() => {
-    bustCache("/api/admins/config");
-    apiFetch("/api/admins/config")
+    bustCache("/api/admins/config/public");
+    apiFetch("/api/admins/config/public")
       .then((d) => {
         setLogoUrl(d?.logo?.url || DEFAULT_LOGO);
         if (d?.slides) setSlides(d.slides);

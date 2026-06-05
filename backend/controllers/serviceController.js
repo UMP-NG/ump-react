@@ -1,6 +1,7 @@
 import Service from "../models/Service.js";
 import User from "../models/User.js";
 import cloudinary from "../config/cloudinary.js";
+import logger from "../utils/logger.js";
 
 // ===============================
 // GET services owned by current user
@@ -12,7 +13,7 @@ export const getMyServices = async (req, res) => {
     });
     res.json({ success: true, services });
   } catch (error) {
-    console.error("getMyServices error:", error);
+    logger.error("getMyServices error:", error);
     res
       .status(500)
       .json({ success: false, message: "Failed to load services" });
@@ -71,7 +72,7 @@ export const becomeServiceProvider = async (req, res) => {
 
     res.status(200).json({ success: true, message: "Provider profile saved. You can now add services from your dashboard.", user });
   } catch (error) {
-    console.error("❌ becomeServiceProvider error:", error);
+    logger.error("❌ becomeServiceProvider error:", error);
     res.status(500).json({ success: false, message: "Server error", error: error.message });
   }
 };
@@ -152,7 +153,7 @@ export const createService = async (req, res) => {
       }
       await user.save();
     } catch (linkErr) {
-      console.warn("⚠️ Could not update user after service creation:", linkErr);
+      logger.warn("⚠️ Could not update user after service creation:", linkErr);
     }
 
     res.status(201).json({
@@ -161,7 +162,7 @@ export const createService = async (req, res) => {
       service,
     });
   } catch (error) {
-    console.error("❌ Error creating service:", error);
+    logger.error("❌ Error creating service:", error);
     res
       .status(500)
       .json({ success: false, message: "Server error", error: error.message });
@@ -229,7 +230,7 @@ export const getAllProviders = async (req, res) => {
 
     res.json({ success: true, providers });
   } catch (err) {
-    console.error("getAllProviders error:", err);
+    logger.error("getAllProviders error:", err);
     res.status(500).json({ success: false, message: "Server error" });
   }
 };
@@ -268,7 +269,7 @@ export const getProviderById = async (req, res) => {
       services,
     });
   } catch (err) {
-    console.error("getProviderById error:", err);
+    logger.error("getProviderById error:", err);
     res.status(500).json({ success: false, message: "Server error" });
   }
 };
@@ -297,7 +298,7 @@ export const getAllServices = async (req, res) => {
 
     res.json({ success: true, count: services.length, services });
   } catch (error) {
-    console.error("❌ Error fetching services:", error);
+    logger.error("❌ Error fetching services:", error);
     res.status(500).json({ success: false, message: "Server error" });
   }
 };
@@ -334,7 +335,7 @@ export const getServiceById = async (req, res) => {
 
     res.status(200).json({ success: true, service });
   } catch (error) {
-    console.error("❌ Error fetching service:", error);
+    logger.error("❌ Error fetching service:", error);
     res.status(500).json({ success: false, message: "Server error" });
   }
 };
@@ -383,7 +384,7 @@ export const updateService = async (req, res) => {
 
     res.json({ success: true, service: updatedService });
   } catch (error) {
-    console.error("❌ Error updating service:", error);
+    logger.error("❌ Error updating service:", error);
     res.status(500).json({ success: false, message: "Server error" });
   }
 };
@@ -408,35 +409,13 @@ export const deleteService = async (req, res) => {
         .json({ success: false, message: "Not authorized" });
     }
 
-    // Delete images from Cloudinary if they exist
-    if (service.images && service.images.length > 0) {
-      for (const img of service.images) {
-        if (img.publicId) {
-          await cloudinary.uploader.destroy(img.publicId, {
-            resource_type: "image",
-          });
-        }
-      }
-    }
-
-    await service.deleteOne();
-
-    // Remove reference from user's services array if present
-    try {
-      const owner = await User.findById(service.provider);
-      if (owner && Array.isArray(owner.services)) {
-        owner.services = owner.services.filter(
-          (sid) => sid.toString() !== service._id.toString()
-        );
-        await owner.save();
-      }
-    } catch (remErr) {
-      console.warn("⚠️ Could not remove service reference from user:", remErr);
-    }
+    // Soft-delete so active bookings keep their service reference.
+    service.deletedAt = new Date();
+    await service.save();
 
     res.json({ success: true, message: "Service deleted successfully" });
   } catch (error) {
-    console.error("❌ Error deleting service:", error);
+    logger.error("❌ Error deleting service:", error);
     res.status(500).json({ success: false, message: "Server error" });
   }
 };

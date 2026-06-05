@@ -5,7 +5,7 @@ const API_CACHE    = "ump-api-v1";
 const STATIC_CACHE = "ump-static-v1";
 
 // App-shell resources cached on install (always available offline)
-const SHELL_URLS = ["/", "/index.html", "/images/ump-logo.png"];
+const SHELL_URLS = ["/", "/index.html", "/offline.html", "/images/ump-logo.png"];
 
 // API routes to cache with stale-while-revalidate (show cached, refresh in bg)
 const SWR_API_PATTERNS = [
@@ -105,7 +105,7 @@ async function networkFirstWithShellFallback(request) {
     return response;
   } catch {
     const cache = await caches.open(SHELL_CACHE);
-    return (await cache.match(request)) ?? (await cache.match("/")) ?? new Response("Offline", { status: 503 });
+    return (await cache.match(request)) ?? (await cache.match("/offline.html")) ?? new Response("Offline", { status: 503 });
   }
 }
 
