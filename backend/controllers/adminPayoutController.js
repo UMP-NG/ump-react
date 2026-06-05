@@ -4,6 +4,10 @@ import { notify } from "../utils/notify.js";
 import logger from "../utils/logger.js";
 import { fmt, startOf } from "./adminHelpers.js";
 
+const PAYOUT_FEE_RATE = 0.032; // 3.2% platform fee deducted from gross payout
+const RISK_HIGH_THRESHOLD   = 500_000;
+const RISK_MEDIUM_THRESHOLD = 100_000;
+
 export const getAdminPayouts = async (req, res) => {
   try {
     const { status = "pending" } = req.query;
@@ -23,9 +27,9 @@ export const getAdminPayouts = async (req, res) => {
         seller: { storeName: sDoc?.storeName || p.seller?.name || p.provider?.name || "—", ownerName: p.seller?.name || p.provider?.name || "—" },
         bankName: acct.bankName || "—", accountNumber: acct.accountNumber || "",
         availableBalance: sDoc?.pendingPayout || 0, requestedAmount: p.amount,
-        netAmount: Math.floor(p.amount * 0.968),
+        netAmount: Math.floor(p.amount * (1 - PAYOUT_FEE_RATE)),
         status: p.status,
-        riskLevel: p.amount > 500_000 ? "High" : p.amount > 100_000 ? "Medium" : "Low",
+        riskLevel: p.amount > RISK_HIGH_THRESHOLD ? "High" : p.amount > RISK_MEDIUM_THRESHOLD ? "Medium" : "Low",
         createdAt: p.createdAt,
       };
     });
@@ -65,7 +69,11 @@ export const approvePayout = async (req, res) => {
     );
     if (!payout) return res.status(400).json({ message: "Payout not found or already processed" });
     if (payout.seller) {
-      await Seller.findOneAndUpdate({ user: payout.seller }, { $inc: { pendingPayout: -payout.amount } });
+      // Aggregation pipeline update prevents pendingPayout from going below 0
+      await Seller.findOneAndUpdate(
+        { user: payout.seller },
+        [{ $set: { pendingPayout: { $max: [0, { $subtract: ["$pendingPayout", payout.amount] }] } } }]
+      );
       notify(payout.seller, { type: "payout", title: "Payout processing", message: `Your payout of ${fmt(payout.amount)} is now being processed and will be sent to your bank account shortly.`, link: "/seller-dashboard" });
     }
     res.json({ success: true, payout });

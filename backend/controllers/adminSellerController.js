@@ -60,8 +60,10 @@ export const approveSeller = async (req, res) => {
     if (!seller) return res.status(404).json({ message: "Seller not found" });
     seller.isSubscribed = true; seller.subscriptionRequested = false; seller.isSuspended = false;
     await seller.save();
+    logger.info(`[admin] seller approved: ${seller._id} (${seller.storeName}) by admin ${req.user?._id}`);
     res.json({ success: true });
   } catch (err) {
+    logger.error("approveSeller:", err);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -73,8 +75,10 @@ export const rejectSeller = async (req, res) => {
     if (seller.isSubscribed) { seller.isSuspended = true; } else { seller.subscriptionRequested = false; }
     seller.isSubscribed = false;
     await seller.save();
+    logger.info(`[admin] seller rejected/suspended: ${seller._id} (${seller.storeName}) by admin ${req.user?._id}`);
     res.json({ success: true });
   } catch (err) {
+    logger.error("rejectSeller:", err);
     res.status(500).json({ message: "Server error" });
   }
 };

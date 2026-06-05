@@ -100,8 +100,8 @@ export default function App() {
     function handleImgError(e) {
       const img = e.target;
       if (img.tagName !== "IMG") return;
-      if (img.dataset.fbApplied) return; // prevent infinite loop if placeholder itself 404s
-      img.dataset.fbApplied = "1";
+      if (img.dataset.fallbackApplied) return; // prevent infinite loop if placeholder itself 404s
+      img.dataset.fallbackApplied = "1";
       img.src = "/images/placeholder.png";
     }
     // Capture phase so we catch error events before they reach any component-level onError handler

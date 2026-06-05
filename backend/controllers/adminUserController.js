@@ -37,6 +37,7 @@ export const banUser = async (req, res) => {
     await user.save({ validateModifiedOnly: true });
     res.json({ success: true });
   } catch (err) {
+    logger.error("banUser:", err);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -49,6 +50,7 @@ export const unbanUser = async (req, res) => {
     await user.save({ validateModifiedOnly: true });
     res.json({ success: true });
   } catch (err) {
+    logger.error("unbanUser:", err);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -104,7 +106,7 @@ export const getAdminProviders = async (req, res) => {
       const svc = svcMap[u._id.toString()];
       const spInfo = u.serviceProviderInfo || {};
       const isSuspended = u.status === "banned";
-      const verSt = isSuspended ? "suspended" : (svc?.verified || spInfo.verified) ? "verified" : svc?.verificationRequested ? "pending" : "pending";
+      const verSt = isSuspended ? "suspended" : (svc?.verified || spInfo.verified) ? "verified" : "pending";
       return { _id: u._id, businessName: svc?.name || spInfo.businessName || u.name, email: u.email, phone: u.phone || "", category: svc?.major || spInfo.skills?.[0] || "", rate: svc?.rate || spInfo.rate || 0, description: svc?.about || svc?.desc || spInfo.bio || "", certifications: svc?.certifications || [], bookingCount: bookingMap[u._id.toString()] ?? 0, averageRating: svc?.rating || 0, verificationStatus: verSt, createdAt: u.createdAt, _status: verSt };
     }).filter((p) => !status || p._status === status);
     res.json({ providers: shaped, total });
@@ -123,6 +125,7 @@ export const approveProvider = async (req, res) => {
     if (!user.roles.includes("service_provider")) { user.roles.push("service_provider"); await user.save(); }
     res.json({ success: true });
   } catch (err) {
+    logger.error("approveProvider:", err);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -146,6 +149,7 @@ export const setSupportRole = async (req, res) => {
     await user.save();
     res.json({ success: true });
   } catch (err) {
+    logger.error("setSupportRole:", err);
     res.status(500).json({ message: "Server error" });
   }
 };
@@ -158,6 +162,7 @@ export const getSupportTeam = async (req, res) => {
     const admins = await User.find(filter).select("name avatar supportRole").lean();
     res.json(admins.map((a) => ({ _id: a._id, name: a.name, avatar: a.avatar?.url || null, supportRole: a.supportRole })));
   } catch (err) {
+    logger.error("getSupportTeam:", err);
     res.status(500).json({ message: "Server error" });
   }
 };

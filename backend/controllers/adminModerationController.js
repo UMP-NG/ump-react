@@ -59,7 +59,7 @@ export const getAdminReviews = async (req, res) => {
     const [reviews, total, starAgg] = await Promise.all([
       Review.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).populate("author","name email avatar").populate({ path: "refId", select: "name title" }).lean(),
       Review.countDocuments(filter),
-      Review.aggregate([{ $group: { _id: "$rating", count: { $sum: 1 } } }]),
+      Review.aggregate([{ $match: filter }, { $group: { _id: "$rating", count: { $sum: 1 } } }]),
     ]);
     const starMap   = Object.fromEntries(starAgg.map((s) => [s._id, s.count]));
     const avgRating = starAgg.length ? starAgg.reduce((a, s) => a + s._id * s.count, 0) / starAgg.reduce((a, s) => a + s.count, 0) : 0;
@@ -76,9 +76,11 @@ export const getAdminReviews = async (req, res) => {
 
 export const deleteReview = async (req, res) => {
   try {
-    await Review.findByIdAndDelete(req.params.reviewId);
+    const deleted = await Review.findByIdAndDelete(req.params.reviewId);
+    if (!deleted) return res.status(404).json({ message: "Review not found" });
     res.json({ success: true });
   } catch (err) {
+    logger.error("deleteReview:", err);
     res.status(500).json({ message: "Server error" });
   }
 };

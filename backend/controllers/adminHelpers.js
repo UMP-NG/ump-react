@@ -2,12 +2,17 @@
 
 // ── In-process response cache ────────────────────────────────────────────────
 const _sCache = new Map();
+const CACHE_MAX = 200; // evict oldest entry when limit reached to prevent unbounded growth
+
 export function scGet(key, ttlMs) {
   const e = _sCache.get(key);
   if (e && Date.now() - e.ts < ttlMs) return e.data;
   return null;
 }
-export function scSet(key, data) { _sCache.set(key, { data, ts: Date.now() }); }
+export function scSet(key, data) {
+  if (_sCache.size >= CACHE_MAX) _sCache.delete(_sCache.keys().next().value);
+  _sCache.set(key, { data, ts: Date.now() });
+}
 
 // ── Currency formatter ───────────────────────────────────────────────────────
 export const fmt = (n) => {

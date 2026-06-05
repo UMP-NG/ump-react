@@ -51,6 +51,8 @@ export const approveIdentityVerification = async (req, res) => {
     ).lean();
     if (!verReq) return res.status(404).json({ message: "Request not found or already approved" });
     if (verReq.user.toString() === req.user._id.toString()) return res.status(403).json({ message: "You cannot approve your own verification request." });
+    // googleAccount: false ensures the account is treated as a fully verified school-email
+    // account rather than a limited Google account, even if the user originally signed in with Google.
     await User.findByIdAndUpdate(verReq.user, { isVerified: true, googleAccount: false });
     res.json({ message: "Verification approved and user account unlocked." });
     setImmediate(() => {

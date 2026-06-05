@@ -19,7 +19,8 @@ export const getBroadcasts = async (req, res) => {
 
 export const deleteBroadcast = async (req, res) => {
   try {
-    await Broadcast.findByIdAndDelete(req.params.broadcastId);
+    const deleted = await Broadcast.findByIdAndDelete(req.params.broadcastId);
+    if (!deleted) return res.status(404).json({ message: "Broadcast not found" });
     res.json({ success: true });
   } catch (err) {
     logger.error("deleteBroadcast:", err);

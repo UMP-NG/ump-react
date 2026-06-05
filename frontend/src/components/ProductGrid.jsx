@@ -1,6 +1,7 @@
 import { useNavigate } from "react-router-dom";
 import useReveal from "../hooks/useReveal";
 import { useCart } from "../context/CartContext";
+import { useToast } from "../context/ToastContext";
 
 function getImageUrl(img, fallback = "/images/placeholder.png") {
   if (!img) return fallback;
@@ -11,6 +12,7 @@ function getImageUrl(img, fallback = "/images/placeholder.png") {
 export default function ProductGrid({ products, onQuickView }) {
   const navigate = useNavigate();
   const { addToCart } = useCart();
+  const showToast = useToast();
   useReveal(".product-card", [products.length]);
 
   const handleAddToCart = async (e, productId) => {
@@ -20,6 +22,7 @@ export default function ProductGrid({ products, onQuickView }) {
       navigate("/cart");
     } catch (err) {
       if (err?.status === 401) navigate("/login");
+      else showToast("Couldn't add to cart. Try again.", "error");
     }
   };
 

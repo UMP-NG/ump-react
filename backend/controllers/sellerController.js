@@ -6,7 +6,6 @@ export const becomeSeller = async (req, res) => {
   try {
     if (!req.user) {
       logger.warn("⛔ No user");
-      console.groupEnd();
       return res.status(401).json({ message: "Unauthorized" });
     }
 
@@ -47,11 +46,9 @@ export const becomeSeller = async (req, res) => {
       });
     }
 
-    console.groupEnd();
     return res.json({ success: true, seller });
   } catch (err) {
     logger.error("❌ SELLER ERROR:", err);
-    console.groupEnd();
     return res.status(500).json({ message: err.message });
   }
 };

@@ -10,7 +10,7 @@ export default function Recommendations() {
 
   useEffect(() => {
     apiFetch("/api/products?limit=6&sort=new")
-      .then((d) => setItems((d.products || d || []).slice(0, 6)))
+      .then((d) => setItems(d.products || d || []))
       .catch(() => setItems([]));
   }, []);
 
