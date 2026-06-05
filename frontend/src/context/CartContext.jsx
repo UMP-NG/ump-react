@@ -27,7 +27,7 @@ export function CartProvider({ children }) {
   const refreshCart = useCallback(() => {
     apiFetch("/api/cart")
       .then((d) => setCartItems(buildMap(d.items || [])))
-      .catch(() => setCartItems(new Map()));
+      .catch(() => {}); // On transient error keep current state; sign-out clears via the user effect below
   }, []);
 
   // Reload cart when user signs in / out
@@ -44,22 +44,27 @@ export function CartProvider({ children }) {
   }, [refreshCart]);
 
   async function updateQty(productId, quantity) {
+    // Optimistic update first — removes and qty changes feel instant
+    setCartItems((prev) => {
+      const m = new Map(prev);
+      if (quantity < 1) {
+        m.delete(productId);
+      } else {
+        const item = m.get(productId);
+        if (item) m.set(productId, { ...item, quantity });
+      }
+      return m;
+    });
+
     try {
       if (quantity < 1) {
         await apiFetch(`/api/cart/remove/${productId}`, { method: "DELETE" });
-        setCartItems((prev) => { const m = new Map(prev); m.delete(productId); return m; });
       } else {
         await apiFetch("/api/cart/update", { method: "PUT", body: { productId, quantity } });
-        setCartItems((prev) => {
-          const m = new Map(prev);
-          const item = m.get(productId);
-          if (item) m.set(productId, { ...item, quantity });
-          return m;
-        });
       }
     } catch (err) {
-      refreshCart();
-      throw err; // re-throw so callers can show an error toast
+      refreshCart(); // revert to server state on failure
+      throw err;
     }
   }
 
