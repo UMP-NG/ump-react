@@ -16,8 +16,16 @@ if (import.meta.env.VITE_SENTRY_DSN) {
     dsn:              import.meta.env.VITE_SENTRY_DSN,
     environment:      import.meta.env.MODE,
     tracesSampleRate: 0.2,
-    // Capture React component render errors in Sentry
     integrations: [Sentry.browserTracingIntegration()],
+    beforeSend(event) {
+      // Drop events from known crawlers and bots — they fail service worker
+      // registration and other browser APIs, producing noise with 0 real users.
+      const ua = typeof navigator !== "undefined" ? navigator.userAgent : "";
+      if (/bot|crawler|spider|googlebot|read.aloud|facebookexternalhit|slurp|bingbot/i.test(ua)) {
+        return null;
+      }
+      return event;
+    },
   });
 }
 
