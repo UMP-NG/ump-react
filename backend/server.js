@@ -32,9 +32,8 @@ if (!MONGO_URI) {
 console.log(`✅ MONGO_URI configured`);
 
 if (!process.env.NODE_ENV) {
-  console.error("\n❌ [CRITICAL] NODE_ENV is not defined!");
-  console.error("   Fix: Add NODE_ENV=production to your deployment environment");
-  process.exit(1);
+  console.warn("\n⚠️  [WARN] NODE_ENV is not defined — defaulting to 'development'");
+  process.env.NODE_ENV = "development";
 }
 console.log(`✅ NODE_ENV: ${process.env.NODE_ENV}`);
 

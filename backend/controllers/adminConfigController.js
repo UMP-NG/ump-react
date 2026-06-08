@@ -36,6 +36,12 @@ export const getConfig = async (req, res) => {
 export const saveConfig = async (req, res) => {
   try {
     const { fees, flags, slides, logo, subscriptions } = req.body;
+
+    if (fees?.serviceChargeMin != null && fees?.serviceChargeMax != null &&
+        fees.serviceChargeMin > fees.serviceChargeMax) {
+      return res.status(400).json({ message: "serviceChargeMin cannot be greater than serviceChargeMax" });
+    }
+
     const update = { fees, flags, slides, updatedBy: req.user._id };
     if (logo          !== undefined) update.logo          = logo;
     if (subscriptions !== undefined) update.subscriptions = subscriptions;

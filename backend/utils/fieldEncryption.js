@@ -27,10 +27,12 @@ export function decrypt(value) {
   // If value has no colon it was stored before encryption was added — return as-is
   if (!value.includes(":")) return value;
   try {
-    const [ivHex, dataHex] = value.split(":");
-    const iv        = Buffer.from(ivHex, "hex");
-    const data      = Buffer.from(dataHex, "hex");
-    const decipher  = crypto.createDecipheriv(ALGO, KEY, iv);
+    const parts   = value.split(":");
+    const ivHex   = parts[0] ?? "";
+    const dataHex = parts[1] ?? "";
+    const iv       = Buffer.from(ivHex, "hex");
+    const data     = Buffer.from(dataHex, "hex");
+    const decipher = crypto.createDecipheriv(ALGO, KEY, iv);
     return Buffer.concat([decipher.update(data), decipher.final()]).toString("utf8");
   } catch {
     // Corrupted or wrong key — return raw so callers can surface an error rather than silently failing
@@ -41,5 +43,8 @@ export function decrypt(value) {
 export function mask(value) {
   if (!value) return value;
   const plain = decrypt(value);
+  // If decrypt returned the raw ciphertext (failed), show a generic mask instead of
+  // accidentally exposing the last 4 chars of the encrypted hex string.
+  if (plain === value && value.includes(":")) return "****";
   return plain.slice(-4).padStart(plain.length, "*");
 }

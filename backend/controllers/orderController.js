@@ -412,12 +412,13 @@ export const updateOrderStatus = async (req, res) => {
       return res.status(400).json({ message: `Cannot move from "${order.status}" to "${status}"` });
 
     const previousStatus = order.status;
-    order.status = status;
 
-    // Only admins may confirm a transfer order — sellers cannot self-approve
+    // Only admins may confirm a transfer order — authorization check before any state mutation
     if (status === "confirmed" && previousStatus === "pending-verification" && !isAdmin) {
       return res.status(403).json({ message: "Only admins can verify transfer payments" });
     }
+
+    order.status = status;
 
     // When admin confirms a transfer order, mark payment as received
     if (status === "confirmed" && previousStatus === "pending-verification") {
@@ -726,8 +727,8 @@ export const generateInvoicePDF = (order, res) =>
 
     doc.moveDown();
     doc.text(`Total: ₦${order.totalAmount}`, { bold: true });
-    doc.end();
     doc.on("end", resolve);
+    doc.end();
   });
 
 // PUT /api/orders/:orderId/confirm-delivery

@@ -1133,3 +1133,171 @@
 
 .rpt-row { transition: background .1s; }
 .rpt-row:hover { background: var(--surface); }
+
+/* ═══════════════════════════════════════════════════════════
+   Dark-mode overrides — admin panel uses hardcoded hex colours
+   so we re-declare them here under [data-theme="dark"]
+   ═══════════════════════════════════════════════════════════ */
+
+/* Root background */
+[data-theme="dark"] .admin { background: var(--paper); }
+
+/* ── Topbar ── */
+[data-theme="dark"] .adm-top {
+  background: var(--white);
+  border-bottom-color: var(--line);
+}
+[data-theme="dark"] .adm-top .icon-btn {
+  background: var(--surface);
+  color: var(--ink-2);
+}
+[data-theme="dark"] .adm-top .icon-btn:hover { background: var(--line); }
+[data-theme="dark"] .adm-top .icon-btn .dot  { border-color: var(--white); }
+[data-theme="dark"] .adm-search input {
+  background: var(--surface);
+  border-color: var(--line);
+  color: var(--ink-1);
+}
+[data-theme="dark"] .adm-search input:focus {
+  background: var(--surface);
+  border-color: var(--accent);
+}
+[data-theme="dark"] .adm-search .kbd {
+  background: var(--surface);
+  border-color: var(--line);
+  color: var(--ink-3);
+}
+
+/* ── Stat cards ── */
+[data-theme="dark"] .adm-stat {
+  background: var(--white);
+  border-color: var(--line);
+}
+[data-theme="dark"] .adm-stat .pill-warn {
+  background: #2d1506; color: #fb923c; border-color: #7c3a00;
+}
+[data-theme="dark"] .adm-stat .pill-red {
+  background: #3b0a0a; color: #f87171; border-color: #7f1d1d;
+}
+
+/* ── Card ── */
+[data-theme="dark"] .adm-card { background: var(--white); border-color: var(--line); }
+[data-theme="dark"] .adm-card-head { border-bottom-color: var(--line); }
+
+/* ── Tabs & chips ── */
+[data-theme="dark"] .adm-tabs { background: var(--white); border-color: var(--line); }
+[data-theme="dark"] .adm-chip { background: var(--surface); border-color: var(--line); color: var(--ink-2); }
+[data-theme="dark"] .adm-chip:hover { background: var(--line); }
+
+/* ── Table ── */
+[data-theme="dark"] .adm-table thead th {
+  background: var(--surface);
+  border-bottom-color: var(--line);
+  color: var(--ink-3);
+}
+[data-theme="dark"] .adm-table tbody td { border-bottom-color: var(--line); }
+[data-theme="dark"] .adm-table tbody tr:hover { background: var(--surface); }
+[data-theme="dark"] .adm-table .adm-checkbox { border-color: var(--line-strong); }
+
+/* ── Buttons ── */
+[data-theme="dark"] .abtn { background: var(--surface); color: var(--ink-1); }
+[data-theme="dark"] .abtn.ghost {
+  background: var(--surface);
+  border-color: var(--line);
+  color: var(--ink-1);
+}
+[data-theme="dark"] .abtn.ghost:hover:not(:disabled) { background: var(--line); }
+[data-theme="dark"] .abtn.danger  { background: #3b0a0a; color: #f87171; border-color: #7f1d1d; }
+[data-theme="dark"] .abtn.success { background: #052e0f; color: #4ade80; border-color: #14532d; }
+
+/* ── Drawer ── */
+[data-theme="dark"] .adm-drawer { background: var(--white); }
+[data-theme="dark"] .adm-drawer-head { border-bottom-color: var(--line); }
+[data-theme="dark"] .adm-drawer-foot { background: var(--surface); border-top-color: var(--line); }
+
+/* ── Modal ── */
+[data-theme="dark"] .adm-modal { background: var(--white); }
+[data-theme="dark"] .adm-modal-head { border-bottom-color: var(--line); }
+[data-theme="dark"] .adm-modal-foot { border-top-color: var(--line); }
+
+/* ── Forms ── */
+[data-theme="dark"] .adm-field input,
+[data-theme="dark"] .adm-field select,
+[data-theme="dark"] .adm-field textarea {
+  background: var(--surface);
+  border-color: var(--line);
+  color: var(--ink-1);
+}
+[data-theme="dark"] .adm-form-err { background: #3b0a0a; color: #f87171; }
+
+/* ── Chart & KPI ── */
+[data-theme="dark"] .chart-toggle { background: var(--surface); }
+[data-theme="dark"] .chart-toggle button.active { background: var(--white); color: var(--ink-1); }
+[data-theme="dark"] .kpi-strip .kpi { background: var(--surface); }
+
+/* ── Timeline ── */
+[data-theme="dark"] .adm-timeline { border-left-color: var(--line); }
+[data-theme="dark"] .adm-timeline li::before {
+  border-color: var(--white);
+  box-shadow: 0 0 0 1px var(--line);
+}
+
+/* ── Hero slide / config ── */
+[data-theme="dark"] .hero-slide-row { background: var(--surface); border-color: var(--line); }
+[data-theme="dark"] .cfg-slide-item { border-color: var(--line); }
+[data-theme="dark"] .cfg-slide-title { color: var(--ink-1); }
+[data-theme="dark"] .cfg-slide-input {
+  background: var(--surface);
+  border-color: var(--line);
+  color: var(--ink-2);
+}
+[data-theme="dark"] .cfg-logo-preview { background: var(--surface); border-color: var(--line); }
+[data-theme="dark"] .cfg-flag-row + .cfg-flag-row { border-top-color: var(--line); }
+
+/* ── Dropdowns ── */
+[data-theme="dark"] .adm-period-drop { background: var(--white); border-color: var(--line); }
+[data-theme="dark"] .adm-period-opt  { color: var(--ink-1); }
+[data-theme="dark"] .adm-period-opt:hover { background: var(--surface); }
+
+[data-theme="dark"] .adm-notif-drop  { background: var(--white); border-color: var(--line); }
+[data-theme="dark"] .adm-notif-head  { border-bottom-color: var(--line); }
+[data-theme="dark"] .adm-notif-item  { color: var(--ink-1); }
+[data-theme="dark"] .adm-notif-item:hover { background: var(--surface); }
+
+/* ── Misc UI ── */
+[data-theme="dark"] .adm-pagination   { border-top-color: var(--line); }
+[data-theme="dark"] .icon-action:hover { background: var(--surface); color: var(--ink-1); }
+[data-theme="dark"] .adm-stars .empty { color: var(--line-strong); }
+[data-theme="dark"] .act-row          { border-bottom-color: var(--line); }
+[data-theme="dark"] .fchip            { background: var(--surface); border-color: var(--line); color: var(--ink-1); }
+[data-theme="dark"] .rpt-row:hover    { background: var(--surface); }
+
+/* ── Compose / broadcast ── */
+[data-theme="dark"] .compose-target {
+  background: var(--surface);
+  border-color: var(--line);
+  color: var(--ink-1);
+}
+[data-theme="dark"] .compose-target.active { background: #2d1506; color: #fb923c; border-color: #c2410c; }
+
+/* ── Dispute messages ── */
+[data-theme="dark"] .dispute-msg       { background: var(--surface); border-color: var(--line); }
+[data-theme="dark"] .dispute-msg.buyer  { background: #0c1a2e; border-color: #1e3a5f; }
+[data-theme="dark"] .dispute-msg.seller { background: #1a0e00; border-color: #7c3a00; }
+[data-theme="dark"] .dispute-msg.admin  { background: #160d2e; border-color: #3b1a6e; }
+
+/* ── Status pills ── */
+[data-theme="dark"] .pill.green  { background: #052e0f; color: #4ade80; }
+[data-theme="dark"] .pill.amber  { background: #2d1f00; color: #fbbf24; }
+[data-theme="dark"] .pill.red    { background: #3b0a0a; color: #f87171; }
+[data-theme="dark"] .pill.blue   { background: #0c1a2e; color: #60a5fa; }
+[data-theme="dark"] .pill.gray   { background: var(--surface); color: var(--ink-3); }
+[data-theme="dark"] .pill.purple { background: #160d2e; color: #a78bfa; }
+
+/* ── Role pills ── */
+[data-theme="dark"] .role-pill          { background: var(--surface); color: var(--ink-2); }
+[data-theme="dark"] .role-pill.user     { background: #0c1a2e; color: #38bdf8; }
+[data-theme="dark"] .role-pill.buyer    { background: #0c1a2e; color: #60a5fa; }
+[data-theme="dark"] .role-pill.seller   { background: #1a0e00; color: #fb923c; }
+[data-theme="dark"] .role-pill.provider { background: #160d2e; color: #a78bfa; }
+[data-theme="dark"] .role-pill.role-admin { background: #052e0f; color: #4ade80; }

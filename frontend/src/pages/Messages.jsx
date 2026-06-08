@@ -175,6 +175,16 @@ export default function Messages() {
     const receiverId = convo.receiverId || convo.conversationWith || convo._id;
     const otherUser  = convo.otherUser  || { _id: receiverId, name: convo.name, avatar: convo.avatar, roles: convo.roles };
     setActiveThread({ ...convo, receiverId, otherUser });
+    // Immediately clear the unread badge in the sidebar
+    if ((convo.unreadCount || 0) > 0) {
+      setConvos((prev) =>
+        prev.map((c) => {
+          const cId = c.conversationWith?.toString() || c._id?.toString();
+          return cId === receiverId.toString() ? { ...c, unreadCount: 0 } : c;
+        })
+      );
+      apiFetch(`/api/messages/conversation/${receiverId}/read`, { method: "PUT" }).catch(() => {});
+    }
   }
 
   const filtered = convos.filter((c) => {
@@ -540,6 +550,32 @@ function formatTime(iso) {
   return d.toLocaleDateString([], { month: "short", day: "numeric" });
 }
 
+// Timestamp shown inside each message bubble — always includes the time;
+// adds date context when the message is not from today.
+function formatMessageTime(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const now = new Date();
+  const diffDays = Math.floor((now - d) / 86400000);
+  const time = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  if (diffDays === 0) return time;
+  if (diffDays === 1) return `Yesterday ${time}`;
+  if (diffDays < 7) return `${d.toLocaleDateString([], { weekday: "short" })} ${time}`;
+  return `${d.toLocaleDateString([], { month: "short", day: "numeric", year: diffDays > 365 ? "numeric" : undefined })} ${time}`;
+}
+
+// Label shown in the date-separator row between messages from different calendar days.
+function formatDateSeparator(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const now = new Date();
+  const diffDays = Math.floor((now - d) / 86400000);
+  if (diffDays === 0) return "Today";
+  if (diffDays === 1) return "Yesterday";
+  if (diffDays < 7) return d.toLocaleDateString([], { weekday: "long" });
+  return d.toLocaleDateString([], { month: "long", day: "numeric", year: diffDays > 365 ? "numeric" : undefined });
+}
+
 function EmptyPanel() {
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16, background: "var(--surface)", color: "var(--ink-3)" }}>
@@ -757,10 +793,17 @@ function MsgThread({ convo, onBack }) {
           </div>
         ) : null}
 
-        {messages.map((msg) => {
+        {messages.map((msg, idx) => {
           const isMe        = msg.isOwn;
           const isAdminMsg  = msg.isAdminMessage;
           const isNegotiation = msg.type === "negotiation" && msg.meta;
+
+          // Show a date separator whenever the calendar day changes between messages
+          const prevMsg = messages[idx - 1];
+          const showDateSep = !prevMsg || (
+            msg.createdAt && prevMsg.createdAt &&
+            new Date(msg.createdAt).toDateString() !== new Date(prevMsg.createdAt).toDateString()
+          );
 
           // For negotiation cards, the "seller" is the person receiving the initial offer
           // iAmSeller = I am not the one who sent this particular message (the one offering)
@@ -796,6 +839,17 @@ function MsgThread({ convo, onBack }) {
 
           return (
             <div key={msg._id} style={{ display: "flex", flexDirection: "column", alignItems: isMe ? "flex-end" : "flex-start", gap: 3 }}>
+
+              {/* Date separator between messages from different calendar days */}
+              {showDateSep && msg.createdAt && (
+                <div style={{ alignSelf: "center", margin: "8px 0 4px", display: "flex", alignItems: "center", gap: 8, width: "100%" }}>
+                  <div style={{ flex: 1, height: 1, background: "var(--line)" }} />
+                  <span style={{ fontSize: "1.05rem", color: "var(--ink-3)", whiteSpace: "nowrap", padding: "2px 10px", background: "var(--surface)", borderRadius: 20, border: "1px solid var(--line)" }}>
+                    {formatDateSeparator(msg.createdAt)}
+                  </span>
+                  <div style={{ flex: 1, height: 1, background: "var(--line)" }} />
+                </div>
+              )}
 
               {/* Admin label above incoming admin message */}
               {!isMe && isAdminMsg && (
@@ -841,7 +895,7 @@ function MsgThread({ convo, onBack }) {
 
               <div style={{ display: "flex", alignItems: "center", gap: 5, paddingLeft: isMe ? 0 : 4, paddingRight: isMe ? 4 : 0 }}>
                 <span style={{ fontSize: "1rem", color: "var(--ink-3)" }}>
-                  {msg.createdAt ? new Date(msg.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : ""}
+                  {formatMessageTime(msg.createdAt)}
                 </span>
                 {isMe && isAdminMsg && (
                   <span style={{ fontSize: "1rem", color: "#f59e0b", display: "flex", alignItems: "center", gap: 3, fontWeight: 600 }}>

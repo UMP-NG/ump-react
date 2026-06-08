@@ -40,6 +40,16 @@ export default function AdminTopbar({ onMenuOpen }) {
   const [avatarBroken, setAvatarBroken] = useState(false);
   const [notifOpen, setNotifOpen]   = useState(false);
   const [helpOpen, setHelpOpen]     = useState(false);
+  const [isDark, setIsDark] = useState(
+    () => document.documentElement.getAttribute('data-theme') === 'dark'
+  );
+
+  function toggleDark() {
+    const next = isDark ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', next);
+    localStorage.setItem('ump-theme', next);
+    setIsDark(!isDark);
+  }
   const [notifStats, setNotifStats] = useState(null);
   const notifRef = useRef(null);
   const helpRef  = useRef(null);
@@ -103,6 +113,15 @@ export default function AdminTopbar({ onMenuOpen }) {
       </div>
 
       <div className="adm-top-spacer"></div>
+
+      {/* Dark mode toggle */}
+      <button
+        className="icon-btn"
+        onClick={toggleDark}
+        title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+      >
+        <i className={isDark ? 'fa-solid fa-sun' : 'fa-solid fa-moon'}></i>
+      </button>
 
       {/* Help */}
       <div ref={helpRef} style={{ position: 'relative' }}>

@@ -36,10 +36,9 @@ export default function Market() {
 
   const [pendingSort, setPendingSort] = useState(sort);
   const [pendingCondition, setPendingCondition] = useState(condition);
-  const [hasMore, setHasMore] = useState(false);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const pageRef = useRef(1);
-  const PAGE_SIZE = 20;
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const PAGE_SIZE = 50;
 
   useEffect(() => {
     apiFetch("/api/categories")
@@ -66,47 +65,30 @@ export default function Market() {
     return () => mq.removeEventListener("change", handler);
   }, []);
 
+  // Reset to page 1 when filters change
   useEffect(() => {
-    pageRef.current = 1;
+    setPage(1);
+  }, [cat, sort, condition]);
+
+  useEffect(() => {
     setLoading(true);
-    setHasMore(false);
     const params = new URLSearchParams();
     if (cat !== "All") params.set("category", cat.toLowerCase());
     if (condition !== "All") params.set("condition", condition.toLowerCase());
     params.set("sort", sort);
     params.set("limit", String(PAGE_SIZE));
+    params.set("skip", String((page - 1) * PAGE_SIZE));
     apiFetch(`/api/products?${params}`)
       .then((d) => {
         const list = Array.isArray(d?.products) ? d.products : Array.isArray(d) ? d : [];
         setProducts(list);
         const t = d?.total ?? list.length;
         setTotal(t);
-        setHasMore(sort !== "random" && list.length === PAGE_SIZE && list.length < t);
+        setTotalPages(Math.max(1, Math.ceil(t / PAGE_SIZE)));
       })
-      .catch(() => { setProducts([]); setTotal(0); setHasMore(false); })
+      .catch(() => { setProducts([]); setTotal(0); setTotalPages(1); })
       .finally(() => setLoading(false));
-  }, [cat, sort, condition]);
-
-  function loadMore() {
-    const nextPage = pageRef.current + 1;
-    setLoadingMore(true);
-    const params = new URLSearchParams();
-    if (cat !== "All") params.set("category", cat.toLowerCase());
-    if (condition !== "All") params.set("condition", condition.toLowerCase());
-    params.set("sort", sort);
-    params.set("limit", String(PAGE_SIZE));
-    params.set("skip", String((nextPage - 1) * PAGE_SIZE));
-    apiFetch(`/api/products?${params}`)
-      .then((d) => {
-        pageRef.current = nextPage; // advance only on success
-        const list = Array.isArray(d?.products) ? d.products : Array.isArray(d) ? d : [];
-        setProducts((prev) => [...prev, ...list]);
-        const t = d?.total ?? 0;
-        setHasMore(sort !== "random" && list.length === PAGE_SIZE && (nextPage * PAGE_SIZE) < t);
-      })
-      .catch(() => setHasMore(false)) // leave pageRef unchanged so retry fetches same page
-      .finally(() => setLoadingMore(false));
-  }
+  }, [cat, sort, condition, page]);
 
   function openFilter() {
     setPendingSort(sort);
@@ -361,10 +343,47 @@ export default function Market() {
           }
         </div>
 
-        {hasMore && !loading && (
-          <div style={{ textAlign: "center", padding: "0 0 24px" }}>
-            <button className="btn btn-ghost" onClick={loadMore} disabled={loadingMore}>
-              {loadingMore ? <><i className="fas fa-spinner fa-spin" aria-hidden="true" /> Loading…</> : "Load more"}
+        {!loading && totalPages > 1 && (
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, padding: "0 0 24px", flexWrap: "wrap" }}>
+            <button
+              className="btn btn-ghost"
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page === 1}
+              style={{ minWidth: 80 }}
+            >
+              <i className="fas fa-chevron-left" /> Prev
+            </button>
+
+            {Array.from({ length: totalPages }, (_, i) => i + 1)
+              .filter((p) => p === 1 || p === totalPages || Math.abs(p - page) <= 2)
+              .reduce((acc, p, idx, arr) => {
+                if (idx > 0 && p - arr[idx - 1] > 1) acc.push("...");
+                acc.push(p);
+                return acc;
+              }, [])
+              .map((p, idx) =>
+                p === "..." ? (
+                  <span key={`ellipsis-${idx}`} style={{ padding: "0 4px", color: "var(--ink-3)", fontSize: "1.3rem" }}>…</span>
+                ) : (
+                  <button
+                    key={p}
+                    className={`btn${p === page ? " btn-primary" : " btn-ghost"}`}
+                    onClick={() => setPage(p)}
+                    style={{ minWidth: 40 }}
+                  >
+                    {p}
+                  </button>
+                )
+              )
+            }
+
+            <button
+              className="btn btn-ghost"
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={page === totalPages}
+              style={{ minWidth: 80 }}
+            >
+              Next <i className="fas fa-chevron-right" />
             </button>
           </div>
         )}

@@ -521,6 +521,8 @@ export const logout = (req, res) => {
   try {
     res.cookie("token", "", {
       httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
       expires: new Date(0),
     });
     res.status(200).json({ success: true, message: "Logged out successfully" });
@@ -563,7 +565,7 @@ export const resendOtp = async (req, res) => {
 // ─── Force-logout (clears the httpOnly cookie) ───────────────────────────────
 export const forceLogout = (req, res) => {
   try {
-    res.cookie("token", "", { httpOnly: true, expires: new Date(0), sameSite: "lax", path: "/" });
+    res.cookie("token", "", { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: process.env.NODE_ENV === "production" ? "none" : "lax", expires: new Date(0), path: "/" });
     res.status(200).json({ message: "Token cleared - please login again", success: true });
   } catch (error) {
     res.status(500).json({ message: "Error clearing token" });

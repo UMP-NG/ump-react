@@ -118,17 +118,37 @@ export const getUserConversations = async (req, res) => {
       return res.status(401).json({ message: "User not authenticated" });
     }
 
-    const userId = new mongoose.Types.ObjectId(req.user._id);
+    const userId  = new mongoose.Types.ObjectId(req.user._id);
+    const isAdmin = req.user.roles?.includes("admin");
+
+    // Admins get a shared support inbox: they see every user→admin conversation,
+    // not just their own, so any admin can pick up and reply to any support thread.
+    // Admin↔admin private messages are excluded to preserve privacy.
+    let baseMatch;
+    if (isAdmin) {
+      const adminDocs = await User.find({ roles: "admin" }).select("_id").lean();
+      const adminIds  = adminDocs.map((a) => new mongoose.Types.ObjectId(a._id));
+      baseMatch = {
+        $or: [
+          { sender: userId },   // messages this admin sent
+          { receiver: userId }, // messages sent directly to this admin
+          // user→any-admin support messages only (exclude admin↔admin private threads)
+          { receiver: { $in: adminIds }, sender: { $nin: adminIds } },
+        ],
+      };
+    } else {
+      baseMatch = {
+        $or: [
+          { sender: userId },
+          { receiver: userId },
+        ],
+      };
+    }
 
     // OPTIMIZATION: Use simpler, faster aggregation pipeline
     const conversations = await Message.aggregate([
       {
-        $match: {
-          $or: [
-            { sender: userId },
-            { receiver: userId },
-          ],
-        },
+        $match: baseMatch,
       },
       // Sort and limit BEFORE grouping - critical for performance
       { $sort: { createdAt: -1 } },
