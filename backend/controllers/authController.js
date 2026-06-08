@@ -5,9 +5,9 @@ import crypto from "crypto";
 // ─── Referral credit amounts ──────────────────────────────────────────────────
 const CREDIT_SCHOOL_EMAIL = 100; // ₦100 for verified UNILAG email signup
 const CREDIT_GOOGLE_UNVERIFIED = 50; // ₦50 for Google (non-UNILAG) signup
-const CREDIT_GOOGLE_VERIFIED = 50;   // ₦50 extra when that Google account links school email
+export const CREDIT_GOOGLE_VERIFIED = 50;   // ₦50 extra when that Google account links school email
 
-async function awardReferralCredit(referrerId, amount, reason) {
+export async function awardReferralCredit(referrerId, amount, reason) {
   if (!referrerId || amount <= 0) return;
   try {
     await User.findByIdAndUpdate(referrerId, { $inc: { referralCredit: amount } });

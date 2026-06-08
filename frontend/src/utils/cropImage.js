@@ -1,5 +1,15 @@
+// fetch() does not support data: URLs on iOS Safari — load via <img> instead.
+function loadImage(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error("Failed to load image"));
+    img.src = src;
+  });
+}
+
 export default async function getCroppedImg(imageSrc, croppedAreaPixels) {
-  const image = await createImageBitmap(await (await fetch(imageSrc)).blob());
+  const image = await loadImage(imageSrc);
   const canvas = document.createElement("canvas");
   canvas.width  = croppedAreaPixels.width;
   canvas.height = croppedAreaPixels.height;

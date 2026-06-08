@@ -4,6 +4,7 @@ import Seller from "../models/Seller.js";
 import User from "../models/User.js";
 import { notify } from "../utils/notify.js";
 import logger from "../utils/logger.js";
+import { awardReferralCredit, CREDIT_GOOGLE_VERIFIED } from "./authController.js";
 
 export const getPendingVerifications = async (req, res) => {
   try {
@@ -44,19 +45,56 @@ export const approveIdentityVerification = async (req, res) => {
     const { id } = req.params;
     const { note } = req.body;
     if (!mongoose.Types.ObjectId.isValid(id)) return res.status(400).json({ message: "Invalid request ID" });
+
+    // Read first so the self-approval guard runs before any DB write.
+    const existing = await VerificationRequest.findOne(
+      { _id: id, status: { $ne: "approved" } },
+      { user: 1 }
+    ).lean();
+    if (!existing) return res.status(404).json({ message: "Request not found or already approved" });
+    if (existing.user.toString() === req.user._id.toString())
+      return res.status(403).json({ message: "You cannot approve your own verification request." });
+
+    // Atomic state transition — the $ne guard prevents double-approval under concurrent requests.
     const verReq = await VerificationRequest.findOneAndUpdate(
       { _id: id, status: { $ne: "approved" } },
       { $set: { status: "approved", adminNote: note || "" } },
       { new: true, projection: { user: 1 } }
     ).lean();
     if (!verReq) return res.status(404).json({ message: "Request not found or already approved" });
-    if (verReq.user.toString() === req.user._id.toString()) return res.status(403).json({ message: "You cannot approve your own verification request." });
-    // googleAccount: false ensures the account is treated as a fully verified school-email
-    // account rather than a limited Google account, even if the user originally signed in with Google.
+
+    // googleAccount: false ensures the account is no longer treated as limited even if the
+    // user originally signed in with Google.
     await User.findByIdAndUpdate(verReq.user, { isVerified: true, googleAccount: false });
+
     res.json({ message: "Verification approved and user account unlocked." });
-    setImmediate(() => {
-      notify(verReq.user, { type: "account", title: "Identity verified — full access unlocked", message: "Your student identity has been verified. You can now sell, list properties, and offer services on UMP.", link: "/settings" }).catch(() => {});
+
+    setImmediate(async () => {
+      try {
+        // Award the remaining referral credit to whoever referred this user, unless the
+        // school-email OTP path already paid it (schoolEmailVerified: true).
+        const fullUser = await User.findById(verReq.user)
+          .select("referredBy schoolEmailVerified name email").lean();
+        if (
+          fullUser?.referredBy &&
+          !fullUser.schoolEmailVerified &&
+          !fullUser.referredBy.equals(verReq.user)
+        ) {
+          awardReferralCredit(
+            fullUser.referredBy,
+            CREDIT_GOOGLE_VERIFIED,
+            `${fullUser.name || fullUser.email} verified their student identity — you've earned the remaining ₦${CREDIT_GOOGLE_VERIFIED} referral credit!`
+          );
+        }
+        await notify(verReq.user, {
+          type:    "account",
+          title:   "Identity verified — full access unlocked",
+          message: "Your student identity has been verified. You can now sell, list properties, and offer services on UMP.",
+          link:    "/settings",
+        });
+      } catch (e) {
+        logger.error("approveIdentityVerification post-response:", e);
+      }
     });
   } catch (err) {
     logger.error("approveIdentityVerification:", err);

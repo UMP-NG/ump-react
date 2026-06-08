@@ -38,6 +38,17 @@ export function UserProvider({ children }) {
     }
   }, [user]);
 
+  // When the server sends an "account" notification (e.g. identity approved, ban lifted),
+  // re-fetch the user so isLimitedAccount and other flags update immediately without a reload.
+  useEffect(() => {
+    if (!user) return;
+    function onNotif(notif) {
+      if (notif?.type === "account") fetchMe();
+    }
+    socket.on("new_notification", onNotif);
+    return () => socket.off("new_notification", onNotif);
+  }, [user, fetchMe]);
+
   // Re-subscribe when the app becomes visible again (handles mobile subscription expiry
   // caused by Chrome silent updates or FCM endpoint rotation — at most once per 5 minutes).
   // lastPushAttemptRef is a ref so the throttle survives user-object identity changes

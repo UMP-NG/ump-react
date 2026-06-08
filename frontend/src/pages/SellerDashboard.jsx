@@ -305,8 +305,9 @@ function QuickEditModal({ product, onClose, onSave, showToast }) {
               ))}
               {form.colors.length === 0 && <span style={{ fontSize: "1.2rem", color: "var(--ink-4)" }}>No colors added</span>}
             </div>
-            <div style={{ display: "flex", gap: 8 }}>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
               <input style={{ ...iSty, flex: 1 }} placeholder="Color name (e.g. Red)" value={colorInput.name} onChange={(e) => setColorInput((c) => ({ ...c, name: e.target.value }))} onKeyDown={(e) => e.key === "Enter" && addColor()} />
+              <span style={{ width: 24, height: 24, borderRadius: "50%", background: colorInput.code || "#e0e0e0", border: "1px solid rgba(0,0,0,.15)", flexShrink: 0, display: "inline-block" }} title={colorInput.code} />
               <input type="color" value={colorInput.code} onChange={(e) => setColorInput((c) => ({ ...c, code: e.target.value }))} style={{ width: 40, height: 38, border: "1px solid var(--line)", borderRadius: "var(--r-md)", cursor: "pointer", padding: 2, flexShrink: 0 }} />
               <button className="btn btn-sm btn-ghost" onClick={addColor} style={{ flexShrink: 0 }}>Add</button>
             </div>
@@ -920,8 +921,9 @@ function AddProductModal({ onClose, onSave, showToast }) {
                 </span>
               ))}
             </div>
-            <div style={{ display: "flex", gap: 8 }}>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
               <input style={{ ...iSty, flex: 1 }} placeholder="Color name" value={colorInput.name} onChange={(e) => setColorInput((c) => ({ ...c, name: e.target.value }))} onKeyDown={(e) => e.key === "Enter" && addColor()} />
+              <span style={{ width: 24, height: 24, borderRadius: "50%", background: colorInput.code || "#e0e0e0", border: "1px solid rgba(0,0,0,.15)", flexShrink: 0, display: "inline-block" }} title={colorInput.code} />
               <input type="color" value={colorInput.code} onChange={(e) => setColorInput((c) => ({ ...c, code: e.target.value }))} style={{ width: 40, height: 38, border: "1px solid var(--line)", borderRadius: "var(--r-md)", cursor: "pointer", padding: 2, flexShrink: 0 }} />
               <button className="btn btn-sm btn-ghost" onClick={addColor} style={{ flexShrink: 0 }}>Add</button>
             </div>

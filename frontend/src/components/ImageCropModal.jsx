@@ -24,8 +24,19 @@ export default function ImageCropModal({ src, aspect = 1, onConfirm, onCancel, t
   async function handleUseAsIs() {
     setBusy(true);
     try {
-      const res = await fetch(src);
-      const blob = await res.blob();
+      // fetch() doesn't support data: URLs on iOS Safari — use canvas instead
+      const blob = await new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement("canvas");
+          canvas.width = img.naturalWidth;
+          canvas.height = img.naturalHeight;
+          canvas.getContext("2d").drawImage(img, 0, 0);
+          canvas.toBlob((b) => b ? resolve(b) : reject(new Error("toBlob failed")), "image/jpeg", 0.92);
+        };
+        img.onerror = () => reject(new Error("Image load failed"));
+        img.src = src;
+      });
       onConfirm(blob);
     } finally {
       setBusy(false);

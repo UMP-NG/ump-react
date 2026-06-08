@@ -295,6 +295,21 @@ export default function ProductDetail() {
         )}
       </div>
 
+      {/* Color swatches */}
+      {Array.isArray(product.colors) && product.colors.length > 0 && (
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: "1.2rem", fontWeight: 600, color: "var(--ink-3)", marginBottom: 8 }}>Colors</div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            {product.colors.map((c, i) => (
+              <div key={i} style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 10px", borderRadius: 20, background: "var(--surface)", border: "1px solid var(--line)", fontSize: "1.2rem" }}>
+                {c.code && <span style={{ width: 14, height: 14, borderRadius: "50%", background: c.code, flexShrink: 0, border: "1px solid rgba(0,0,0,.1)" }} />}
+                {c.name}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* tabs */}
       <div style={{ display: "flex", gap: 0, borderBottom: "1px solid var(--line)", overflowX: "auto", scrollbarWidth: "none" }}>
         {TABS.map((t) => (
