@@ -69,12 +69,26 @@ export const getUserMessages = async (req, res) => {
     const { page = 1, limit = 20, conversationWith } = req.query;
     const skip = (page - 1) * limit;
 
-    const filter = {
-      $or: [
-        { sender: req.user._id, receiver: conversationWith },
-        { sender: conversationWith, receiver: req.user._id },
-      ],
-    };
+    // Admins share a support inbox — an admin must be able to read messages between
+    // any user and any other admin, not just themselves.
+    let filter;
+    if (req.user.roles?.includes("admin")) {
+      const adminDocs = await User.find({ roles: "admin" }).select("_id").lean();
+      const adminIds  = adminDocs.map((a) => a._id);
+      filter = {
+        $or: [
+          { sender: conversationWith, receiver: { $in: adminIds } },
+          { sender: { $in: adminIds }, receiver: conversationWith },
+        ],
+      };
+    } else {
+      filter = {
+        $or: [
+          { sender: req.user._id, receiver: conversationWith },
+          { sender: conversationWith, receiver: req.user._id },
+        ],
+      };
+    }
 
     const messages = await Message.find(filter)
       .populate("sender", "name avatar roles")

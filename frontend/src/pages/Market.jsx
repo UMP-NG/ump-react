@@ -39,6 +39,9 @@ export default function Market() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const PAGE_SIZE = 50;
+  // Track previous filter values so we can detect changes and reset page atomically
+  // within a single effect, avoiding a redundant fetch at the stale page number.
+  const prevFilterRef = useRef({ cat, sort, condition });
 
   useEffect(() => {
     apiFetch("/api/categories")
@@ -65,12 +68,18 @@ export default function Market() {
     return () => mq.removeEventListener("change", handler);
   }, []);
 
-  // Reset to page 1 when filters change
   useEffect(() => {
-    setPage(1);
-  }, [cat, sort, condition]);
+    const prev = prevFilterRef.current;
+    const filterChanged = prev.cat !== cat || prev.sort !== sort || prev.condition !== condition;
+    prevFilterRef.current = { cat, sort, condition };
 
-  useEffect(() => {
+    // When filters change and we're not on page 1, reset page and let the re-render
+    // trigger this effect again at page=1 — avoids a redundant fetch at the old page.
+    if (filterChanged && page !== 1) {
+      setPage(1);
+      return;
+    }
+
     setLoading(true);
     const params = new URLSearchParams();
     if (cat !== "All") params.set("category", cat.toLowerCase());

@@ -22,11 +22,19 @@ export const getAdminPayouts = async (req, res) => {
     const shaped = payouts.map((p) => {
       const uid  = p.seller?._id?.toString() || p.provider?._id?.toString();
       const sDoc = uid ? sellerMap[uid] : null;
-      const acct = p.accountDetails || sDoc?.bankDetails || {};
+      // Merge property-by-property so a partial p.accountDetails doesn't block the
+      // Seller.bankDetails fallback for individual missing fields.
+      const pa = p.accountDetails || {};
+      const bd = sDoc?.bankDetails  || {};
+      const acct = {
+        bankName:      pa.bankName      || bd.bankName      || "",
+        accountName:   pa.accountName   || bd.accountName   || "",
+        accountNumber: pa.accountNumber || bd.accountNumber || "",
+      };
       return {
         _id: p._id,
         seller: { storeName: sDoc?.storeName || p.seller?.name || p.provider?.name || "—", ownerName: p.seller?.name || p.provider?.name || "—" },
-        bankName: acct.bankName || "—", accountNumber: mask(acct.accountNumber || ""),
+        bankName: acct.bankName || "—", accountNumber: mask(acct.accountNumber),
         availableBalance: sDoc?.pendingPayout || 0, requestedAmount: p.amount,
         netAmount: Math.floor(p.amount * (1 - PAYOUT_FEE_RATE)),
         status: p.status,

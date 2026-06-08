@@ -9,7 +9,7 @@ const SHELL_URLS = ["/", "/index.html", "/offline.html", "/images/ump-logo.png"]
 
 // VitePWA injects the precache manifest here at build time (replaces self.__WB_MANIFEST).
 // The try-catch makes this safe on the dev server / direct load where __WB_MANIFEST is undefined.
-const PRECACHE_URLS = (() => { try { return self.__WB_MANIFEST; } catch (_) { return []; } })();
+const PRECACHE_URLS = (() => { try { return self.__WB_MANIFEST ?? []; } catch (_) { return []; } })();
 
 // API routes to cache with stale-while-revalidate (show cached, refresh in bg)
 const SWR_API_PATTERNS = [

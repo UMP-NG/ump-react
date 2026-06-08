@@ -4,6 +4,7 @@ import Product from "../models/Product.js";
 import Category from "../models/Category.js";
 import logger from "../utils/logger.js";
 import { startOf, sellerStatus } from "./adminHelpers.js";
+import { mask } from "../utils/fieldEncryption.js";
 
 export const getAdminSellers = async (req, res) => {
   try {
@@ -45,7 +46,14 @@ export const getAdminSellers = async (req, res) => {
       productCount: prodMap[s.user?._id?.toString()] ?? s.totalProducts ?? 0,
       revenue30d: revMap[s.user?._id?.toString()] ?? 0,
       totalRevenue: s.totalRevenue || 0, totalOrders: s.totalOrders || 0, averageRating: s.rating || 0,
-      verificationStatus: sellerStatus(s), bankDetails: s.bankDetails || null, story: s.story || "", createdAt: s.createdAt,
+      verificationStatus: sellerStatus(s),
+      bankDetails: s.bankDetails ? {
+        bankName:      s.bankDetails.bankName      || "",
+        bankCode:      s.bankDetails.bankCode      || "",
+        accountName:   s.bankDetails.accountName   || "",
+        accountNumber: mask(s.bankDetails.accountNumber || ""),
+      } : null,
+      story: s.story || "", createdAt: s.createdAt,
     }));
     res.json({ sellers: shaped, total, page, pages: Math.ceil(total / limit) });
   } catch (err) {

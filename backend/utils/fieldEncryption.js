@@ -3,7 +3,7 @@ import crypto from "crypto";
 const ALGO = "aes-256-cbc";
 
 const _rawKey = process.env.FIELD_ENCRYPTION_KEY;
-if (!_rawKey || _rawKey.length !== 64) {
+if (!_rawKey || _rawKey.length !== 64 || !/^[0-9a-f]{64}$/i.test(_rawKey)) {
   throw new Error(
     "FIELD_ENCRYPTION_KEY must be a 64-character hex string. " +
     "Generate one with: node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\""

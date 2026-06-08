@@ -7,7 +7,8 @@ const UserContext = createContext(null);
 
 export function UserProvider({ children }) {
   const [user, setUser] = useState(undefined); // undefined = loading, null = guest
-  const retryTimerRef = useRef(null);
+  const retryTimerRef    = useRef(null);
+  const lastPushAttemptRef = useRef(0);
 
   const fetchMe = useCallback((retryCount = 0) => {
     apiFetch("/api/auth/me")
@@ -38,15 +39,16 @@ export function UserProvider({ children }) {
   }, [user]);
 
   // Re-subscribe when the app becomes visible again (handles mobile subscription expiry
-  // caused by Chrome silent updates or FCM endpoint rotation — at most once per 5 minutes)
+  // caused by Chrome silent updates or FCM endpoint rotation — at most once per 5 minutes).
+  // lastPushAttemptRef is a ref so the throttle survives user-object identity changes
+  // (e.g. profile updates) without resetting the 5-minute window.
   useEffect(() => {
     if (!user) return;
-    let lastAttempt = 0;
     const onVisible = () => {
       if (document.visibilityState !== "visible") return;
       const now = Date.now();
-      if (now - lastAttempt < 5 * 60 * 1000) return;
-      lastAttempt = now;
+      if (now - lastPushAttemptRef.current < 5 * 60 * 1000) return;
+      lastPushAttemptRef.current = now;
       subscribeToPush().catch(() => {});
     };
     document.addEventListener("visibilitychange", onVisible);

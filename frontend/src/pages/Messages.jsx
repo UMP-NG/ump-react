@@ -540,10 +540,20 @@ function NegotiationCard({ msg, iAmSeller, onRespond, onApply }) {
   );
 }
 
+// Compare calendar dates (midnight-to-midnight), not elapsed milliseconds.
+// Math.floor((now - d) / 86400000) counts 24h blocks, so a message from
+// 11:58 PM yesterday reads as diffDays=0 ("today") at 00:02 AM — wrong.
+function calendarDayDiff(iso) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const msgDay = new Date(iso);
+  msgDay.setHours(0, 0, 0, 0);
+  return Math.round((today - msgDay) / 86400000);
+}
+
 function formatTime(iso) {
   const d = new Date(iso);
-  const now = new Date();
-  const diffDays = Math.floor((now - d) / 86400000);
+  const diffDays = calendarDayDiff(iso);
   if (diffDays === 0) return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   if (diffDays === 1) return "Yesterday";
   if (diffDays < 7) return d.toLocaleDateString([], { weekday: "short" });
@@ -555,8 +565,7 @@ function formatTime(iso) {
 function formatMessageTime(iso) {
   if (!iso) return "";
   const d = new Date(iso);
-  const now = new Date();
-  const diffDays = Math.floor((now - d) / 86400000);
+  const diffDays = calendarDayDiff(iso);
   const time = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   if (diffDays === 0) return time;
   if (diffDays === 1) return `Yesterday ${time}`;
@@ -568,8 +577,7 @@ function formatMessageTime(iso) {
 function formatDateSeparator(iso) {
   if (!iso) return "";
   const d = new Date(iso);
-  const now = new Date();
-  const diffDays = Math.floor((now - d) / 86400000);
+  const diffDays = calendarDayDiff(iso);
   if (diffDays === 0) return "Today";
   if (diffDays === 1) return "Yesterday";
   if (diffDays < 7) return d.toLocaleDateString([], { weekday: "long" });
