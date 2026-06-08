@@ -3,7 +3,6 @@ import Order from "../models/Order.js";
 import User from "../models/User.js";
 import Seller from "../models/Seller.js";
 import Config from "../models/Config.js";
-import paystack from "../utils/paystack.js";
 import logger from "../utils/logger.js";
 import { decrypt, mask } from "../utils/fieldEncryption.js";
 
@@ -75,28 +74,7 @@ export const requestPayout = async (req, res) => {
         { $inc: { pendingPayout: -amount } }
       );
 
-      // Fire Paystack transfer if bank is registered
-      if (seller.bankDetails?.paystackRecipientCode) {
-        try {
-          const transferRef = `PAYOUT_${userId}_${Date.now()}`;
-          const transferRes = await paystack.post("/transfer", {
-            source: "balance",
-            reason: "UMP seller payout withdrawal",
-            amount: amount * 100,
-            recipient: seller.bankDetails.paystackRecipientCode,
-            reference: transferRef,
-          });
-          const transferData = transferRes.data?.data;
-          payoutData.status = transferData?.status === "success" ? "completed" : "processing";
-          payoutData.reference = transferRef;
-        } catch (transferErr) {
-          logger.error("Paystack transfer error:", transferErr.response?.data || transferErr.message);
-          // Refund wallet if transfer failed to initiate
-          await Seller.findOneAndUpdate({ user: userId }, { $inc: { pendingPayout: amount } });
-          return res.status(500).json({ message: "Transfer failed — please try again or contact support" });
-        }
-      }
-      // No bank registered: stays pending for admin to process manually
+      // Payout is always saved as "pending" — admin reviews and processes manually
     } else if (roles.includes("walker") || roles.includes("service_provider")) {
       // Service providers have no separate wallet model yet — block payouts until implemented
       return res.status(400).json({ message: "Payout for this account type requires manual admin processing. Please contact support." });
@@ -105,12 +83,7 @@ export const requestPayout = async (req, res) => {
     }
 
     const payout = await Payout.create(payoutData);
-    const statusMsg = payoutData.status === "processing"
-      ? "Transfer initiated — you'll receive the funds shortly"
-      : payoutData.status === "completed"
-      ? "Payout sent to your bank account"
-      : "Payout request submitted — please add your bank details to enable instant transfers";
-    res.json({ success: true, message: statusMsg, payout });
+    res.json({ success: true, message: "Payout request submitted — our team will review and process it within 1–2 business days.", payout });
   } catch (err) {
     logger.error("requestPayout error:", err);
     res.status(500).json({ message: "Payout request failed. Please try again." });
@@ -119,36 +92,15 @@ export const requestPayout = async (req, res) => {
 
 export const retryPayout = async (req, res) => {
   try {
-    const userId = req.user._id;
     const payout = await Payout.findById(req.params.payoutId);
     if (!payout) return res.status(404).json({ message: "Payout not found" });
-    if (payout.seller?.toString() !== userId.toString())
+    if (payout.seller?.toString() !== req.user._id.toString())
       return res.status(403).json({ message: "Not authorized" });
-    if (payout.status !== "pending")
-      return res.status(400).json({ message: `Payout is already ${payout.status}` });
-
-    const seller = await Seller.findOne({ user: userId });
-    if (!seller?.bankDetails?.paystackRecipientCode)
-      return res.status(400).json({ message: "No bank account registered. Add your bank details first." });
-
-    const transferRef = `PAYOUT_RETRY_${payout._id}_${Date.now()}`;
-    const transferRes = await paystack.post("/transfer", {
-      source: "balance",
-      reason: "UMP seller payout withdrawal",
-      amount: payout.amount * 100,
-      recipient: seller.bankDetails.paystackRecipientCode,
-      reference: transferRef,
-    });
-
-    const transferData = transferRes.data?.data;
-    payout.status = transferData?.status === "success" ? "completed" : "processing";
-    payout.reference = transferRef;
-    await payout.save();
-
-    res.json({ success: true, message: "Transfer initiated successfully", payout });
+    // Payouts are processed manually by admin — nothing to retry on the seller's side
+    res.json({ success: true, message: "Your payout request is pending — our team will review and process it within 1–2 business days.", payout });
   } catch (err) {
-    logger.error("retryPayout error:", err.response?.data || err.message);
-    res.status(500).json({ message: err.response?.data?.message || err.message || "Transfer failed — please try again" });
+    logger.error("retryPayout error:", err.message);
+    res.status(500).json({ message: "Server error" });
   }
 };
 

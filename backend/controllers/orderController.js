@@ -785,8 +785,9 @@ export const confirmDelivery = async (req, res) => {
     if (!claimed)
       return res.status(400).json({ message: "Delivery already confirmed by a concurrent request — please check order status." });
 
-    // Look up seller profile
-    const seller = await Seller.findOne({ user: order.seller || req.user._id });
+    // Look up seller profile — used for payout crediting only; delivery never fails if absent
+    const sellerUserId = order.seller || req.user._id;
+    const seller = await Seller.findOne({ user: sellerUserId });
 
     // Determine which pending items are being delivered now
     const pendingItems = order.items.filter((i) => i.status !== "completed");
@@ -831,7 +832,8 @@ export const confirmDelivery = async (req, res) => {
 
     await order.save();
 
-    // Credit seller's pending balance — actual bank transfer happens when they request a payout (24h hold)
+    // Credit seller's pending balance — delivery confirmation must never fail because
+    // the seller hasn't set up bank details or their Seller document is missing.
     if (seller) {
       await Seller.findByIdAndUpdate(seller._id, {
         $inc: {
@@ -847,6 +849,9 @@ export const confirmDelivery = async (req, res) => {
           },
         },
       });
+    } else {
+      // Seller profile doesn't exist yet — log for admin follow-up but don't block delivery
+      logger.warn(`confirmDelivery: no Seller document for user ${sellerUserId}; order ${order._id} payout of ₦${payoutAmount} needs manual admin credit`);
     }
 
     // Reduce stock for delivered items only

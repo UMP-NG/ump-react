@@ -395,23 +395,13 @@ export const verifyAccount = async (req, res) => {
 };
 
 // ----------------------------
-// 5️⃣ Save seller bank details + register Paystack transfer recipient
+// 5️⃣ Save seller bank details (stored directly — no Paystack registration required)
 // ----------------------------
 export const saveBankDetails = async (req, res) => {
   try {
     const { bankName, bankCode, accountName, accountNumber } = req.body;
     if (!bankCode || !accountNumber || !accountName)
       return res.status(400).json({ success: false, message: "bankCode, accountName, and accountNumber are required" });
-
-    // Register / update recipient on Paystack
-    const recipientRes = await paystack.post("/transferrecipient", {
-      type: "nuban",
-      name: accountName,
-      account_number: accountNumber,
-      bank_code: bankCode,
-      currency: "NGN",
-    });
-    const recipientCode = recipientRes.data?.data?.recipient_code;
 
     const seller = await Seller.findOneAndUpdate(
       { user: req.user._id },
@@ -421,7 +411,6 @@ export const saveBankDetails = async (req, res) => {
           bankCode,
           accountName,
           accountNumber: encrypt(accountNumber),
-          paystackRecipientCode: recipientCode,
         },
       },
       { new: true }
@@ -437,13 +426,10 @@ export const saveBankDetails = async (req, res) => {
       req,
     });
 
-    return res.json({ success: true, message: "Bank details saved", recipientCode });
+    return res.json({ success: true, message: "Bank details saved successfully." });
   } catch (err) {
-    logger.error("saveBankDetails error:", err.response?.data || err.message);
-    return res.status(500).json({
-      success: false,
-      message: err.response?.data?.message || "Failed to save bank details",
-    });
+    logger.error("saveBankDetails error:", err.message);
+    return res.status(500).json({ success: false, message: "Failed to save bank details" });
   }
 };
 
