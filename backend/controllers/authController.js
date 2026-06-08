@@ -223,9 +223,9 @@ export const signupProvider = async (req, res) => {
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     });
 
-    // Fix #5: return only safe fields, not the full Mongoose document
     res.status(201).json({
       message: "Provider account created",
+      token,
       user: {
         _id:       user._id,
         name:      user.name,
@@ -291,10 +291,9 @@ export const verifyOTP = async (req, res) => {
       path: "/",
     });
 
-    // Fix #3: do not return the raw token in the body — the httpOnly cookie is enough.
-    // Returning the token in JSON exposes it to JavaScript and defeats the cookie's security.
     res.status(200).json({
       message: "Email verified successfully",
+      token,
       user: {
         _id: user._id,
         name: user.name,
@@ -385,8 +384,13 @@ export const login = async (req, res) => {
     
     audit("LOGIN_SUCCESS", { actor: existingUser._id, entity: "User", entityId: existingUser._id, req });
 
+    // Token is returned in the body so the frontend can store it in localStorage
+    // and send it as a Bearer header — required on iOS Safari where ITP blocks
+    // cross-origin httpOnly cookies (frontend on myump.com.ng, backend on onrender.com).
+    // The httpOnly cookie is still set for same-origin and non-Safari browsers.
     res.status(200).json({
       message: "Login successful",
+      token,
       user: {
         _id: existingUser._id,
         name: existingUser.name,
@@ -671,6 +675,7 @@ export const googleSignIn = async (req, res) => {
     });
     res.json({
       message: "Google sign-in successful",
+      token,
       user: {
         _id: user._id, name: user.name, email: user.email, avatar: user.avatar,
         isVerified: user.isVerified, googleAccount: user.googleAccount,
