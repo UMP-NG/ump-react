@@ -43,3 +43,6 @@ export const identityLimiter = make(60 * 60 * 1000, 3, "Too many verification at
 
 // 20 req / 15 min — referral code lookups (prevents enumeration of user identities)
 export const referralLimiter = make(15 * 60 * 1000, 20, "Too many referral lookups. Please slow down.");
+
+// 30 req / 60 sec — message sending (prevents spam flood)
+export const messageLimiter = make(60 * 1000, 30, "Too many messages. Please slow down.");

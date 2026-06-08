@@ -13,6 +13,7 @@ import {
 } from "../controllers/messageController.js";
 import { protect, requireRole } from "../middleware/authMiddleware.js";
 import { uploadAttachments } from "../middleware/upload.js";
+import { messageLimiter } from "../middleware/rateLimits.js";
 
 const router = express.Router();
 
@@ -29,6 +30,7 @@ router.post(
   "/send",
   protect,
   requireRole(...ALL_CHAT_ROLES),
+  messageLimiter,
   uploadAttachments,
   sendMessage
 );

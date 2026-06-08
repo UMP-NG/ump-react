@@ -1,5 +1,4 @@
 import mongoose from "mongoose";
-import fs from "fs";                           // fix #9: was missing, needed by generateInvoicePDF
 import crypto from "crypto";
 import Order from "../models/Order.js";
 import Product from "../models/Product.js";
@@ -7,8 +6,7 @@ import Seller from "../models/Seller.js";
 import Cart from "../models/Cart.js";
 import User from "../models/User.js";
 import Negotiation from "../models/Negotiation.js";
-import path from "path";
-import { fileURLToPath } from "url";
+import Config from "../models/Config.js";
 import PDFDocument from "pdfkit";
 import cloudinary from "../config/cloudinary.js";
 import axios from "axios";
@@ -16,13 +14,29 @@ import { audit } from "../utils/auditLog.js";
 import { notify } from "../utils/notify.js";
 import logger from "../utils/logger.js";
 
+// Read platform fee settings from Config once per request (cached in local var)
+async function getFeeConfig() {
+  const config = await Config.findOne().select("fees").lean();
+  const f = config?.fees || {};
+  return {
+    serviceChargeEnabled: f.serviceChargeEnabled ?? true,
+    serviceFeeRate:       (f.serviceFee           ?? 5.0) / 100,
+    serviceChargeMin:     f.serviceChargeMin       ?? 100,
+    serviceChargeMax:     f.serviceChargeMax       ?? 2000,
+    platformFeeEnabled:   f.platformFeeEnabled     ?? false,
+    platformFeeRate:      (f.platformFee           ?? 5.0) / 100,
+  };
+}
+
+function calcServiceCharge(subtotal, cfg) {
+  if (!cfg.serviceChargeEnabled) return 0;
+  return Math.min(cfg.serviceChargeMax, Math.max(cfg.serviceChargeMin, Math.round(subtotal * cfg.serviceFeeRate)));
+}
+
 // Fix #6: use cryptographically secure random bytes instead of Math.random()
 function generateDeliveryCode() {
   return crypto.randomBytes(5).toString("hex").toUpperCase(); // 5 bytes = 10 hex chars ≈ 10^12 combinations
 }
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 // ===============================
 // Create a new order
@@ -101,6 +115,7 @@ export const checkoutCart = async (req, res) => {
   try {
     const userId = req.user?._id;
     if (!userId) return res.status(401).json({ message: "Unauthorized" });
+    const feeConfig = await getFeeConfig();
 
     const cart = await Cart.findOne({ user: userId }).populate("items.product");
     if (!cart || cart.items.length === 0) {
@@ -182,6 +197,7 @@ export const checkoutCart = async (req, res) => {
       }));
 
       const subtotal = orderItems.reduce((s, i) => s + i.price * i.quantity, 0);
+      const serviceCharge = calcServiceCharge(subtotal, feeConfig);
       // Distribute credit proportionally; last order gets the remainder
       const isLastOrder = createdOrders.length === sellerGroups.size - 1;
       const orderCredit = isLastOrder
@@ -194,8 +210,9 @@ export const checkoutCart = async (req, res) => {
         seller: new mongoose.Types.ObjectId(sid),
         items: orderItems,
         subtotal,
+        serviceCharge,
         deliveryFee: 0,
-        totalAmount: Math.max(0, subtotal - orderCredit),
+        totalAmount: Math.max(0, subtotal + serviceCharge - orderCredit),
         creditUsed: orderCredit,
         shippingAddress: shippingAddress || {},
         paymentMethod,
@@ -278,8 +295,13 @@ export const getSellerOrders = async (req, res) => {
       paymentStatus: { $in: ["paid", "released"] },
     };
 
-    // filter by status
-    if (req.query.status) filter.status = req.query.status;
+    // filter by status — allowlist prevents NoSQL operator injection via query string
+    const VALID_ORDER_STATUSES = ["pending", "pending-verification", "confirmed", "shipped", "completed", "cancelled", "disputed", "partial"];
+    if (req.query.status) {
+      if (!VALID_ORDER_STATUSES.includes(req.query.status))
+        return res.status(400).json({ message: "Invalid status filter" });
+      filter.status = req.query.status;
+    }
 
     // search by order ID
     if (req.query.search) {
@@ -385,12 +407,23 @@ export const updateOrderStatus = async (req, res) => {
       return res.status(400).json({ message: "Escrow has already been released for this order." });
 
     // Enforce forward-only transitions (cancellation is always allowed)
-    const FLOW = { pending: 0, confirmed: 1, shipped: 2, completed: 3 };
+    const FLOW = { "pending": 0, "pending-verification": 0, "confirmed": 1, "shipped": 2, "completed": 3 };
     if (status !== "cancelled" && FLOW[status] <= FLOW[order.status])
       return res.status(400).json({ message: `Cannot move from "${order.status}" to "${status}"` });
 
     const previousStatus = order.status;
     order.status = status;
+
+    // Only admins may confirm a transfer order — sellers cannot self-approve
+    if (status === "confirmed" && previousStatus === "pending-verification" && !isAdmin) {
+      return res.status(403).json({ message: "Only admins can verify transfer payments" });
+    }
+
+    // When admin confirms a transfer order, mark payment as received
+    if (status === "confirmed" && previousStatus === "pending-verification") {
+      order.paymentStatus = "paid";
+      order.paymentInfo = { ...order.paymentInfo, paidAt: new Date() };
+    }
 
     // ── On COMPLETED: release escrow to seller ───────────────────────────────
     if (status === "completed") {
@@ -399,12 +432,17 @@ export const updateOrderStatus = async (req, res) => {
 
       const sellerId = order.seller || order.items[0]?.product?.seller;
       if (sellerId) {
+        const cfg = await getFeeConfig();
+        const sellerBase = order.subtotal || order.totalAmount;
+        const sellerPayout = cfg.platformFeeEnabled
+          ? Math.floor(sellerBase * (1 - cfg.platformFeeRate))
+          : sellerBase;
         await Seller.findOneAndUpdate(
           { user: sellerId },
           {
             $inc: {
-              pendingPayout: Math.floor(order.totalAmount * 0.95),
-              totalRevenue: order.totalAmount,
+              pendingPayout: sellerPayout,
+              totalRevenue: sellerBase,
               totalOrders: 1,
             },
           }
@@ -628,11 +666,12 @@ export const downloadInvoice = async (req, res) => {
       return res.status(403).json({ message: "Not authorized to download this invoice" });
     }
 
-    const pdfPath = await generateInvoicePDF(order);
-    res.download(pdfPath);
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="invoice-${order._id}.pdf"`);
+    await generateInvoicePDF(order, res);
   } catch (error) {
     logger.error("downloadInvoice error:", error);
-    res.status(500).json({ message: "Failed to generate invoice" });
+    if (!res.headersSent) res.status(500).json({ message: "Failed to generate invoice" });
   }
 };
 
@@ -665,33 +704,31 @@ export const getIncomingOrders = async (req, res) => {
   }
 };
 
-export const generateInvoicePDF = async (order) => {
-  const pdfPath = path.join(__dirname, `../invoices/invoice-${order._id}.pdf`);
-  const doc = new PDFDocument();
-  doc.pipe(fs.createWriteStream(pdfPath));
+// Streams the PDF directly to the response — no disk writes, no leftover files.
+export const generateInvoicePDF = (order, res) =>
+  new Promise((resolve, reject) => {
+    const doc = new PDFDocument();
+    doc.pipe(res);
+    doc.on("error", reject);
+    res.on("error", reject);
 
-  doc.fontSize(20).text("Invoice", { align: "center" });
-  doc.moveDown();
-  doc.fontSize(12).text(`Order ID: ${order._id}`);
-  doc.text(`Buyer: ${order.buyer?.name || "Unknown"}`);
-  doc.text(`Date: ${new Date(order.createdAt).toLocaleDateString()}`);
-  doc.moveDown();
+    doc.fontSize(20).text("Invoice", { align: "center" });
+    doc.moveDown();
+    doc.fontSize(12).text(`Order ID: ${order._id}`);
+    doc.text(`Buyer: ${order.buyer?.name || "Unknown"}`);
+    doc.text(`Date: ${new Date(order.createdAt).toLocaleDateString()}`);
+    doc.moveDown();
 
-  doc.text("Items:", { underline: true });
-  order.items.forEach((item) => {
-    doc.text(
-      `${item.product?.name || "Product"} - Qty: ${item.quantity} - ₦${
-        item.price
-      }`
-    );
+    doc.text("Items:", { underline: true });
+    order.items.forEach((item) => {
+      doc.text(`${item.product?.name || "Product"} - Qty: ${item.quantity} - ₦${item.price}`);
+    });
+
+    doc.moveDown();
+    doc.text(`Total: ₦${order.totalAmount}`, { bold: true });
+    doc.end();
+    doc.on("end", resolve);
   });
-
-  doc.moveDown();
-  doc.text(`Total: ₦${order.totalAmount}`, { bold: true });
-  doc.end();
-
-  return pdfPath;
-};
 
 // PUT /api/orders/:orderId/confirm-delivery
 // Called by SELLER — submits the buyer's delivery code.
@@ -704,6 +741,9 @@ export const confirmDelivery = async (req, res) => {
     if (!deliveryCode)
       return res.status(400).json({ message: "Delivery code is required" });
 
+    const code = deliveryCode.trim().toUpperCase();
+
+    // Load order for pre-validation (read-only at this stage)
     const order = await Order.findById(req.params.orderId);
     if (!order) return res.status(404).json({ message: "Order not found" });
 
@@ -713,10 +753,14 @@ export const confirmDelivery = async (req, res) => {
     if (order.deliveryCodeUsed)
       return res.status(400).json({ message: "Delivery already confirmed for this order" });
 
-    if (order.deliveryCode !== deliveryCode.trim().toUpperCase())
+    // Constant-time delivery code comparison — prevents timing-based enumeration
+    const storedBuf = Buffer.from(order.deliveryCode || "");
+    const inputBuf  = Buffer.from(code);
+    const codeMatch = storedBuf.length === inputBuf.length && crypto.timingSafeEqual(storedBuf, inputBuf);
+    if (!codeMatch)
       return res.status(400).json({ message: "Invalid delivery code" });
 
-    // Fix #15: always verify seller ownership — previously skipped when order.seller was null
+    // Verify seller ownership before the atomic gate
     const userId = req.user._id.toString();
     const isAdmin = req.user.roles?.includes("admin");
     if (!isAdmin) {
@@ -729,6 +773,17 @@ export const confirmDelivery = async (req, res) => {
         if (!ownsItem) return res.status(403).json({ message: "Not authorized" });
       }
     }
+
+    // ── Atomic gate: exactly one concurrent request wins ─────────────────────
+    // findOneAndUpdate with deliveryCodeUsed:false ensures this is a test-and-set.
+    // Any second concurrent request that passed the checks above will fail here.
+    const claimed = await Order.findOneAndUpdate(
+      { _id: order._id, deliveryCodeUsed: false, paymentStatus: "paid" },
+      { $set: { deliveryCodeUsed: true } },
+      { new: false }
+    );
+    if (!claimed)
+      return res.status(400).json({ message: "Delivery already confirmed by a concurrent request — please check order status." });
 
     // Look up seller profile
     const seller = await Seller.findOne({ user: order.seller || req.user._id });
@@ -744,13 +799,16 @@ export const confirmDelivery = async (req, res) => {
 
     const isPartial = toDeliver.length < pendingItems.length;
 
-    const UMP_FEE = 0.05;
-
-    // Pro-rate the amount owed to the seller for this batch (5% platform cut)
-    const allItemsSubtotal = order.items.reduce((s, i) => s + i.price * i.quantity, 0);
-    const deliveredSubtotal = toDeliver.reduce((s, i) => s + i.price * i.quantity, 0);
-    const proportion = allItemsSubtotal > 0 ? deliveredSubtotal / allItemsSubtotal : 1;
-    const payoutAmount = Math.floor(order.totalAmount * proportion * (1 - UMP_FEE));
+    // Pro-rate seller payout for this delivery batch, using item prices as base
+    // (service charge goes to platform — seller is never penalised for it)
+    const cfg = await getFeeConfig();
+    const allItemsSubtotal   = order.items.reduce((s, i) => s + i.price * i.quantity, 0);
+    const deliveredSubtotal  = toDeliver.reduce((s, i) => s + i.price * i.quantity, 0);
+    const proportion         = allItemsSubtotal > 0 ? deliveredSubtotal / allItemsSubtotal : 1;
+    const sellerBase         = (order.subtotal || allItemsSubtotal) * proportion;
+    const payoutAmount       = cfg.platformFeeEnabled
+      ? Math.floor(sellerBase * (1 - cfg.platformFeeRate))
+      : Math.floor(sellerBase);
     const payoutRef = `ESCROW_${order._id}_${Date.now()}`;
 
     // Mark delivered items
@@ -952,6 +1010,7 @@ export const confirmTransfer = async (req, res) => {
         .status(400)
         .json({ success: false, message: "Missing order details" });
     }
+    const feeConfig = await getFeeConfig();
 
     // Parse order data from FormData
     const info = JSON.parse(orderInfo);
@@ -1005,7 +1064,8 @@ export const confirmTransfer = async (req, res) => {
 
       const subtotal = resolvedItems.reduce((sum, item) => sum + item.resolvedPrice * (item.quantity || 1), 0);
       const deliveryFee = productIds.reduce((s, pid) => s + Math.max(0, priceMap.get(pid)?.fee || 0), 0);
-      const totalAmount = subtotal + deliveryFee;
+      const serviceCharge = calcServiceCharge(subtotal, feeConfig);
+      const totalAmount = subtotal + deliveryFee + serviceCharge;
 
       // Build order items using DB-verified prices
       const orderItems = resolvedItems.map(item => ({
@@ -1020,6 +1080,7 @@ export const confirmTransfer = async (req, res) => {
         seller: sellerId,
         items: orderItems,
         subtotal,
+        serviceCharge,
         deliveryFee,
         totalAmount,
         shippingAddress,
@@ -1027,6 +1088,7 @@ export const confirmTransfer = async (req, res) => {
         paymentMethod: "transfer",
         paymentStatus: "pending",
         status: "pending-verification",
+        deliveryCode: generateDeliveryCode(),
         paymentInfo: {
           reference: `TRANSFER-${Date.now()}`,
           transactionId: null,

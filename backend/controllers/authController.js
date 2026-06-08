@@ -99,10 +99,7 @@ export const signup = async (req, res) => {
         // Error logged at mail service level
       }
 
-      return res.status(200).json({
-        message: "OTP sent successfully",
-        ...(process.env.NODE_ENV !== "production" && { otp }),
-      });
+      return res.status(200).json({ message: "OTP sent successfully" });
     }
 
     // Resolve referrer if a referral code was provided
@@ -138,10 +135,7 @@ export const signup = async (req, res) => {
       // Error logged at mail service level
     }
 
-    res.status(201).json({
-      message: "User created. OTP sent to your email.",
-      ...(process.env.NODE_ENV !== "production" && { otp }),
-    });
+    res.status(201).json({ message: "User created. OTP sent to your email." });
   } catch (error) {
     logger.error("❌ [SIGNUP] Server error:", error.message);
     res.status(500).json({ message: "Server error. Please try again." });
@@ -260,13 +254,14 @@ export const verifyOTP = async (req, res) => {
     if (user.isVerified)
       return res.status(400).json({ message: "User already verified" });
 
-    // Fix #9: check expiry first, then use constant-time comparison to prevent timing attacks
+    // Check expiry first, then constant-time comparison against stored SHA-256 hash
     if (!user.otp || user.otpExpire < Date.now()) {
       return res.status(400).json({ message: "Invalid or expired OTP" });
     }
-    const otpBuf = Buffer.from(String(user.otp));
-    const inBuf  = Buffer.from(String(otp));
-    const otpMatch = otpBuf.length === inBuf.length && crypto.timingSafeEqual(otpBuf, inBuf);
+    const hashedInput = crypto.createHash("sha256").update(String(otp)).digest("hex");
+    const storedBuf   = Buffer.from(user.otp);
+    const inputBuf    = Buffer.from(hashedInput);
+    const otpMatch    = storedBuf.length === inputBuf.length && crypto.timingSafeEqual(storedBuf, inputBuf);
     if (!otpMatch) {
       return res.status(400).json({ message: "Invalid or expired OTP" });
     }
@@ -277,7 +272,8 @@ export const verifyOTP = async (req, res) => {
     await user.save();
 
     // Award referral credit to whoever referred this user (fire-and-forget)
-    if (user.referredBy) {
+    // Guard: skip if the referrer ID somehow equals the new user (self-referral)
+    if (user.referredBy && !user.referredBy.equals(user._id)) {
       setImmediate(() => awardReferralCredit(
         user.referredBy,
         CREDIT_SCHOOL_EMAIL,
@@ -540,8 +536,10 @@ export const resendOtp = async (req, res) => {
     if (!email) return res.status(400).json({ message: "Email is required" });
 
     const user = await User.findOne({ email });
-    if (!user) return res.status(404).json({ message: "No account found with that email" });
-    if (user.isVerified) return res.status(400).json({ message: "Email is already verified" });
+    // Return identical response whether the email exists or not — prevents enumeration
+    if (!user || user.isVerified) {
+      return res.status(200).json({ message: "OTP resent successfully" });
+    }
 
     const otp = user.createOTP();
     await user.save({ validateBeforeSave: false });
@@ -816,8 +814,8 @@ export const linkSchoolEmail = async (req, res) => {
     const user = await User.findById(req.user._id);
     if (!user) return res.status(404).json({ message: "User not found" });
 
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
-    user.schoolEmailOtp       = otp;
+    const otp = String(crypto.randomInt(100000, 1000000));
+    user.schoolEmailOtp       = crypto.createHash("sha256").update(otp).digest("hex");
     user.schoolEmailOtpExpire = Date.now() + 10 * 60 * 1000;
     user.schoolEmail          = schoolEmail.toLowerCase();
     await user.save({ validateModifiedOnly: true });
@@ -844,8 +842,9 @@ export const verifySchoolEmail = async (req, res) => {
     if (user.schoolEmailOtpExpire < Date.now()) {
       return res.status(400).json({ message: "OTP has expired. Please request a new one." });
     }
-    const storedBuf = Buffer.from(String(user.schoolEmailOtp));
-    const inputBuf  = Buffer.from(String(otp));
+    const hashedOtpInput = crypto.createHash("sha256").update(String(otp)).digest("hex");
+    const storedBuf      = Buffer.from(user.schoolEmailOtp);
+    const inputBuf       = Buffer.from(hashedOtpInput);
     const match = storedBuf.length === inputBuf.length && crypto.timingSafeEqual(storedBuf, inputBuf);
     if (!match) {
       return res.status(400).json({ message: "Incorrect OTP." });
@@ -860,6 +859,22 @@ export const verifySchoolEmail = async (req, res) => {
     let merged = false;
     const existingAccount = await User.findOne({ email: user.schoolEmail });
     if (existingAccount && !existingAccount._id.equals(user._id)) {
+      // Notify the account being absorbed so the owner can contact support if
+      // they did not initiate this merge (e.g. their email was phished).
+      try {
+        await sendMail({
+          email: existingAccount.email,
+          subject: "Important: Your UMP account is being merged",
+          message:
+            `Your UMP account (${existingAccount.email}) is being merged into another account ` +
+            `because both accounts share the same verified school email address. ` +
+            `All your orders, products, services, and balances will be transferred to the linked account. ` +
+            `If you did NOT authorise this action, please contact support immediately at support@myump.com.ng ` +
+            `before the merge completes.`,
+        });
+      } catch (mailErr) {
+        logger.warn("merge-notify-email:", mailErr);
+      }
       try {
         await mergeAccounts(user, existingAccount);
         merged = true;
@@ -878,7 +893,7 @@ export const verifySchoolEmail = async (req, res) => {
     });
 
     // Award the remaining ₦50 to whoever referred this user (they got ₦50 at signup)
-    if (user.referredBy && user.googleAccount) {
+    if (user.referredBy && user.googleAccount && !user.referredBy.equals(user._id)) {
       setImmediate(() => awardReferralCredit(
         user.referredBy,
         CREDIT_GOOGLE_VERIFIED,

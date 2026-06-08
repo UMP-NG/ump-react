@@ -37,6 +37,22 @@ export function UserProvider({ children }) {
     }
   }, [user]);
 
+  // Re-subscribe when the app becomes visible again (handles mobile subscription expiry
+  // caused by Chrome silent updates or FCM endpoint rotation — at most once per 5 minutes)
+  useEffect(() => {
+    if (!user) return;
+    let lastAttempt = 0;
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      const now = Date.now();
+      if (now - lastAttempt < 5 * 60 * 1000) return;
+      lastAttempt = now;
+      subscribeToPush().catch(() => {});
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [user]);
+
   useEffect(() => {
     fetchMe();
 

@@ -9,6 +9,7 @@ import crypto from "crypto";
 import { audit } from "../utils/auditLog.js";
 import { confirmAllOrders } from "../utils/confirmOrders.js";
 import logger from "../utils/logger.js";
+import { encrypt, decrypt, mask } from "../utils/fieldEncryption.js";
 
 // ─── Subscription helpers ─────────────────────────────────────────────────────
 // Prices come from the Config document so admins can edit them without a deploy
@@ -255,7 +256,6 @@ export const initializePayment = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Payment initialization failed",
-      error: err.response?.data || err.message,
     });
   }
 };
@@ -351,7 +351,6 @@ export const verifyPayment = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Payment verification failed",
-      error: err.response?.data || err.message,
     });
   }
 };
@@ -421,7 +420,7 @@ export const saveBankDetails = async (req, res) => {
           bankName,
           bankCode,
           accountName,
-          accountNumber,
+          accountNumber: encrypt(accountNumber),
           paystackRecipientCode: recipientCode,
         },
       },
@@ -434,7 +433,7 @@ export const saveBankDetails = async (req, res) => {
       actor: req.user._id,
       entity: "Seller",
       entityId: seller._id,
-      meta: { bankName, accountNumber: accountNumber.slice(-4).padStart(accountNumber.length, "*"), accountName },
+      meta: { bankName, accountNumber: mask(accountNumber), accountName },
       req,
     });
 

@@ -31,6 +31,22 @@ if (!MONGO_URI) {
 }
 console.log(`✅ MONGO_URI configured`);
 
+if (!process.env.NODE_ENV) {
+  console.error("\n❌ [CRITICAL] NODE_ENV is not defined!");
+  console.error("   Fix: Add NODE_ENV=production to your deployment environment");
+  process.exit(1);
+}
+console.log(`✅ NODE_ENV: ${process.env.NODE_ENV}`);
+
+if (!process.env.FIELD_ENCRYPTION_KEY || process.env.FIELD_ENCRYPTION_KEY.length < 64) {
+  console.error("\n❌ [CRITICAL] FIELD_ENCRYPTION_KEY is not defined or is shorter than 64 hex characters!");
+  console.error("   Bank account numbers will NOT be encrypted securely without this key.");
+  console.error("   Generate one with: node -e \"console.log(require('crypto').randomBytes(32).toString('hex'))\"");
+  console.error("   Fix: Add FIELD_ENCRYPTION_KEY to Backend/.env");
+  process.exit(1);
+}
+console.log(`✅ FIELD_ENCRYPTION_KEY configured`);
+
 console.log(`✅ Environment validation passed\n`);
 
 // 🧩 Create HTTP server first (Socket.io needs the server object before DB connects)

@@ -7,12 +7,14 @@ import { getImageUrl, naira } from "../components/ProductCard";
 import { apiFetch } from "../utils/api";
 import { useToast } from "../context/ToastContext";
 import { useUser } from "../context/UserContext";
+import { useAppConfig } from "../context/AppConfigContext";
 import Skel from "../components/Skel";
 
 export default function Cart() {
   const navigate = useNavigate();
   const showToast = useToast();
   const { user } = useUser();
+  const { fees } = useAppConfig();
   const [step, setStep] = useState(1);
   const [applyCredit, setApplyCredit] = useState(false);
   const creditBalance = user?.referralCredit || 0;
@@ -96,7 +98,10 @@ export default function Cart() {
     return s + unitPrice * (i.quantity || i.qty || 1);
   }, 0);
   const creditToApply = applyCredit ? Math.min(creditBalance, sub) : 0;
-  const orderTotal = Math.max(0, sub - creditToApply);
+  const serviceCharge = fees.serviceChargeEnabled
+    ? Math.min(fees.serviceChargeMax, Math.max(fees.serviceChargeMin, Math.round(sub * (fees.serviceFee / 100))))
+    : 0;
+  const orderTotal = Math.max(0, sub + serviceCharge - creditToApply);
 
   function getProductId(it) {
     return typeof it.product === "object" ? it.product?._id : it.product;
@@ -483,7 +488,7 @@ export default function Cart() {
           {step === 3 && (
             <div style={{ paddingBottom: 24 }}>
               {/* Order summary — hidden on desktop (sidebar shows it) */}
-              <MobileOrderSummary items={items} sub={sub} deliveryFeeTotal={0} orderTotal={orderTotal} />
+              <MobileOrderSummary items={items} sub={sub} deliveryFeeTotal={0} serviceCharge={serviceCharge} orderTotal={orderTotal} />
 
               {/* Delivery recap */}
               <div className="card" style={{ padding: "12px 16px", marginBottom: 12, fontSize: "1.2rem", color: "var(--ink-2)" }}>
@@ -609,6 +614,15 @@ export default function Cart() {
                 );
               })}
               <div style={{ height: 1, background: "var(--line)", margin: "10px 0" }} />
+              {serviceCharge > 0 && (
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: "1.3rem", marginBottom: 4 }}>
+                  <span style={{ color: "var(--ink-3)" }}>
+                    Service charge ({fees.serviceFee}%)
+                    <span style={{ fontSize: "1rem", marginLeft: 4, color: "var(--ink-4)" }}>min ₦{fees.serviceChargeMin.toLocaleString()} / max ₦{fees.serviceChargeMax.toLocaleString()}</span>
+                  </span>
+                  <span style={{ color: "var(--ink-2)", fontWeight: 600 }}>{naira(serviceCharge)}</span>
+                </div>
+              )}
               {deliveryMethod === "delivery" && bbxFee > 0 && (
                 <div style={{ display: "flex", justifyContent: "space-between", fontSize: "1.3rem", marginBottom: 4 }}>
                   <span style={{ color: "var(--ink-3)" }}>Delivery (pay to rider)</span>
@@ -725,7 +739,7 @@ export default function Cart() {
   );
 }
 
-function MobileOrderSummary({ items, sub, deliveryFeeTotal, orderTotal }) {
+function MobileOrderSummary({ items, sub, deliveryFeeTotal, orderTotal, serviceCharge }) {
   const [open, setOpen] = useState(false);
   return (
     <div className="mob-only" style={{ marginBottom: 12 }}>
@@ -790,6 +804,11 @@ function MobileOrderSummary({ items, sub, deliveryFeeTotal, orderTotal }) {
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: "1.25rem", color: "var(--ink-3)" }}>
             <span>Subtotal</span><span>{naira(sub)}</span>
           </div>
+          {serviceCharge > 0 && (
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: "1.25rem", color: "var(--ink-3)" }}>
+              <span>Service charge</span><span>{naira(serviceCharge)}</span>
+            </div>
+          )}
           {deliveryFeeTotal > 0 && (
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: "1.25rem", color: "var(--ink-3)" }}>
               <span>Delivery fee</span><span>{naira(deliveryFeeTotal)}</span>

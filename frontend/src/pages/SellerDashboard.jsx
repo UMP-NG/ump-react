@@ -706,12 +706,13 @@ function ListingModal({ listing, onClose, onSave, showToast }) {
 
 // ─── Add Product Modal ────────────────────────────────────────────────────────
 function AddProductModal({ onClose, onSave, showToast }) {
-  const [form, setForm] = useState({ name: "", price: "", stock: "", desc: "", condition: "New", status: "active", category: "", colors: [], specs: [], deliveryFee: "" });
+  const [form, setForm] = useState({ name: "", price: "", stock: "", desc: "", condition: "New", status: "active", category: "", colors: [], specs: [] });
   const [imageFiles, setImageFiles] = useState([]);
   const [imagePreviews, setImagePreviews] = useState([]);
   const [mainImageIdx, setMainImageIdx] = useState(0);
   const [categories, setCategories] = useState([]);
   const [saving, setSaving] = useState(false);
+  const [addError, setAddError] = useState("");
   const [colorInput, setColorInput] = useState({ name: "", code: "#e0e0e0" });
   const [specInput, setSpecInput] = useState({ k: "", v: "" });
   const [cropQueue, setCropQueue] = useState([]);
@@ -765,9 +766,10 @@ function AddProductModal({ onClose, onSave, showToast }) {
   const removeSpec = (i) => setForm((f) => ({ ...f, specs: f.specs.filter((_, idx) => idx !== i) }));
 
   async function handleSave() {
-    if (!form.name.trim()) { showToast("Product name is required", "error"); return; }
-    if (!form.price || Number(form.price) <= 0) { showToast("Valid price is required", "error"); return; }
-    if (!imageFiles.length) { showToast("At least one product image is required", "error"); return; }
+    setAddError("");
+    if (!form.name.trim()) { setAddError("Product name is required."); return; }
+    if (!form.price || Number(form.price) <= 0) { setAddError("A valid price greater than ₦0 is required."); return; }
+    if (!imageFiles.length) { setAddError("At least one product image is required."); return; }
     setSaving(true);
     try {
       const fd = new FormData();
@@ -779,7 +781,6 @@ function AddProductModal({ onClose, onSave, showToast }) {
       fd.append("status", form.status);
       if (form.category) fd.append("category", form.category);
       fd.append("colors", JSON.stringify(form.colors));
-      fd.append("deliveryFee", Number(form.deliveryFee) || 0);
       form.specs.forEach(({ k, v }) => { fd.append("specKey", k); fd.append("specValue", v); });
       // Send main image first so it becomes the cover
       const orderedFiles = mainImageIdx === 0
@@ -792,7 +793,8 @@ function AddProductModal({ onClose, onSave, showToast }) {
       onSave(result.product);
       onClose();
     } catch (err) {
-      showToast(err?.message || "Failed to create product", "error");
+      const msg = err?.message || "Failed to create product. Please try again.";
+      setAddError(msg);
     } finally {
       setSaving(false);
     }
@@ -861,12 +863,6 @@ function AddProductModal({ onClose, onSave, showToast }) {
                 <option value="draft">Draft</option>
               </select>
             </div>
-          </div>
-
-          {/* Delivery fee */}
-          <div style={{ marginBottom: 14 }}>
-            <label style={lSty}>Delivery fee (₦)</label>
-            <input style={iSty} type="number" min="0" value={form.deliveryFee} onChange={set("deliveryFee")} placeholder="0 = free delivery" />
           </div>
 
           {/* Description */}
@@ -951,6 +947,17 @@ function AddProductModal({ onClose, onSave, showToast }) {
             </div>
           </div>
         </div>
+
+        {addError && (
+          <div style={{ margin: "0 20px 12px", padding: "12px 14px", background: "rgba(220,38,38,.08)", border: "1px solid rgba(220,38,38,.3)", borderRadius: "var(--r-md)", display: "flex", alignItems: "flex-start", gap: 10, fontSize: "1.25rem", color: "#dc2626" }}>
+            <i className="fas fa-circle-exclamation" style={{ marginTop: 2, flexShrink: 0 }} />
+            <div>
+              <div style={{ fontWeight: 700, marginBottom: 2 }}>Could not create product</div>
+              <div style={{ color: "var(--ink-2)", lineHeight: 1.5 }}>{addError}</div>
+              <div style={{ marginTop: 6, fontSize: "1.1rem", color: "var(--ink-3)" }}>If this keeps happening, screenshot this message and send it to the admin.</div>
+            </div>
+          </div>
+        )}
 
         <div style={{ padding: "14px 20px", borderTop: "1px solid var(--line)", display: "flex", gap: 10, justifyContent: "flex-end", position: "sticky", bottom: 0, background: "var(--card)" }}>
           <button className="btn btn-ghost" onClick={onClose}>Cancel</button>

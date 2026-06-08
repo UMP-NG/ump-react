@@ -5,8 +5,16 @@ import mongoose from "mongoose";
 const configSchema = new mongoose.Schema(
   {
     fees: {
-      platformFee:    { type: Number, default: 3.2, min: 0, max: 100 },
-      serviceFee:     { type: Number, default: 5.0, min: 0, max: 100 },
+      // Buyer-facing service charge (platform convenience fee)
+      serviceChargeEnabled: { type: Boolean, default: true },
+      serviceFee:           { type: Number,  default: 5.0, min: 0, max: 100 }, // % of subtotal
+      serviceChargeMin:     { type: Number,  default: 100, min: 0 },           // ₦ floor
+      serviceChargeMax:     { type: Number,  default: 2000, min: 0 },          // ₦ cap
+
+      // Seller-facing platform fee (deducted from payout) — OFF by default
+      platformFeeEnabled: { type: Boolean, default: false },
+      platformFee:        { type: Number,  default: 5.0, min: 0, max: 100 },   // % of seller subtotal
+
       minPayout:      { type: Number, default: 2000, min: 0 },
       payoutCadence:  { type: String, default: "Daily" },
     },

@@ -15,6 +15,9 @@ export const sendMessage = async (req, res) => {
         .status(400)
         .json({ message: "Message or attachments required" });
     }
+    if (text && text.length > 5000) {
+      return res.status(400).json({ message: "Message too long (max 5000 characters)" });
+    }
 
     const receiverUser = await User.findById(receiver);
     if (!receiverUser)

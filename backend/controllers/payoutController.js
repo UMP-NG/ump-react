@@ -5,6 +5,7 @@ import Seller from "../models/Seller.js";
 import Config from "../models/Config.js";
 import paystack from "../utils/paystack.js";
 import logger from "../utils/logger.js";
+import { decrypt, mask } from "../utils/fieldEncryption.js";
 
 // Fix #10a: read bank details from Seller model where they are actually stored
 export const getPayoutDetails = async (req, res) => {
@@ -17,7 +18,7 @@ export const getPayoutDetails = async (req, res) => {
         bankName:      accountDetails.bankName      || "",
         bankCode:      accountDetails.bankCode      || "",
         accountName:   accountDetails.accountName   || "",
-        accountNumber: accountDetails.accountNumber || "",
+        accountNumber: mask(accountDetails.accountNumber || ""),
       },
     });
   } catch (err) {

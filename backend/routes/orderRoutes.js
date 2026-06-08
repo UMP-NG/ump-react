@@ -53,6 +53,7 @@ router.get(
 router.post(
   "/transfer",
   protect,
+  requireRole("user", "seller", "admin"),
   uploadPaymentProof,
   confirmTransfer
 );

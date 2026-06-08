@@ -226,17 +226,15 @@ userSchema.methods.comparePassword = function (candidatePassword) {
 
 userSchema.methods.createOTP = function () {
   const otp = String(crypto.randomInt(100000, 1000000)); // cryptographically secure 6-digit OTP
-  this.otp = otp;
+  // Hash before storing — a DB dump cannot be used to bypass verification
+  this.otp = crypto.createHash("sha256").update(otp).digest("hex");
   this.otpExpire = Date.now() + 10 * 60 * 1000;
-  return otp;
+  return otp; // return plain OTP; only sent via email, never stored
 };
 
-userSchema.methods.createResetToken = function () {
-  const resetToken = require("crypto").randomBytes(32).toString("hex");
-  this.resetPasswordToken = resetToken;
-  this.resetPasswordExpire = Date.now() + 10 * 60 * 1000; // 10 minutes
-  return resetToken;
-};
+// createResetToken() intentionally removed — it stored the raw token without hashing,
+// which would expose valid reset tokens in a DB leak.
+// Use the forgotPassword controller instead, which hashes with SHA-256 before saving.
 
 // ===============================
 // INDEXES FOR PERFORMANCE

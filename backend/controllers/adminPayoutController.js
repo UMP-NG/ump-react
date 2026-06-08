@@ -3,6 +3,7 @@ import Seller from "../models/Seller.js";
 import { notify } from "../utils/notify.js";
 import logger from "../utils/logger.js";
 import { fmt, startOf } from "./adminHelpers.js";
+import { mask } from "../utils/fieldEncryption.js";
 
 const PAYOUT_FEE_RATE = 0.032; // 3.2% platform fee deducted from gross payout
 const RISK_HIGH_THRESHOLD   = 500_000;
@@ -25,7 +26,7 @@ export const getAdminPayouts = async (req, res) => {
       return {
         _id: p._id,
         seller: { storeName: sDoc?.storeName || p.seller?.name || p.provider?.name || "—", ownerName: p.seller?.name || p.provider?.name || "—" },
-        bankName: acct.bankName || "—", accountNumber: acct.accountNumber || "",
+        bankName: acct.bankName || "—", accountNumber: mask(acct.accountNumber || ""),
         availableBalance: sDoc?.pendingPayout || 0, requestedAmount: p.amount,
         netAmount: Math.floor(p.amount * (1 - PAYOUT_FEE_RATE)),
         status: p.status,

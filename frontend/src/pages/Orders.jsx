@@ -50,7 +50,9 @@ th{text-align:left;font-size:12px;color:#6b7280;text-transform:uppercase;padding
 <hr class="divider">
 <table>
   <tr><td style="padding:4px 0;color:#6b7280">Subtotal</td><td style="text-align:right">${fmt(o.subtotal || o.totalAmount)}</td></tr>
+  ${o.serviceCharge > 0 ? `<tr><td style="padding:4px 0;color:#6b7280">Service charge</td><td style="text-align:right">${fmt(o.serviceCharge)}</td></tr>` : ""}
   ${o.deliveryFee > 0 ? `<tr><td style="padding:4px 0;color:#6b7280">Delivery fee</td><td style="text-align:right">${fmt(o.deliveryFee)}</td></tr>` : ""}
+  ${o.creditUsed > 0 ? `<tr><td style="padding:4px 0;color:#6b7280">Credit applied</td><td style="text-align:right">−${fmt(o.creditUsed)}</td></tr>` : ""}
   <tr class="total-row"><td style="padding:8px 0">Total paid</td><td style="text-align:right;color:#f97316">${fmt(o.totalAmount)}</td></tr>
 </table>
 ${o.shippingAddress?.address ? `<hr class="divider"><p style="margin:4px 0;font-size:13px"><strong>Delivered to:</strong> ${esc(o.shippingAddress.name || "")}, ${esc(o.shippingAddress.address)}${o.shippingAddress.city ? ", " + esc(o.shippingAddress.city) : ""}</p>` : ""}
@@ -502,6 +504,31 @@ export default function Orders() {
                         </div>
                       );
                     })}
+
+                    {/* Price breakdown */}
+                    <div style={{ marginTop: 10, padding: "10px 12px", background: "var(--surface)", borderRadius: "var(--r-md)" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: "1.2rem", color: "var(--ink-3)", marginBottom: 4 }}>
+                        <span>Subtotal</span>
+                        <span>{naira(o.subtotal || o.totalAmount)}</span>
+                      </div>
+                      {o.serviceCharge > 0 && (
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: "1.2rem", color: "var(--ink-3)", marginBottom: 4 }}>
+                          <span>Service charge</span>
+                          <span>{naira(o.serviceCharge)}</span>
+                        </div>
+                      )}
+                      {o.creditUsed > 0 && (
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: "1.2rem", color: "var(--accent)", marginBottom: 4 }}>
+                          <span><i className="fas fa-wallet" style={{ marginRight: 4 }} />Credit applied</span>
+                          <span>−{naira(o.creditUsed)}</span>
+                        </div>
+                      )}
+                      <div style={{ height: 1, background: "var(--line)", margin: "6px 0" }} />
+                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: "1.3rem", fontWeight: 700 }}>
+                        <span>Total paid</span>
+                        <span style={{ color: "var(--accent)" }}>{naira(o.totalAmount)}</span>
+                      </div>
+                    </div>
 
                     {o.shippingAddress?.address && (
                       <div style={{ marginTop: 10, padding: 10, background: "var(--surface)", borderRadius: "var(--r-md)" }}>

@@ -20,7 +20,16 @@ const DEFAULT_LOGO = '/images/ump-icon.svg';
 
 export default function Config() {
   const { refreshConfig } = useAppConfig();
-  const [fees, setFees] = useState({ platformFee: '3.2', serviceFee: '5.0', minPayout: '2000', payoutCadence: 'Daily' });
+  const [fees, setFees] = useState({
+    serviceChargeEnabled: true,
+    serviceFee: '5.0',
+    serviceChargeMin: '100',
+    serviceChargeMax: '2000',
+    platformFeeEnabled: false,
+    platformFee: '5.0',
+    minPayout: '2000',
+    payoutCadence: 'Daily',
+  });
   const [flags, setFlags] = useState(DEFAULT_FLAGS);
   const [slides, setSlides] = useState([]);
   const [logo, setLogo] = useState({ url: '', publicId: '' });
@@ -54,15 +63,25 @@ export default function Config() {
   }, []);
 
   async function save() {
-    const platformFee = parseFloat(fees.platformFee);
-    const serviceFee  = parseFloat(fees.serviceFee);
-    const minPayout   = parseInt(fees.minPayout, 10);
-    if (isNaN(platformFee) || platformFee < 0 || platformFee > 100) {
-      setSaveError('Platform fee must be a number between 0 and 100.');
+    const serviceFee       = parseFloat(fees.serviceFee);
+    const serviceChargeMin = parseInt(fees.serviceChargeMin, 10);
+    const serviceChargeMax = parseInt(fees.serviceChargeMax, 10);
+    const platformFee      = parseFloat(fees.platformFee);
+    const minPayout        = parseInt(fees.minPayout, 10);
+    if (isNaN(serviceFee) || serviceFee < 0 || serviceFee > 100) {
+      setSaveError('Service charge rate must be between 0 and 100.');
       return;
     }
-    if (isNaN(serviceFee) || serviceFee < 0 || serviceFee > 100) {
-      setSaveError('Service fee must be a number between 0 and 100.');
+    if (isNaN(serviceChargeMin) || serviceChargeMin < 0) {
+      setSaveError('Service charge minimum must be a positive number.');
+      return;
+    }
+    if (isNaN(serviceChargeMax) || serviceChargeMax < serviceChargeMin) {
+      setSaveError('Service charge maximum must be greater than the minimum.');
+      return;
+    }
+    if (isNaN(platformFee) || platformFee < 0 || platformFee > 100) {
+      setSaveError('Platform fee must be a number between 0 and 100.');
       return;
     }
     if (isNaN(minPayout) || minPayout < 0) {
@@ -75,7 +94,14 @@ export default function Config() {
     try {
       await apiFetch('/api/admins/config', {
         method: 'PUT',
-        body: { fees: { ...fees, platformFee, serviceFee, minPayout }, flags: flagsObj, slides, logo, subscriptions: subs },
+        body: {
+          fees: {
+            ...fees,
+            serviceFee, serviceChargeMin, serviceChargeMax,
+            platformFee, minPayout,
+          },
+          flags: flagsObj, slides, logo, subscriptions: subs,
+        },
       });
       refreshConfig();
       setSaved(true);
@@ -186,16 +212,72 @@ export default function Config() {
 
         <div className="adm-card">
           <div className="adm-card-head"><h3>Fees &amp; commission</h3></div>
-          <div className="adm-card-body">
+          <div className="adm-card-body" style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+
+            {/* Buyer service charge */}
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: '1.3rem' }}>Buyer service charge</div>
+                  <div style={{ fontSize: '1.1rem', color: 'var(--ink-3)' }}>Added to buyer's total at checkout. Seller receives their full listing price.</div>
+                </div>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', flexShrink: 0 }}>
+                  <input
+                    type="checkbox"
+                    checked={!!fees.serviceChargeEnabled}
+                    onChange={e => setFees(f => ({ ...f, serviceChargeEnabled: e.target.checked }))}
+                  />
+                  <span style={{ fontSize: '1.2rem', fontWeight: 600 }}>{fees.serviceChargeEnabled ? 'Enabled' : 'Disabled'}</span>
+                </label>
+              </div>
+              <div className="adm-form-grid">
+                <div className="adm-field">
+                  <label className="lbl">Rate (%)</label>
+                  <input type="number" step="0.1" min="0" max="100" value={fees.serviceFee} onChange={e => setFees(f => ({ ...f, serviceFee: e.target.value }))} disabled={!fees.serviceChargeEnabled} />
+                </div>
+                <div className="adm-field">
+                  <label className="lbl">Minimum (₦)</label>
+                  <input type="number" min="0" value={fees.serviceChargeMin} onChange={e => setFees(f => ({ ...f, serviceChargeMin: e.target.value }))} disabled={!fees.serviceChargeEnabled} />
+                </div>
+                <div className="adm-field">
+                  <label className="lbl">Maximum (₦)</label>
+                  <input type="number" min="0" value={fees.serviceChargeMax} onChange={e => setFees(f => ({ ...f, serviceChargeMax: e.target.value }))} disabled={!fees.serviceChargeEnabled} />
+                </div>
+              </div>
+            </div>
+
+            <div style={{ height: 1, background: 'var(--line)' }} />
+
+            {/* Seller platform fee */}
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: '1.3rem' }}>Seller platform fee</div>
+                  <div style={{ fontSize: '1.1rem', color: 'var(--ink-3)' }}>Deducted from seller payout on delivery. Currently <strong>off</strong> — enable only when ready.</div>
+                </div>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', flexShrink: 0 }}>
+                  <input
+                    type="checkbox"
+                    checked={!!fees.platformFeeEnabled}
+                    onChange={e => setFees(f => ({ ...f, platformFeeEnabled: e.target.checked }))}
+                  />
+                  <span style={{ fontSize: '1.2rem', fontWeight: 600, color: fees.platformFeeEnabled ? '#dc2626' : 'var(--ink-3)' }}>
+                    {fees.platformFeeEnabled ? 'ENABLED' : 'Disabled'}
+                  </span>
+                </label>
+              </div>
+              <div className="adm-form-grid">
+                <div className="adm-field">
+                  <label className="lbl">Rate (%)</label>
+                  <input type="number" step="0.1" min="0" max="100" value={fees.platformFee} onChange={e => setFees(f => ({ ...f, platformFee: e.target.value }))} disabled={!fees.platformFeeEnabled} />
+                </div>
+              </div>
+            </div>
+
+            <div style={{ height: 1, background: 'var(--line)' }} />
+
+            {/* Payout settings */}
             <div className="adm-form-grid">
-              <div className="adm-field">
-                <label className="lbl">Platform fee (%)</label>
-                <input type="number" step="0.1" value={fees.platformFee} onChange={e => setFees(f => ({ ...f, platformFee: e.target.value }))} />
-              </div>
-              <div className="adm-field">
-                <label className="lbl">Service fee (%)</label>
-                <input type="number" step="0.1" value={fees.serviceFee} onChange={e => setFees(f => ({ ...f, serviceFee: e.target.value }))} />
-              </div>
               <div className="adm-field">
                 <label className="lbl">Min payout (₦)</label>
                 <input type="number" value={fees.minPayout} onChange={e => setFees(f => ({ ...f, minPayout: e.target.value }))} />
@@ -208,6 +290,7 @@ export default function Config() {
                 </select>
               </div>
             </div>
+
           </div>
         </div>
 

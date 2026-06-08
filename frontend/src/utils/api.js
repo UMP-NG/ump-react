@@ -9,10 +9,37 @@ export const API_BASE =
   (window.location.hostname === "localhost" ? "http://localhost:5000" : "");
 
 // ── JWT helpers ──────────────────────────────────────────────────────────────
+// iOS Safari (private mode / ITP) can block localStorage, so we mirror the
+// token in a same-site cookie as a fallback.
 const TOKEN_KEY = "ump_tk";
-export const setToken   = (t) => { try { if (t) localStorage.setItem(TOKEN_KEY, t); } catch { /* ignore */ } };
-export const getToken   = ()    => { try { return localStorage.getItem(TOKEN_KEY); } catch { return null; } };
-export const clearToken = ()    => { try { localStorage.removeItem(TOKEN_KEY); } catch { /* ignore */ } };
+
+export const setToken = (t) => {
+  if (!t) return;
+  try { localStorage.setItem(TOKEN_KEY, t); } catch { /* ignore */ }
+  // Cookie fallback — 30-day session, SameSite=Lax so it travels with navigations
+  try {
+    const expires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toUTCString();
+    document.cookie = `${TOKEN_KEY}=${encodeURIComponent(t)}; expires=${expires}; path=/; SameSite=Lax`;
+  } catch { /* ignore */ }
+};
+
+export const getToken = () => {
+  try {
+    const ls = localStorage.getItem(TOKEN_KEY);
+    if (ls) return ls;
+  } catch { /* ignore */ }
+  // Fall back to cookie
+  try {
+    const m = document.cookie.match(new RegExp("(?:^|; )" + TOKEN_KEY + "=([^;]*)"));
+    if (m) return decodeURIComponent(m[1]);
+  } catch { /* ignore */ }
+  return null;
+};
+
+export const clearToken = () => {
+  try { localStorage.removeItem(TOKEN_KEY); } catch { /* ignore */ }
+  try { document.cookie = `${TOKEN_KEY}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; SameSite=Lax`; } catch { /* ignore */ }
+};
 
 // ── Cookie helpers ───────────────────────────────────────────────────────────
 export function cookieSet(name, value, days = 1) {

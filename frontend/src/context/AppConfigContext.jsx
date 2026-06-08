@@ -2,7 +2,16 @@ import { createContext, useContext, useEffect, useState, useCallback } from "rea
 import { apiFetch, bustCache } from "../utils/api";
 
 const DEFAULT_LOGO = "/images/ump-icon.svg";
-const DEFAULT_FEES = { platformFee: 3.2, serviceFee: 5.0, minPayout: 2000, payoutCadence: 'Daily' };
+const DEFAULT_FEES = {
+  serviceChargeEnabled: true,
+  serviceFee: 5.0,
+  serviceChargeMin: 100,
+  serviceChargeMax: 2000,
+  platformFeeEnabled: false,
+  platformFee: 5.0,
+  minPayout: 2000,
+  payoutCadence: 'Daily',
+};
 const DEFAULT_SUBS = {
   seller:   { monthly: { price: 3000, label: "Monthly" }, annual: { price: 25000, label: "Annual", badge: "Save 31%" } },
   provider: { monthly: { price: 3000, label: "Monthly" }, annual: { price: 25000, label: "Annual", badge: "Save 31%" } },

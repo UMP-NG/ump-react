@@ -1,11 +1,15 @@
 // UMP Service Worker — push notifications + offline caching
 
-const SHELL_CACHE  = "ump-shell-v1";
+const SHELL_CACHE  = "ump-shell-v2";
 const API_CACHE    = "ump-api-v1";
 const STATIC_CACHE = "ump-static-v1";
 
 // App-shell resources cached on install (always available offline)
 const SHELL_URLS = ["/", "/index.html", "/offline.html", "/images/ump-logo.png"];
+
+// VitePWA injects the precache manifest here at build time (replaces self.__WB_MANIFEST).
+// The try-catch makes this safe on the dev server / direct load where __WB_MANIFEST is undefined.
+const PRECACHE_URLS = (() => { try { return self.__WB_MANIFEST; } catch (_) { return []; } })();
 
 // API routes to cache with stale-while-revalidate (show cached, refresh in bg)
 const SWR_API_PATTERNS = [
@@ -17,19 +21,22 @@ const SWR_API_PATTERNS = [
   /\/api\/admins\/config/,
 ];
 
-// ── Install: pre-cache the app shell ─────────────────────────────────────────
+// ── Install: pre-cache app shell + VitePWA manifest ──────────────────────────
 self.addEventListener("install", (event) => {
   // Use allSettled so a single failed URL (slow network, missing asset) does
   // NOT abort the install — push subscriptions must survive bad connections.
   event.waitUntil(
     caches.open(SHELL_CACHE).then((cache) =>
-      Promise.allSettled(SHELL_URLS.map((url) => cache.add(url)))
+      Promise.allSettled([
+        ...SHELL_URLS.map((url) => cache.add(url)),
+        ...PRECACHE_URLS.map((e) => cache.add(typeof e === "string" ? e : e.url)),
+      ])
     )
   );
   self.skipWaiting();
 });
 
-// ── Activate: wipe old caches ─────────────────────────────────────────────────
+// ── Activate: wipe old caches ────────────────────────────────────────────────
 self.addEventListener("activate", (event) => {
   const keep = new Set([SHELL_CACHE, API_CACHE, STATIC_CACHE]);
   event.waitUntil(

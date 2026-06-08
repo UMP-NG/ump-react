@@ -10,13 +10,20 @@ function urlBase64ToUint8Array(base64String) {
 // Wait for a specific ServiceWorkerRegistration to have an active worker.
 // navigator.serviceWorker.ready resolves with whatever SW is already controlling
 // the page — that might be an old or different SW. This waits for OUR registration.
-function waitForActive(reg) {
+// Timeout prevents an infinite hang on slow mobile connections where statechange never fires.
+function waitForActive(reg, timeout = 10000) {
   if (reg.active) return Promise.resolve(reg.active);
   return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(null), timeout);
     const worker = reg.installing || reg.waiting;
-    if (!worker) { resolve(null); return; }
+    if (!worker) {
+      clearTimeout(timer);
+      resolve(null);
+      return;
+    }
     worker.addEventListener("statechange", function handler() {
       if (worker.state === "activated") {
+        clearTimeout(timer);
         worker.removeEventListener("statechange", handler);
         resolve(worker);
       }

@@ -6,6 +6,11 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
+      // injectManifest: VitePWA processes public/sw.js (injecting __WB_MANIFEST) instead
+      // of generating a workbox-only SW that overwrites the custom one and loses push handlers.
+      strategies: 'injectManifest',
+      srcDir: 'public',
+      filename: 'sw.js',
       registerType: 'autoUpdate',
       includeAssets: ['images/ump-icon.svg', 'images/ump-banner.svg', 'images/ump-logo.png', 'images/market.png', 'images/hostel-hub.png'],
       manifest: {
@@ -64,78 +69,11 @@ export default defineConfig({
           },
         ],
       },
-      workbox: {
-        // Only precache code assets — large images are served via runtime caching
+      injectManifest: {
+        // Determines which built assets go into the __WB_MANIFEST precache list.
+        // Runtime caching strategies are defined in public/sw.js directly.
         globPatterns: ['**/*.{js,css,html,ico,svg,woff2}'],
-        navigateFallback: '/index.html',
-        navigateFallbackDenylist: [/^\/api\//],
-        runtimeCaching: [
-          {
-            // Local static images (public/images/*)
-            urlPattern: /\/images\//,
-            handler: 'StaleWhileRevalidate',
-            options: {
-              cacheName: 'local-images',
-              expiration: { maxEntries: 60, maxAgeSeconds: 60 * 60 * 24 * 30 },
-              cacheableResponse: { statuses: [0, 200] },
-            },
-          },
-          {
-            // Google Fonts CSS
-            urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
-            handler: 'CacheFirst',
-            options: {
-              cacheName: 'google-fonts-css',
-              expiration: { maxEntries: 10, maxAgeSeconds: 60 * 60 * 24 * 365 },
-              cacheableResponse: { statuses: [0, 200] },
-            },
-          },
-          {
-            // Google Fonts files
-            urlPattern: /^https:\/\/fonts\.gstatic\.com\/.*/i,
-            handler: 'CacheFirst',
-            options: {
-              cacheName: 'google-fonts-files',
-              expiration: { maxEntries: 30, maxAgeSeconds: 60 * 60 * 24 * 365 },
-              cacheableResponse: { statuses: [0, 200] },
-            },
-          },
-          {
-            // Font Awesome CDN
-            urlPattern: /^https:\/\/cdnjs\.cloudflare\.com\/.*/i,
-            handler: 'CacheFirst',
-            options: {
-              cacheName: 'cdn-assets',
-              expiration: { maxEntries: 20, maxAgeSeconds: 60 * 60 * 24 * 30 },
-              cacheableResponse: { statuses: [0, 200] },
-            },
-          },
-          {
-            // Cloudinary images — stale-while-revalidate
-            urlPattern: /^https:\/\/res\.cloudinary\.com\/.*/i,
-            handler: 'StaleWhileRevalidate',
-            options: {
-              cacheName: 'cloudinary-images',
-              expiration: { maxEntries: 100, maxAgeSeconds: 60 * 60 * 24 * 7 },
-              cacheableResponse: { statuses: [0, 200] },
-            },
-          },
-          {
-            // Browse endpoints — serve cached immediately, revalidate in background (60s TTL)
-            urlPattern: /\/api\/(products|categories|listings|services|sellers)\b/,
-            handler: 'StaleWhileRevalidate',
-            options: {
-              cacheName: 'api-browse',
-              expiration: { maxEntries: 60, maxAgeSeconds: 60 },
-              cacheableResponse: { statuses: [0, 200] },
-            },
-          },
-          {
-            // Transactional / auth endpoints — always fresh, never serve stale
-            urlPattern: /\/api\//,
-            handler: 'NetworkOnly',
-          },
-        ],
+        maximumFileSizeToCacheInBytes: 3 * 1024 * 1024, // 3 MB
       },
       devOptions: {
         // Keep SW disabled in dev to avoid confusing cache behaviour
