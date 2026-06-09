@@ -59,7 +59,7 @@ export const createListing = async (req, res) => {
       type: listingType,
       description,
       price,
-      pricePerHalfYear: pricePerHalfYear ? Number(pricePerHalfYear) : null,
+      pricePerHalfYear: pricePerHalfYear != null && pricePerHalfYear !== "" && !isNaN(Number(pricePerHalfYear)) ? Math.max(0, Number(pricePerHalfYear)) : null,
       rate,
       location,
       beds,

@@ -206,6 +206,9 @@ async function fulfillCartLinkPayment(token, ownerId) {
       sellerGroups.get(sid).push(item);
     }
 
+    // Total subtotal across all items — used to prorate service charge per seller
+    const totalSubtotal = cartReq.items.reduce((s, i) => s + i.price * i.quantity, 0) || 1;
+
     for (const [sid, sellerItems] of sellerGroups) {
       const orderItems = sellerItems.map((i) => ({
         product: i.productId,
@@ -213,14 +216,16 @@ async function fulfillCartLinkPayment(token, ownerId) {
         price: i.price,
       }));
       const subtotal = orderItems.reduce((s, i) => s + i.price * i.quantity, 0);
+      // Prorate the cart-level service charge by this seller's share of the subtotal
+      const serviceCharge = Math.round((subtotal / totalSubtotal) * (cartReq.serviceCharge || 0));
       const order = await Order.create({
         buyer: ownerId,
         seller: new mongoose.Types.ObjectId(sid),
         items: orderItems,
         subtotal,
-        serviceCharge: 0,
+        serviceCharge,
         deliveryFee: 0,
-        totalAmount: subtotal,
+        totalAmount: subtotal + serviceCharge,
         paymentStatus: "paid",
         status: "confirmed",
         paymentMethod: "Flutterwave",

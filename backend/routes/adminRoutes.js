@@ -13,8 +13,8 @@ import {
   banUser,
   unbanUser,
   getAdminSellers,
-  approveSeller,
-  rejectSeller,
+  reinstateSeller,
+  restrictSeller,
   getAdminOrders,
   getOrdersSummary,
   getAdminPayouts,
@@ -96,8 +96,8 @@ router.delete("/users/:userId",          ...adm, deleteUser);
 
 // ── Sellers ────────────────────────────────────────────────────────────────
 router.get   ("/sellers",                    ...adm, getAdminSellers);
-router.post  ("/sellers/:sellerId/approve",  ...adm, approveSeller);
-router.post  ("/sellers/:sellerId/reject",   ...adm, rejectSeller);
+router.post  ("/sellers/:sellerId/approve",  ...adm, reinstateSeller);
+router.post  ("/sellers/:sellerId/reject",   ...adm, restrictSeller);
 router.put   ("/sellers/:sellerId/status",   ...adm, updateSellerStatus);
 
 // ── Orders ─────────────────────────────────────────────────────────────────

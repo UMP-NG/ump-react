@@ -26,7 +26,7 @@ const listingSchema = new mongoose.Schema(
       },
     ],
     // Half-year pricing option (6 months)
-    pricePerHalfYear: { type: Number, default: null },
+    pricePerHalfYear: { type: Number, default: null, min: [0, "Half-year price cannot be negative"] },
 
     // Lagos-specific agent fees — optional, shown as move-in cost breakdown
     agreementFee:  { type: Number, default: 0 },

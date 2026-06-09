@@ -37,8 +37,12 @@ export async function confirmAllOrders(payment) {
       await Seller.findOneAndUpdate({ user: o.seller }, { $inc: { totalOrders: 1 } });
     }
   }
-  // Clear the buyer's cart now that payment is confirmed
+  // Clear the buyer's cart now that payment is confirmed — non-fatal if it fails
   if (buyerIdForCartClear) {
-    await Cart.findOneAndUpdate({ user: buyerIdForCartClear }, { $set: { items: [] } });
+    try {
+      await Cart.findOneAndUpdate({ user: buyerIdForCartClear }, { $set: { items: [] } });
+    } catch (cartErr) {
+      console.warn("confirmAllOrders: cart clear failed for", buyerIdForCartClear, cartErr.message);
+    }
   }
 }

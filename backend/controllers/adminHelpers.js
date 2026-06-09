@@ -32,9 +32,13 @@ export const startOf = (daysAgo) => {
 
 // ── Seller status ─────────────────────────────────────────────────────────────
 export const sellerStatus = (s) => {
+  if (!s) return "inactive";
   if (s.isSuspended) return "suspended";
   if (s.isSubscribed) {
-    if (s.subscriptionExpiresAt && new Date(s.subscriptionExpiresAt) < new Date()) return "inactive";
+    if (s.subscriptionExpiresAt) {
+      const expiry = new Date(s.subscriptionExpiresAt);
+      if (!isNaN(expiry) && expiry < new Date()) return "inactive";
+    }
     return "subscribed";
   }
   return "inactive";

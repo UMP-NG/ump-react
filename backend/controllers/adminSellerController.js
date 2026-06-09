@@ -62,8 +62,8 @@ export const getAdminSellers = async (req, res) => {
   }
 };
 
-// Reinstate a restricted/suspended seller (undo restriction)
-export const approveSeller = async (req, res) => {
+// Reinstate a restricted/suspended seller
+export const reinstateSeller = async (req, res) => {
   try {
     const seller = await Seller.findById(req.params.sellerId);
     if (!seller) return res.status(404).json({ message: "Seller not found" });
@@ -72,13 +72,13 @@ export const approveSeller = async (req, res) => {
     logger.info(`[admin] seller reinstated: ${seller._id} (${seller.storeName}) by admin ${req.user?._id}`);
     res.json({ success: true });
   } catch (err) {
-    logger.error("approveSeller:", err);
+    logger.error("reinstateSeller:", err);
     res.status(500).json({ message: "Server error" });
   }
 };
 
-// Restrict a seller — removes subscription benefits regardless of payment
-export const rejectSeller = async (req, res) => {
+// Restrict a seller — suspends account regardless of subscription status
+export const restrictSeller = async (req, res) => {
   try {
     const seller = await Seller.findById(req.params.sellerId);
     if (!seller) return res.status(404).json({ message: "Seller not found" });
@@ -88,7 +88,7 @@ export const rejectSeller = async (req, res) => {
     logger.info(`[admin] seller restricted: ${seller._id} (${seller.storeName}) by admin ${req.user?._id}`);
     res.json({ success: true });
   } catch (err) {
-    logger.error("rejectSeller:", err);
+    logger.error("restrictSeller:", err);
     res.status(500).json({ message: "Server error" });
   }
 };
