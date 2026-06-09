@@ -20,6 +20,7 @@ import {
   submitVerifyIdentity,
   disputeVerifyIdentity,
   changePassword,
+  setPassword,
 } from "../controllers/authController.js";
 import { protect } from "../middleware/authMiddleware.js";
 import {
@@ -48,6 +49,7 @@ router.post("/logout",                    protect, logout);
 router.get ("/me",                        protect, getMe);
 router.put ("/me",                        protect, updateMe);
 router.put ("/change-password",           protect, changePassword);
+router.put ("/set-password",              protect, setPassword);
 
 // ── School email linking ──────────────────────────────────────────────────────
 router.post("/link-school-email",         protect, linkSchoolEmail);

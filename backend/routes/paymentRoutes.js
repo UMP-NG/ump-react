@@ -14,6 +14,9 @@ import {
   initializeFlwPayment,
   verifyFlwPayment,
   flutterwaveWebhook,
+  createCartPaymentLink,
+  getCartPaymentDetails,
+  payCartLink,
 } from "../controllers/flutterwaveController.js";
 import { paymentLimiter } from "../middleware/rateLimits.js";
 
@@ -28,6 +31,11 @@ router.post("/webhook/paystack", paystackWebhook);
 router.post("/flw/initialize", protect, paymentLimiter, initializeFlwPayment);
 router.get("/flw/verify", protect, paymentLimiter, verifyFlwPayment);
 router.post("/webhook/flutterwave", flutterwaveWebhook);
+
+// Cart payment links (pay for someone's cart)
+router.post("/cart-link",             protect, paymentLimiter, createCartPaymentLink);
+router.get ("/cart-link/:token",                               getCartPaymentDetails);
+router.post("/cart-link/:token/pay",           paymentLimiter, payCartLink);
 
 // Subscription
 router.post("/subscription/initialize", protect, paymentLimiter, initializeSubscriptionPayment);

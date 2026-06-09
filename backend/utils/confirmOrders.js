@@ -1,10 +1,12 @@
 import Order from "../models/Order.js";
 import Seller from "../models/Seller.js";
+import Cart from "../models/Cart.js";
 import { notify } from "./notify.js";
 
 export async function confirmAllOrders(payment) {
   const orderIds = payment.orders?.length ? payment.orders : [];
   let buyerNotified = false;
+  let buyerIdForCartClear = null;
   for (const orderId of orderIds) {
     const o = await Order.findByIdAndUpdate(
       orderId,
@@ -12,6 +14,7 @@ export async function confirmAllOrders(payment) {
       { new: true }
     );
     if (!o) continue;
+    if (!buyerIdForCartClear) buyerIdForCartClear = o.buyer;
     const shortId = o._id.toString().slice(-6).toUpperCase();
     if (!buyerNotified) {
       notify(o.buyer, {
@@ -33,5 +36,9 @@ export async function confirmAllOrders(payment) {
       });
       await Seller.findOneAndUpdate({ user: o.seller }, { $inc: { totalOrders: 1 } });
     }
+  }
+  // Clear the buyer's cart now that payment is confirmed
+  if (buyerIdForCartClear) {
+    await Cart.findOneAndUpdate({ user: buyerIdForCartClear }, { $set: { items: [] } });
   }
 }

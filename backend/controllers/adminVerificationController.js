@@ -9,10 +9,10 @@ import { awardReferralCredit, CREDIT_GOOGLE_VERIFIED } from "./authController.js
 export const getPendingVerifications = async (req, res) => {
   try {
     const limit = Math.min(parseInt(req.query.limit) || 4, 20);
-    const sellers = await Seller.find({ isSubscribed: false, subscriptionRequested: true })
-      .sort({ createdAt: -1 }).limit(limit).populate("user","name email").lean();
-    const results = sellers.map((s) => ({
-      _id: s._id, storeName: s.storeName || s.name, ownerName: s.user?.name || "—", email: s.user?.email || "—", createdAt: s.createdAt,
+    const requests = await VerificationRequest.find({ status: "pending" })
+      .sort({ createdAt: -1 }).limit(limit).populate("user", "name email").lean();
+    const results = requests.map((r) => ({
+      _id: r._id, ownerName: r.user?.name || "—", email: r.user?.email || "—", createdAt: r.createdAt,
     }));
     res.json({ verifications: results, total: results.length });
   } catch (err) {

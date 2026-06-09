@@ -364,6 +364,7 @@ function ListingModal({ listing, onClose, onSave, showToast }) {
     furnished: listing?.furnished || false,
     available: listing?.available ?? true,
     amenities: listing?.amenities || [],
+    pricePerHalfYear: listing?.pricePerHalfYear ?? "",
     agreementFee:  listing?.agreementFee  ?? "",
     commissionFee: listing?.commissionFee ?? "",
     agentFee:      listing?.agentFee      ?? "",
@@ -444,6 +445,7 @@ function ListingModal({ listing, onClose, onSave, showToast }) {
       fd.append("description", form.description);
       fd.append("furnished", form.furnished);
       fd.append("available", form.available);
+      if (form.pricePerHalfYear) fd.append("pricePerHalfYear", Number(form.pricePerHalfYear));
       fd.append("agreementFee",  Number(form.agreementFee)  || 0);
       fd.append("commissionFee", Number(form.commissionFee) || 0);
       fd.append("agentFee",      Number(form.agentFee)      || 0);
@@ -515,18 +517,23 @@ function ListingModal({ listing, onClose, onSave, showToast }) {
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
             <div>
-              <label style={lSty}>Price (₦)</label>
+              <label style={lSty}>Price / yr (₦)</label>
               <input style={iSty} type="number" min="0" value={form.price} onChange={set("price")} placeholder="0" />
             </div>
+            <div>
+              <label style={lSty}>Price / 6 months (₦) <span style={{ color: "var(--ink-3)", fontWeight: 400 }}>optional</span></label>
+              <input style={iSty} type="number" min="0" value={form.pricePerHalfYear} onChange={set("pricePerHalfYear")} placeholder="0" />
+            </div>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
             <div>
               <label style={lSty}>Distance to Campus</label>
               <input style={iSty} value={form.distance} onChange={set("distance")} placeholder="e.g. 500m from gate" />
             </div>
-          </div>
-
-          <div style={{ marginBottom: 14 }}>
-            <label style={lSty}>Location / Neighborhood</label>
-            <input style={iSty} value={form.location} onChange={set("location")} placeholder="e.g. Akoka, Yaba, Lagos" />
+            <div>
+              <label style={lSty}>Location / Neighborhood</label>
+              <input style={iSty} value={form.location} onChange={set("location")} placeholder="e.g. Akoka, Yaba, Lagos" />
+            </div>
           </div>
 
           {/* Agent / move-in fees — optional */}
@@ -1814,9 +1821,9 @@ export default function SellerDashboard() {
 
                         <div style={{ display: "flex", gap: 8 }}>
                           <input
-                            style={{ flex: 1, padding: "8px 12px", borderRadius: "var(--r-md)", border: "2px solid #6366f1", background: "var(--paper)", fontSize: "1.6rem", fontFamily: "monospace", fontWeight: 800, letterSpacing: ".12em", textTransform: "uppercase", opacity: o.paymentStatus !== "paid" ? 0.5 : 1 }}
-                            placeholder="ABC123"
-                            maxLength={6}
+                            style={{ flex: 1, padding: "8px 12px", borderRadius: "var(--r-md)", border: "2px solid #6366f1", background: "#1e1b4b", color: "#fff", fontSize: "1.6rem", fontFamily: "monospace", fontWeight: 800, letterSpacing: ".12em", textTransform: "uppercase", opacity: o.paymentStatus !== "paid" ? 0.5 : 1 }}
+                            placeholder="A1B2C3"
+                            maxLength={10}
                             disabled={o.paymentStatus !== "paid"}
                             value={deliveryCodes[oid] || ""}
                             onChange={(e) => setDeliveryCodes((c) => ({ ...c, [oid]: e.target.value.toUpperCase() }))}

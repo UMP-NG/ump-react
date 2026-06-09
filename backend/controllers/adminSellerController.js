@@ -14,7 +14,7 @@ export const getAdminSellers = async (req, res) => {
     const skip  = (page - 1) * limit;
     const filter = {};
     if (status === "subscribed") { filter.isSubscribed = true;  filter.isSuspended = { $ne: true }; }
-    if (status === "pending")   { filter.isSubscribed = false; filter.isSuspended = { $ne: true }; }
+    if (status === "inactive")  { filter.isSubscribed = false; filter.isSuspended = { $ne: true }; }
     if (status === "suspended") { filter.isSuspended = true; }
     if (q) {
       const safe = q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -62,13 +62,14 @@ export const getAdminSellers = async (req, res) => {
   }
 };
 
+// Reinstate a restricted/suspended seller (undo restriction)
 export const approveSeller = async (req, res) => {
   try {
     const seller = await Seller.findById(req.params.sellerId);
     if (!seller) return res.status(404).json({ message: "Seller not found" });
-    seller.isSubscribed = true; seller.subscriptionRequested = false; seller.isSuspended = false;
+    seller.isSuspended = false;
     await seller.save();
-    logger.info(`[admin] seller approved: ${seller._id} (${seller.storeName}) by admin ${req.user?._id}`);
+    logger.info(`[admin] seller reinstated: ${seller._id} (${seller.storeName}) by admin ${req.user?._id}`);
     res.json({ success: true });
   } catch (err) {
     logger.error("approveSeller:", err);
@@ -76,14 +77,15 @@ export const approveSeller = async (req, res) => {
   }
 };
 
+// Restrict a seller — removes subscription benefits regardless of payment
 export const rejectSeller = async (req, res) => {
   try {
     const seller = await Seller.findById(req.params.sellerId);
     if (!seller) return res.status(404).json({ message: "Seller not found" });
-    if (seller.isSubscribed) { seller.isSuspended = true; } else { seller.subscriptionRequested = false; }
+    seller.isSuspended = true;
     seller.isSubscribed = false;
     await seller.save();
-    logger.info(`[admin] seller rejected/suspended: ${seller._id} (${seller.storeName}) by admin ${req.user?._id}`);
+    logger.info(`[admin] seller restricted: ${seller._id} (${seller.storeName}) by admin ${req.user?._id}`);
     res.json({ success: true });
   } catch (err) {
     logger.error("rejectSeller:", err);

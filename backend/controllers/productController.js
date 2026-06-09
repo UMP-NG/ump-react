@@ -154,7 +154,7 @@ export const getAllProducts = async (req, res) => {
     const safeLimit = Math.min(Math.max(parseInt(limit, 10) || 100, 1), 200);
     const skip = typeof req.query.skip === "string" ? Math.max(0, parseInt(req.query.skip, 10) || 0) : 0;
 
-    let query = {};
+    let query = { deletedAt: null };
 
     if (category) {
       const mongoose = (await import("mongoose")).default;

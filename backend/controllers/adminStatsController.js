@@ -12,12 +12,11 @@ export const getAdminStats = async (req, res) => {
   if (cached) return res.json(cached);
   try {
     const since = startOf(days);
-    const [newUsers, totalUsers, newSellers, totalSellers, pendingSellers, orderAgg, payoutAgg, disputes] = await Promise.all([
+    const [newUsers, totalUsers, newSellers, totalSellers, orderAgg, payoutAgg, disputes] = await Promise.all([
       User.countDocuments({ createdAt: { $gte: since } }),
       User.countDocuments(),
       Seller.countDocuments({ createdAt: { $gte: since } }),
       Seller.countDocuments(),
-      Seller.countDocuments({ isSubscribed: false, subscriptionRequested: true }),
       Order.aggregate([{ $facet: {
         active:  [{ $match: { status: { $in: ["pending","confirmed","shipped"] } } }, { $group: { _id: null, total: { $sum: "$totalAmount" } } }],
         period:  [{ $match: { createdAt: { $gte: since } } }, { $group: { _id: null, total: { $sum: "$totalAmount" }, count: { $sum: 1 } } }],
@@ -36,7 +35,7 @@ export const getAdminStats = async (req, res) => {
       days, newUsers, newSellers,
       periodOrdersValue: fmt(periodGMV), periodOrderCount: periodCount,
       platformRevenue: fmt(periodRev * 0.032),
-      totalUsers, totalSellers, pendingSellers,
+      totalUsers, totalSellers,
       activeOrdersValue: fmt(activeVal),
       pendingPayoutsValue: fmt(payoutVal), pendingPayoutsCount: payoutCount,
       flaggedCount: disputes, disputes, reports: 0,

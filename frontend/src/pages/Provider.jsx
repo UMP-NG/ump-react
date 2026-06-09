@@ -24,7 +24,7 @@ const STATS = [
 
 export default function Provider() {
   const navigate = useNavigate();
-  const { user } = useUser();
+  const { user, setUser } = useUser();
   const [tab, setTab]       = useState("seller");
   const [loading, setLoading] = useState(false);
   const [error, setError]   = useState("");
@@ -94,6 +94,8 @@ export default function Provider() {
             ...(logoObj   && { logo:   logoObj }),
           },
         });
+        // Refresh roles so SellerDashboard sees "seller" immediately without a re-login
+        setUser((u) => ({ ...u, roles: [...new Set([...(u?.roles || []), "seller"])] }));
       } else {
         // Profile-only registration — service listings are added from the Provider Dashboard
         const { avatarFile, nameOrBusiness, ...profileData } = service;
@@ -107,6 +109,7 @@ export default function Provider() {
             ...(avatarObj && { avatarUrl: avatarObj.url }),
           },
         });
+        setUser((u) => ({ ...u, roles: [...new Set([...(u?.roles || []), "service_provider"])] }));
       }
       navigate(tab === "seller" ? "/seller-dashboard" : "/provider-analytics");
     } catch (err) {

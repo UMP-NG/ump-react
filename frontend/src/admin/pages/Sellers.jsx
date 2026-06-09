@@ -7,11 +7,11 @@ import { apiFetch } from '../../utils/api';
 
 const TABS = [
   { label: 'All',        filter: '' },
-  { label: 'Pending',    filter: 'pending' },
   { label: 'Subscribed', filter: 'subscribed' },
-  { label: 'Suspended',  filter: 'suspended' },
+  { label: 'Inactive',   filter: 'inactive' },
+  { label: 'Restricted', filter: 'suspended' },
 ];
-const STATUS_COLOR = { subscribed: 'green', pending: 'amber', suspended: 'red' };
+const STATUS_COLOR = { subscribed: 'green', inactive: 'gray', suspended: 'red' };
 
 export default function Sellers() {
   const navigate = useNavigate();
@@ -224,7 +224,7 @@ function SellerDrawer({ seller, onClose, onApprove, onReject, onMessage }) {
                 )}
               </div>
               <div className="muted" style={{ fontSize: '1.2rem', marginTop: 2 }}>
-                {status === 'pending' ? 'Subscription pending' : `Status: ${status}`}
+                {status === 'subscribed' ? 'Subscribed' : status === 'suspended' ? 'Restricted by admin' : 'No active subscription'}
               </div>
               {seller.location && (
                 <div style={{ fontSize: '1.2rem', color: 'var(--ink-3)', marginTop: 2 }}>
@@ -329,19 +329,9 @@ function SellerDrawer({ seller, onClose, onApprove, onReject, onMessage }) {
           <button className="abtn ghost" style={{ flex: 1 }} onClick={onMessage}>
             <i className="fa-solid fa-message"></i> Message
           </button>
-          {status === 'pending' && (
-            <>
-              <button className="abtn danger" style={{ flex: 1 }} onClick={onReject}>
-                <i className="fa-solid fa-xmark"></i> Reject
-              </button>
-              <button className="abtn primary" style={{ flex: 1.4 }} onClick={onApprove}>
-                <i className="fa-solid fa-circle-check"></i> Approve
-              </button>
-            </>
-          )}
-          {status === 'verified' && (
+          {status === 'subscribed' && (
             <button className="abtn danger" style={{ flex: 1 }} onClick={onReject}>
-              <i className="fa-solid fa-ban"></i> Suspend
+              <i className="fa-solid fa-ban"></i> Restrict
             </button>
           )}
           {status === 'suspended' && (

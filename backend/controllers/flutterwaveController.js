@@ -1,10 +1,16 @@
+import mongoose from "mongoose";
 import axios from "axios";
 import crypto from "crypto";
 import Payment from "../models/Payment.js";
 import Order from "../models/Order.js";
 import Seller from "../models/Seller.js";
+import Cart from "../models/Cart.js";
+import Product from "../models/Product.js";
+import CartPaymentRequest from "../models/CartPaymentRequest.js";
+import Config from "../models/Config.js";
 import { audit } from "../utils/auditLog.js";
 import { confirmAllOrders } from "../utils/confirmOrders.js";
+import { notify } from "../utils/notify.js";
 import logger from "../utils/logger.js";
 
 const FLW_BASE = "https://api.flutterwave.com/v3";
@@ -140,7 +146,11 @@ export const verifyFlwPayment = async (req, res) => {
 
     let orderSummaries = [];
     if (succeeded) {
-      await confirmAllOrders(payment);
+      if (payment.metadata?.type === "cart_link" && payment.metadata?.cartPaymentToken) {
+        await fulfillCartLinkPayment(payment.metadata.cartPaymentToken, payment.user);
+      } else {
+        await confirmAllOrders(payment);
+      }
       audit("PAYMENT_VERIFIED", {
         actor: req.user?._id,
         entity: "Payment",
@@ -180,6 +190,68 @@ export const verifyFlwPayment = async (req, res) => {
 };
 
 // ----------------------------
+// Helper: Create orders from a CartPaymentRequest after payment succeeds
+// ----------------------------
+async function fulfillCartLinkPayment(token, ownerId) {
+  try {
+    const cartReq = await CartPaymentRequest.findOne({ token, paymentStatus: "pending" });
+    if (!cartReq) return;
+
+    // Group items by seller
+    const sellerGroups = new Map();
+    for (const item of cartReq.items) {
+      const sid = item.sellerId?.toString();
+      if (!sid) continue;
+      if (!sellerGroups.has(sid)) sellerGroups.set(sid, []);
+      sellerGroups.get(sid).push(item);
+    }
+
+    for (const [sid, sellerItems] of sellerGroups) {
+      const orderItems = sellerItems.map((i) => ({
+        product: i.productId,
+        quantity: i.quantity,
+        price: i.price,
+      }));
+      const subtotal = orderItems.reduce((s, i) => s + i.price * i.quantity, 0);
+      const order = await Order.create({
+        buyer: ownerId,
+        seller: new mongoose.Types.ObjectId(sid),
+        items: orderItems,
+        subtotal,
+        serviceCharge: 0,
+        deliveryFee: 0,
+        totalAmount: subtotal,
+        paymentStatus: "paid",
+        status: "confirmed",
+        paymentMethod: "Flutterwave",
+        shippingAddress: cartReq.shippingAddress || {},
+      });
+      if (order.seller) {
+        notify(order.seller, {
+          type: "order",
+          title: "New order received",
+          message: `Payment confirmed — ₦${order.totalAmount.toLocaleString()}. Ready to fulfil.`,
+          link: "/seller-dashboard",
+        });
+        await Seller.findOneAndUpdate({ user: order.seller }, { $inc: { totalOrders: 1 } });
+      }
+    }
+
+    notify(ownerId, {
+      type: "order",
+      title: "Your cart has been paid!",
+      message: "Someone paid for your cart. Your orders are now being processed.",
+      link: "/orders",
+    });
+
+    cartReq.paymentStatus = "paid";
+    await cartReq.save();
+  } catch (err) {
+    logger.error("💥 fulfillCartLinkPayment error:", err.message);
+  }
+}
+
+// ----------------------------
 // 3️⃣ Flutterwave Webhook
 // ----------------------------
 export const flutterwaveWebhook = async (req, res) => {
@@ -211,7 +283,12 @@ export const flutterwaveWebhook = async (req, res) => {
           { reference: data.tx_ref },
           { $set: { status: "success", paidAt: new Date(), metadata: data } }
         );
-        await confirmAllOrders(payment);
+        // Cart link payment — create orders from the snapshot then notify
+        if (payment.metadata?.type === "cart_link" && payment.metadata?.cartPaymentToken) {
+          await fulfillCartLinkPayment(payment.metadata.cartPaymentToken, payment.user);
+        } else {
+          await confirmAllOrders(payment);
+        }
         audit("WEBHOOK_PAYMENT_CONFIRMED", {
           entity: "Payment",
           entityId: payment._id,
@@ -226,5 +303,168 @@ export const flutterwaveWebhook = async (req, res) => {
   } catch (err) {
     logger.error("💥 Flutterwave webhook error:", err);
     res.sendStatus(500);
+  }
+};
+
+// ----------------------------
+// 4️⃣ Create Cart Payment Link (owner generates shareable link for someone else to pay)
+// ----------------------------
+async function getFeeConfig() {
+  const config = await Config.findOne().select("fees").lean();
+  const f = config?.fees || {};
+  return {
+    serviceChargeEnabled: f.serviceChargeEnabled ?? true,
+    serviceFeeRate: (f.serviceFee ?? 5.0) / 100,
+    serviceChargeMax: f.serviceChargeMax ?? 2000,
+  };
+}
+
+export const createCartPaymentLink = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const cart = await Cart.findOne({ user: userId }).populate("items.product");
+    if (!cart || cart.items.length === 0)
+      return res.status(400).json({ success: false, message: "Your cart is empty." });
+
+    const cfg = await getFeeConfig();
+
+    // Build snapshot + calculate totals per-item capped
+    let subtotal = 0;
+    let serviceCharge = 0;
+    const items = [];
+    for (const i of cart.items) {
+      const p = i.product;
+      if (!p?._id) continue;
+      const unitPrice = i.negotiatedPrice ?? p.price ?? 0;
+      const qty = i.quantity || 1;
+      const lineTotal = unitPrice * qty;
+      const lineSvc = cfg.serviceChargeEnabled
+        ? Math.min(cfg.serviceChargeMax, Math.round(lineTotal * cfg.serviceFeeRate))
+        : 0;
+      subtotal += lineTotal;
+      serviceCharge += lineSvc;
+      items.push({
+        productId: p._id,
+        sellerId: p.seller,
+        name: p.name || "Product",
+        price: unitPrice,
+        quantity: qty,
+        image: p.images?.[0]?.url || "",
+      });
+    }
+    if (!items.length)
+      return res.status(400).json({ success: false, message: "No valid items in cart." });
+
+    const total = subtotal + serviceCharge;
+    const token = crypto.randomBytes(20).toString("hex");
+    const expiresAt = new Date(Date.now() + 72 * 60 * 60 * 1000); // 72 h
+
+    await CartPaymentRequest.create({
+      token,
+      owner: userId,
+      ownerName: req.user.name || "",
+      ownerEmail: req.user.email || "",
+      items,
+      subtotal,
+      serviceCharge,
+      total,
+      expiresAt,
+    });
+
+    const base = clientUrl();
+    return res.json({ success: true, link: `${base}/pay/${token}`, expiresAt });
+  } catch (err) {
+    logger.error("💥 createCartPaymentLink error:", err.message);
+    return res.status(500).json({ success: false, message: "Failed to generate payment link." });
+  }
+};
+
+// ----------------------------
+// 5️⃣ Get Cart Payment Link Details (public — no auth)
+// ----------------------------
+export const getCartPaymentDetails = async (req, res) => {
+  try {
+    const { token } = req.params;
+    const req2 = await CartPaymentRequest.findOne({ token }).lean();
+    if (!req2 || req2.paymentStatus === "paid")
+      return res.status(404).json({ success: false, message: req2 ? "This link has already been paid." : "Payment link not found." });
+    if (new Date() > new Date(req2.expiresAt))
+      return res.status(410).json({ success: false, message: "This payment link has expired." });
+    return res.json({
+      success: true,
+      ownerName: req2.ownerName,
+      items: req2.items,
+      subtotal: req2.subtotal,
+      serviceCharge: req2.serviceCharge,
+      total: req2.total,
+      expiresAt: req2.expiresAt,
+    });
+  } catch (err) {
+    logger.error("💥 getCartPaymentDetails error:", err.message);
+    return res.status(500).json({ success: false, message: "Server error." });
+  }
+};
+
+// ----------------------------
+// 6️⃣ Pay a Cart Payment Link (payer initializes Flutterwave)
+// ----------------------------
+export const payCartLink = async (req, res) => {
+  try {
+    const { token } = req.params;
+    const { payerName, payerEmail, payerPhone } = req.body;
+    if (!payerEmail) return res.status(400).json({ success: false, message: "Payer email is required." });
+
+    const cartReq = await CartPaymentRequest.findOne({ token, paymentStatus: "pending" }).lean();
+    if (!cartReq)
+      return res.status(404).json({ success: false, message: "Payment link not found or already paid." });
+    if (new Date() > new Date(cartReq.expiresAt))
+      return res.status(410).json({ success: false, message: "This payment link has expired." });
+
+    const reference = `UMP_CARTLINK_${Date.now()}_${token.slice(0, 8)}`;
+    const base = clientUrl();
+
+    const response = await axios.post(
+      `${FLW_BASE}/payments`,
+      {
+        tx_ref: reference,
+        amount: cartReq.total,
+        currency: "NGN",
+        redirect_url: `${base}/pay/${token}/success`,
+        customer: {
+          email: payerEmail,
+          name: payerName || payerEmail,
+          phonenumber: payerPhone || "",
+        },
+        meta: { cartPaymentToken: token, ownerId: cartReq.owner.toString() },
+        customizations: {
+          title: "UMP — Pay for someone",
+          description: `Paying ${cartReq.ownerName}'s cart`,
+          logo: `${base}/images/ump-apple-touch-icon.png`,
+        },
+      },
+      { headers: flwHeaders() }
+    );
+
+    const paymentLink = response.data?.data?.link;
+    if (!paymentLink) throw new Error("No payment link from Flutterwave");
+
+    // Record the payment intent
+    await Payment.create({
+      user: cartReq.owner,
+      orders: [],
+      provider: "Flutterwave",
+      amount: cartReq.total,
+      reference,
+      status: "pending",
+      metadata: { cartPaymentToken: token, type: "cart_link" },
+    });
+
+    // Store the reference on the request so webhook can find it
+    await CartPaymentRequest.findOneAndUpdate({ token }, { flwTxRef: reference });
+
+    return res.json({ success: true, payment_link: paymentLink, reference });
+  } catch (err) {
+    logger.error("💥 payCartLink error:", err.response?.data || err.message);
+    return res.status(500).json({ success: false, message: "Failed to initialize payment." });
   }
 };

@@ -13,6 +13,7 @@ export const createListing = async (req, res) => {
       type,
       description,
       price,
+      pricePerHalfYear,
       rate,
       location,
       beds,
@@ -21,6 +22,10 @@ export const createListing = async (req, res) => {
       amenities,
       furnished,
       available,
+      agreementFee,
+      commissionFee,
+      agentFee,
+      cautionFee,
     } = req.body;
 
     // ✅ Ensure `type` is always a string
@@ -54,6 +59,7 @@ export const createListing = async (req, res) => {
       type: listingType,
       description,
       price,
+      pricePerHalfYear: pricePerHalfYear ? Number(pricePerHalfYear) : null,
       rate,
       location,
       beds,
@@ -64,6 +70,10 @@ export const createListing = async (req, res) => {
       videos,
       furnished,
       available,
+      agreementFee:  Number(agreementFee)  || 0,
+      commissionFee: Number(commissionFee) || 0,
+      agentFee:      Number(agentFee)      || 0,
+      cautionFee:    Number(cautionFee)    || 0,
       owner: req.user._id,
     });
 

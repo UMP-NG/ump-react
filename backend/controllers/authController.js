@@ -1090,6 +1090,23 @@ export const disputeVerifyIdentity = async (req, res) => {
   }
 };
 
+// ─── Set password (for Google users who verified school email) ────────────────
+export const setPassword = async (req, res) => {
+  try {
+    const { newPassword } = req.body;
+    if (!newPassword || newPassword.length < 8)
+      return res.status(400).json({ message: "Password must be at least 8 characters" });
+    const user = await User.findById(req.user._id);
+    if (!user.schoolEmailVerified)
+      return res.status(403).json({ message: "Verify your school email first to set a password." });
+    user.password = newPassword;
+    await user.save();
+    res.json({ success: true, message: "Password set. You can now log in with your school email and this password." });
+  } catch (err) {
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
 // ─── Change password ──────────────────────────────────────────────────────────
 export const changePassword = async (req, res) => {
   try {

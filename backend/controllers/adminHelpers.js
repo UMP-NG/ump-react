@@ -32,7 +32,10 @@ export const startOf = (daysAgo) => {
 
 // ── Seller status ─────────────────────────────────────────────────────────────
 export const sellerStatus = (s) => {
-  if (s.isSuspended)  return "suspended";
-  if (s.isSubscribed) return "subscribed";
-  return "pending";
+  if (s.isSuspended) return "suspended";
+  if (s.isSubscribed) {
+    if (s.subscriptionExpiresAt && new Date(s.subscriptionExpiresAt) < new Date()) return "inactive";
+    return "subscribed";
+  }
+  return "inactive";
 };

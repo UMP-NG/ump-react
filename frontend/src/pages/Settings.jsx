@@ -412,14 +412,21 @@ function PasswordField({ label, value, onChange, visible, onToggle, children }) 
 // ─── Security tab ─────────────────────────────────────────────────────────────
 function SecurityTab({ user, showToast, onAccountDeleted }) {
   const [form, setForm] = useState({ currentPassword: "", newPassword: "", confirm: "" });
+  const [pwSetForm, setPwSetForm] = useState({ newPassword: "", confirm: "" });
   const [saving, setSaving] = useState(false);
+  const [savingSet, setSavingSet] = useState(false);
   const [show, setShow] = useState({ current: false, new: false, confirm: false });
+  const [show2, setShow2] = useState({ new: false, confirm: false });
   const [deleting, setDeleting] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
 
   const allRulesMet = STRENGTH_RULES.every((r) => r.test(form.newPassword));
   const confirmMatch = form.confirm && form.newPassword === form.confirm;
   const confirmMismatch = form.confirm && form.newPassword !== form.confirm;
+
+  const allRulesMet2 = STRENGTH_RULES.every((r) => r.test(pwSetForm.newPassword));
+  const confirmMatch2 = pwSetForm.confirm && pwSetForm.newPassword === pwSetForm.confirm;
+  const confirmMismatch2 = pwSetForm.confirm && pwSetForm.newPassword !== pwSetForm.confirm;
 
   async function handlePasswordSubmit(e) {
     e.preventDefault();
@@ -437,6 +444,25 @@ function SecurityTab({ user, showToast, onAccountDeleted }) {
       showToast(err?.message || "Failed to change password", "error");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleSetPassword(e) {
+    e.preventDefault();
+    if (!allRulesMet2) return showToast("Password doesn't meet all requirements", "error");
+    if (pwSetForm.newPassword !== pwSetForm.confirm) return showToast("Passwords don't match", "error");
+    setSavingSet(true);
+    try {
+      await apiFetch("/api/auth/set-password", {
+        method: "PUT",
+        body: { newPassword: pwSetForm.newPassword },
+      });
+      showToast("Password set! You can now log in with your school email.", "success");
+      setPwSetForm({ newPassword: "", confirm: "" });
+    } catch (err) {
+      showToast(err?.message || "Failed to set password", "error");
+    } finally {
+      setSavingSet(false);
     }
   }
 
@@ -464,10 +490,34 @@ function SecurityTab({ user, showToast, onAccountDeleted }) {
           <div style={{ fontSize: "1.5rem", fontWeight: 700 }}>Password</div>
           <div style={{ fontSize: "1.25rem", color: "var(--ink-3)", marginTop: 2 }}>Change your account password to keep it secure.</div>
         </div>
-        {isGoogleAccount ? (
+        {isGoogleAccount && user?.schoolEmailVerified ? (
+          <form onSubmit={handleSetPassword}>
+            <div style={{ padding: "10px 14px", background: "var(--surface)", borderRadius: "var(--r-md)", fontSize: "1.25rem", color: "var(--ink-2)", marginBottom: 14 }}>
+              <i className="fab fa-google" style={{ marginRight: 8, color: "#4285f4" }} />
+              Your school email is verified. Set a password to also log in with your school email.
+            </div>
+            <PasswordField label="New password" value={pwSetForm.newPassword} onChange={(e) => setPwSetForm((f) => ({ ...f, newPassword: e.target.value }))} visible={show2.new} onToggle={() => setShow2((s) => ({ ...s, new: !s.new }))}>
+              <StrengthMeter password={pwSetForm.newPassword} />
+            </PasswordField>
+            <PasswordField label="Confirm password" value={pwSetForm.confirm} onChange={(e) => setPwSetForm((f) => ({ ...f, confirm: e.target.value }))} visible={show2.confirm} onToggle={() => setShow2((s) => ({ ...s, confirm: !s.confirm }))} />
+            {confirmMismatch2 && (
+              <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "1.2rem", color: "#ef4444", marginTop: -6, marginBottom: 12 }}>
+                <i className="fas fa-circle-xmark" /> Passwords don't match
+              </div>
+            )}
+            {confirmMatch2 && (
+              <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: "1.2rem", color: "#16a34a", marginTop: -6, marginBottom: 12 }}>
+                <i className="fas fa-circle-check" /> Passwords match
+              </div>
+            )}
+            <button className="btn btn-primary btn-block" type="submit" disabled={savingSet || !allRulesMet2 || !!confirmMismatch2}>
+              {savingSet ? <><i className="fas fa-spinner fa-spin" /> Setting…</> : "Set password"}
+            </button>
+          </form>
+        ) : isGoogleAccount ? (
           <div style={{ padding: "12px 14px", background: "var(--surface)", borderRadius: "var(--r-md)", fontSize: "1.3rem", color: "var(--ink-2)" }}>
             <i className="fab fa-google" style={{ marginRight: 8, color: "#4285f4" }} />
-            You signed in with Google. Password login is not available for this account.
+            Verify your school email first (in the Verify tab) to enable password login.
           </div>
         ) : (
           <form onSubmit={handlePasswordSubmit}>

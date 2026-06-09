@@ -45,6 +45,8 @@ const ProviderAnalytics = lazy(() => import("./pages/ProviderAnalytics"));
 const NotFound         = lazy(() => import("./pages/NotFound"));
 const Terms            = lazy(() => import("./pages/Terms"));
 const Privacy          = lazy(() => import("./pages/Privacy"));
+const PayForCart       = lazy(() => import("./pages/PayForCart"));
+const PayForCartSuccess = lazy(() => import("./pages/PayForCart").then(m => ({ default: m.PayForCartSuccess })));
 
 // Catches chunk-load errors (e.g. network failure while lazy-loading a route)
 // and shows a simple reload prompt instead of a blank screen.
@@ -131,6 +133,10 @@ export default function App() {
       <Route path="/cart"              element={<PrivateRoute><Cart /></PrivateRoute>} />
       <Route path="/checkout-success"  element={<CheckoutSuccess />} />
       <Route path="/payment-success"   element={<PaymentSuccess />} />
+
+      {/* Cart payment links (public — payer doesn't need an account) */}
+      <Route path="/pay/:token/success" element={<PayForCartSuccess />} />
+      <Route path="/pay/:token"         element={<PayForCart />} />
 
       {/* Auth */}
       <Route path="/login"           element={<Login />} />

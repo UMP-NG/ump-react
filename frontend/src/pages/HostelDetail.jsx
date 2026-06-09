@@ -101,6 +101,7 @@ export default function HostelDetail() {
         </div>
       </div>
 
+      <div style={{ maxWidth: 780, margin: "0 auto" }}>
       {/* Gallery */}
       <div style={{ position: "relative", margin: "0 16px", borderRadius: "var(--r-2xl)", overflow: "hidden", height: 260, background: "var(--surface)" }}>
         {listing.images?.length > 0
@@ -136,7 +137,12 @@ export default function HostelDetail() {
       <div style={{ padding: "20px 16px 0" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
           <h1 style={{ fontSize: "2.2rem", fontWeight: 800, letterSpacing: "-0.02em", margin: "0 0 6px", flex: 1 }}>{listing.name}</h1>
-          <span style={{ fontSize: "2.4rem", fontWeight: 800, color: "var(--accent)", flexShrink: 0, marginLeft: 12 }}>{naira(listing.price || 0)}<span style={{ fontSize: "1.2rem", color: "var(--ink-3)", fontWeight: 500 }}> {listing.rate || "/ yr"}</span></span>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", flexShrink: 0, marginLeft: 12 }}>
+              <span style={{ fontSize: "2.4rem", fontWeight: 800, color: "var(--accent)" }}>{naira(listing.price || 0)}<span style={{ fontSize: "1.2rem", color: "var(--ink-3)", fontWeight: 500 }}> {listing.rate || "/ yr"}</span></span>
+              {listing.pricePerHalfYear > 0 && (
+                <span style={{ fontSize: "1.3rem", color: "var(--ink-3)", fontWeight: 500, marginTop: 2 }}>{naira(listing.pricePerHalfYear)} / 6 months</span>
+              )}
+            </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--ink-3)", fontSize: "1.3rem", marginBottom: 16 }}>
           <i className="fas fa-location-dot" /> {listing.location || listing.address}
@@ -235,6 +241,7 @@ export default function HostelDetail() {
           </>
         )}
       </div>
+      </div>{/* end max-width wrapper */}
 
       <Footer />
 

@@ -32,6 +32,10 @@ export default function Cart() {
   const [bbxDropoffArea, setBbxDropoffArea] = useState("");
   const [pickupAddresses, setPickupAddresses] = useState({}); // { userId: { storeName, address } }
   const bbxRef = useRef(null);
+  const [linkLoading, setLinkLoading] = useState(false);
+  const [payLink, setPayLink] = useState("");
+  const [showLinkSheet, setShowLinkSheet] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
 
   useEffect(() => {
     apiFetch("/api/cart")
@@ -99,7 +103,11 @@ export default function Cart() {
   }, 0);
   const creditToApply = applyCredit ? Math.min(creditBalance, sub) : 0;
   const serviceCharge = fees.serviceChargeEnabled
-    ? Math.min(fees.serviceChargeMax, Math.max(fees.serviceChargeMin, Math.round(sub * (fees.serviceFee / 100))))
+    ? items.reduce((total, i) => {
+        const unitPrice = i.negotiatedPrice || i.product?.price || i.price || 0;
+        const itemTotal = unitPrice * (i.quantity || i.qty || 1);
+        return total + Math.min(fees.serviceChargeMax, Math.round(itemTotal * (fees.serviceFee / 100)));
+      }, 0)
     : 0;
   const orderTotal = Math.max(0, sub + serviceCharge - creditToApply);
 
@@ -145,6 +153,20 @@ export default function Cart() {
     }
     setStepError("");
     setShowDeliveryConfirm(true);
+  }
+
+  async function generatePayLink() {
+    setLinkLoading(true);
+    try {
+      const res = await apiFetch("/api/payments/cart-link", { method: "POST" });
+      if (!res.link) throw new Error("Failed to generate link");
+      setPayLink(res.link);
+      setShowLinkSheet(true);
+    } catch (err) {
+      showToast(err?.message || "Failed to generate payment link", "error");
+    } finally {
+      setLinkLoading(false);
+    }
   }
 
   async function placeOrder() {
@@ -197,9 +219,11 @@ export default function Cart() {
     } catch (err) {
       // Cancel any orders that were created before the payment init failed
       sessionStorage.removeItem("ump_pending_orders");
-      await Promise.allSettled(orderIds.map((id) => apiFetch(`/api/orders/${id}`, { method: "DELETE" })));
+      if (orderIds.length) {
+        await Promise.allSettled(orderIds.map((id) => apiFetch(`/api/orders/${id}`, { method: "DELETE" })));
+      }
       if (err?.status === 401) navigate("/login");
-      else alert(err?.message || "Failed to place order. Try again.");
+      else showToast(err?.message || "Failed to place order. Please try again.", "error");
       setPlacing(false);
     }
   }
@@ -347,8 +371,20 @@ export default function Cart() {
                     </div>
                   )}
 
-                  <button className="btn btn-primary btn-block btn-lg" style={{ borderRadius: "var(--r-pill)", marginBottom: 24 }} onClick={() => setStep(2)}>
+                  <button className="btn btn-primary btn-block btn-lg" style={{ borderRadius: "var(--r-pill)", marginBottom: 10 }} onClick={() => setStep(2)}>
                     Proceed to delivery <i className="fas fa-arrow-right" />
+                  </button>
+
+                  {/* Payment link — let someone else pay for this cart */}
+                  <button
+                    className="btn btn-ghost btn-block"
+                    style={{ borderRadius: "var(--r-pill)", marginBottom: 24, fontSize: "1.25rem", color: "var(--ink-2)" }}
+                    onClick={generatePayLink}
+                    disabled={linkLoading}
+                  >
+                    {linkLoading
+                      ? <><i className="fas fa-spinner fa-spin" /> Generating…</>
+                      : <><i className="fas fa-link" /> Share payment link</>}
                   </button>
                 </>
               )}
@@ -616,10 +652,7 @@ export default function Cart() {
               <div style={{ height: 1, background: "var(--line)", margin: "10px 0" }} />
               {serviceCharge > 0 && (
                 <div style={{ display: "flex", justifyContent: "space-between", fontSize: "1.3rem", marginBottom: 4 }}>
-                  <span style={{ color: "var(--ink-3)" }}>
-                    Service charge ({fees.serviceFee}%)
-                    <span style={{ fontSize: "1rem", marginLeft: 4, color: "var(--ink-4)" }}>min ₦{fees.serviceChargeMin.toLocaleString()} / max ₦{fees.serviceChargeMax.toLocaleString()}</span>
-                  </span>
+                  <span style={{ color: "var(--ink-3)" }}>Service charge</span>
                   <span style={{ color: "var(--ink-2)", fontWeight: 600 }}>{naira(serviceCharge)}</span>
                 </div>
               )}
@@ -653,6 +686,64 @@ export default function Cart() {
       </div>{/* /cart-grid */}
 
       <Footer />
+
+      {/* Payment link sheet */}
+      {showLinkSheet && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          style={{ position: "fixed", inset: 0, zIndex: 9999, background: "rgba(0,0,0,.5)", backdropFilter: "blur(2px)", display: "flex", alignItems: "flex-end", justifyContent: "center" }}
+          onClick={() => setShowLinkSheet(false)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{ width: "100%", maxWidth: 520, background: "var(--paper)", borderRadius: "var(--r-lg) var(--r-lg) 0 0", padding: "24px 20px 36px", boxShadow: "0 -8px 40px rgba(0,0,0,.18)" }}
+          >
+            <div style={{ width: 40, height: 4, borderRadius: 4, background: "var(--line)", margin: "0 auto 20px" }} />
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16 }}>
+              <div style={{ width: 40, height: 40, borderRadius: "50%", background: "rgba(249,115,22,.1)", color: "var(--accent)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.4rem", flexShrink: 0 }}>
+                <i className="fas fa-link" />
+              </div>
+              <div>
+                <div style={{ fontWeight: 800, fontSize: "1.5rem" }}>Payment link ready</div>
+                <div style={{ fontSize: "1.2rem", color: "var(--ink-3)" }}>Share with someone to pay for your cart</div>
+              </div>
+            </div>
+            <div style={{ background: "var(--surface)", borderRadius: "var(--r-md)", padding: "12px 14px", marginBottom: 14, display: "flex", alignItems: "center", gap: 10 }}>
+              <span style={{ flex: 1, fontSize: "1.2rem", color: "var(--ink-2)", wordBreak: "break-all", lineHeight: 1.5 }}>{payLink}</span>
+            </div>
+            <div style={{ display: "flex", gap: 10 }}>
+              <button
+                className="btn btn-primary btn-lg"
+                style={{ flex: 1, borderRadius: "var(--r-pill)" }}
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(payLink);
+                    setLinkCopied(true);
+                    setTimeout(() => setLinkCopied(false), 2500);
+                  } catch {
+                    showToast("Could not copy — long-press the link to copy manually", "error");
+                  }
+                }}
+              >
+                {linkCopied ? <><i className="fas fa-check" /> Copied!</> : <><i className="fas fa-copy" /> Copy link</>}
+              </button>
+              {navigator.share && (
+                <button
+                  className="btn btn-ghost btn-lg"
+                  style={{ flex: 1, borderRadius: "var(--r-pill)" }}
+                  onClick={() => navigator.share({ title: "Pay for my UMP cart", url: payLink }).catch(() => {})}
+                >
+                  <i className="fas fa-share-nodes" /> Share
+                </button>
+              )}
+            </div>
+            <p style={{ textAlign: "center", fontSize: "1.15rem", color: "var(--ink-4)", margin: "12px 0 0" }}>
+              <i className="fas fa-clock" style={{ marginRight: 5 }} />This link expires in 72 hours
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Delivery details confirmation sheet */}
       {showDeliveryConfirm && (

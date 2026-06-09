@@ -40,7 +40,7 @@ async function activateSubscription(payment) {
   if (type === "seller") {
     await Seller.findOneAndUpdate(
       { user: payment.user },
-      { isSubscribed: true, subscriptionRequested: false, subscriptionPlan: plan, subscriptionExpiresAt: expiresAt }
+      { isSubscribed: true, subscriptionPlan: plan, subscriptionExpiresAt: expiresAt }
     );
   } else if (type === "provider") {
     await User.findByIdAndUpdate(payment.user, {

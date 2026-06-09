@@ -195,6 +195,7 @@ export async function apiFetch(path, options = {}) {
     _invalidate("/api/services");
     _invalidate("/api/listings");
     _invalidate("/api/categories");
+    _invalidate("/api/cart");
   }
 
   try {

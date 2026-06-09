@@ -28,14 +28,17 @@ async function getFeeConfig() {
   };
 }
 
-function calcServiceCharge(subtotal, cfg) {
+function calcServiceCharge(items, cfg) {
   if (!cfg.serviceChargeEnabled) return 0;
-  return Math.min(cfg.serviceChargeMax, Math.max(cfg.serviceChargeMin, Math.round(subtotal * cfg.serviceFeeRate)));
+  return items.reduce((total, i) => {
+    const itemTotal = (i.price || 0) * (i.quantity || 1);
+    return total + Math.min(cfg.serviceChargeMax, Math.round(itemTotal * cfg.serviceFeeRate));
+  }, 0);
 }
 
 // Fix #6: use cryptographically secure random bytes instead of Math.random()
 function generateDeliveryCode() {
-  return crypto.randomBytes(5).toString("hex").toUpperCase(); // 5 bytes = 10 hex chars ≈ 10^12 combinations
+  return crypto.randomBytes(3).toString("hex").toUpperCase(); // 3 bytes = 6 hex chars
 }
 
 // ===============================
@@ -197,7 +200,7 @@ export const checkoutCart = async (req, res) => {
       }));
 
       const subtotal = orderItems.reduce((s, i) => s + i.price * i.quantity, 0);
-      const serviceCharge = calcServiceCharge(subtotal, feeConfig);
+      const serviceCharge = calcServiceCharge(orderItems, feeConfig);
       // Distribute credit proportionally; last order gets the remainder
       const isLastOrder = createdOrders.length === sellerGroups.size - 1;
       const orderCredit = isLastOrder
@@ -227,8 +230,8 @@ export const checkoutCart = async (req, res) => {
       isFirstOrder = false;
     }
 
-    cart.items = [];
-    await cart.save();
+    // Cart is cleared in confirmAllOrders after payment is confirmed —
+    // not here, so abandoned payments don't leave users with an empty cart.
 
     const orderWord = createdOrders.length > 1 ? `${createdOrders.length} orders` : `order #${createdOrders[0]._id.toString().slice(-6).toUpperCase()}`;
     notify(userId, {
@@ -1070,7 +1073,10 @@ export const confirmTransfer = async (req, res) => {
 
       const subtotal = resolvedItems.reduce((sum, item) => sum + item.resolvedPrice * (item.quantity || 1), 0);
       const deliveryFee = productIds.reduce((s, pid) => s + Math.max(0, priceMap.get(pid)?.fee || 0), 0);
-      const serviceCharge = calcServiceCharge(subtotal, feeConfig);
+      const serviceCharge = calcServiceCharge(
+        resolvedItems.map(i => ({ price: i.resolvedPrice, quantity: i.quantity || 1 })),
+        feeConfig
+      );
       const totalAmount = subtotal + deliveryFee + serviceCharge;
 
       // Build order items using DB-verified prices
