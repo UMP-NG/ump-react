@@ -112,7 +112,7 @@ const productSchema = new mongoose.Schema(
     distance: String,
 
     // ── Flash Sale ──────────────────────────────────────────────────────────────
-    salePrice:  { type: Number, default: null, min: 0 },
+    salePrice:  { type: Number, default: null, min: [0, "Sale price cannot be negative"] },
     saleEndsAt: { type: Date,   default: null },
 
     // ── Restock alerts ──────────────────────────────────────────────────────────
@@ -120,8 +120,8 @@ const productSchema = new mongoose.Schema(
 
     // ── Price-drop watchers ──────────────────────────────────────────────────────
     priceWatchers: [{
-      user:                { type: mongoose.Schema.Types.ObjectId, ref: "User" },
-      priceAtSubscription: { type: Number, min: 0 },
+      user:                { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+      priceAtSubscription: { type: Number, min: 0, required: true },
     }],
 
     // Soft-delete: set instead of destroying the document.

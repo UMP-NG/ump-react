@@ -349,6 +349,9 @@ export const completeBooking = async (req, res) => {
     );
     if (!updated) return res.status(409).json({ message: "Booking has already been completed or modified" });
 
+    // Reattach the populated item so the frontend response includes full item data
+    updated.item = booking.item;
+
     // Credit provider's earnings — negotiated rate takes priority, falls back to item's listed rate
     const earnings = booking.negotiatedRate ?? booking.item?.rate ?? 0;
     if (earnings > 0) {

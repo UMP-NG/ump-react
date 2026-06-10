@@ -2,6 +2,7 @@ import Seller from "../models/Seller.js";
 import User from "../models/User.js";
 import Product from "../models/Product.js";
 import Service from "../models/Service.js";
+import PushSub from "../models/PushSub.js";
 import logger from "../utils/logger.js";
 
 export const becomeSeller = async (req, res) => {
@@ -236,6 +237,7 @@ export const closeStore = async (req, res) => {
       Product.updateMany({ seller: userId }, { $set: { deletedAt: now } }),
       Service.updateMany({ provider: userId }, { $set: { deletedAt: now } }),
       User.findByIdAndUpdate(userId, { $pull: { roles: { $in: ["seller", "service_provider"] } } }),
+      PushSub.updateMany({ user: userId }, { $pull: { roles: { $in: ["seller", "service_provider"] } } }),
     ]);
     await seller.deleteOne();
 

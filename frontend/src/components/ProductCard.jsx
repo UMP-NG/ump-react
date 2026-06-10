@@ -90,7 +90,7 @@ export default function ProductCard({ product, variant = "always", onAddToCart }
   const outOfStock = totalStock <= 0;
   const cls = `product-card${variant === "hover" ? " hover-reveal" : ""}`;
   const isActiveSale = product?.salePrice != null &&
-    product.salePrice < product.price &&
+    Number(product.salePrice) < Number(product.price) &&
     (!product.saleEndsAt || new Date(product.saleEndsAt) > new Date());
 
   return (

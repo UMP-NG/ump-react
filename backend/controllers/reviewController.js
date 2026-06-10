@@ -181,12 +181,8 @@ export const replyToReview = async (req, res) => {
     review.sellerRepliedAt = new Date();
     await review.save();
 
-    // Build a sensible deep-link based on what was reviewed
-    const reviewLink = review.refModel === "Product"
-      ? `/products/${review.refId}`
-      : review.refModel === "Service"
-        ? `/services/${review.refId}`
-        : `/hostel/${review.refId}`;
+    const REVIEW_PATH = { Product: "/products", Service: "/services", Listing: "/hostel" };
+    const reviewLink = `${REVIEW_PATH[review.refModel] ?? "/products"}/${review.refId}`;
 
     notify(review.author, {
       type: "review",

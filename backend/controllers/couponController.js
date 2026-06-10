@@ -62,6 +62,16 @@ export const updateCoupon = async (req, res) => {
     if (maxUses !== undefined)         updates.maxUses = maxUses ? Number(maxUses) : null;
     if (expiresAt !== undefined)       updates.expiresAt = expiresAt || null;
     if (active !== undefined)          updates.active = Boolean(active);
+
+    // Mongoose's custom validator uses `this.discountType` which is undefined during
+    // partial updates via findByIdAndUpdate. Enforce the percent cap at the controller level.
+    if (updates.discountValue !== undefined) {
+      const effectiveType = updates.discountType ?? (await Coupon.findById(req.params.id).select("discountType").lean())?.discountType;
+      if (effectiveType === "percent" && updates.discountValue > 100) {
+        return res.status(400).json({ message: "Percent discount cannot exceed 100%" });
+      }
+    }
+
     const coupon = await Coupon.findByIdAndUpdate(req.params.id, updates, { new: true, runValidators: true });
     if (!coupon) return res.status(404).json({ message: "Coupon not found" });
     res.json({ success: true, coupon });

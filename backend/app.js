@@ -355,7 +355,7 @@ app.get("/api/test", (req, res) => {
 // OG meta tags for product pages — detected social crawlers get OG-enriched HTML;
 // real browsers get the SPA index.html normally via the catch-all below.
 const BOT_UA = /facebookexternalhit|twitterbot|whatsapp|linkedinbot|telegrambot|slackbot|discordbot|applebot|googlebot|bingbot/i;
-// Escape HTML entities to prevent XSS in OG tag injection
+// Escape HTML entities — safe for HTML attribute values and element text
 function escHtml(str) {
   return String(str)
     .replace(/&/g, "&amp;")
@@ -363,6 +363,12 @@ function escHtml(str) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#x27;");
+}
+// Escape for JavaScript string literals inside <script> blocks.
+// JSON.stringify adds surrounding quotes and escapes backslashes, quotes, and
+// control characters; the regex then prevents </script> from closing the block.
+function escJs(str) {
+  return JSON.stringify(String(str)).replace(/<\/script/gi, "<\\/script");
 }
 app.get("/products/:id", async (req, res, next) => {
   try {
@@ -389,7 +395,7 @@ ${image ? `<meta property="og:image" content="${escHtml(image)}"/>` : ""}
 <meta name="twitter:title" content="${title}"/>
 <meta name="twitter:description" content="${desc}"/>
 ${image ? `<meta name="twitter:image" content="${escHtml(image)}"/>` : ""}
-<script>window.location.replace("${escHtml(url)}");</script>
+<script>window.location.replace(${escJs(url)});</script>
 </head><body></body></html>`);
   } catch { next(); }
 });

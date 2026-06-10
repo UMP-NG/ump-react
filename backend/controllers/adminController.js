@@ -155,6 +155,7 @@ export const deleteSeller = async (req, res) => {
       Service.updateMany({ provider: seller.user }, { $set: { deletedAt: now } }),
       // Remove seller role from the linked user account
       seller.user && User.findByIdAndUpdate(seller.user, { $pull: { roles: { $in: ["seller", "service_provider"] } } }),
+      seller.user && PushSub.updateMany({ user: seller.user }, { $pull: { roles: { $in: ["seller", "service_provider"] } } }),
     ]);
 
     await seller.deleteOne();

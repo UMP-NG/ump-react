@@ -15,10 +15,12 @@ const PRICING_SUFFIX = {
   fixed:         "",
 };
 
+const CURRENCY_SYM = { USD: "$", NGN: "₦", EUR: "€", GBP: "£" };
+
 function formatPrice(service) {
   if (service.pricingType === "negotiable") return { label: "Negotiable", sub: "", accent: false };
   if (service.pricingType === "free")       return { label: "Free",       sub: "", accent: false };
-  const sym = service.currency === "USD" ? "$" : "₦";
+  const sym = CURRENCY_SYM[service.currency] ?? "₦";
   const amt = `${sym}${Number(service.rate || 0).toLocaleString()}`;
   const sub = PRICING_SUFFIX[service.pricingType] || "";
   return { label: amt, sub, accent: true };
