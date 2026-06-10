@@ -1,6 +1,7 @@
 import User from "../models/User.js";
 import Product from "../models/Product.js";
 import Service from "../models/Service.js";
+import Seller from "../models/Seller.js";
 import cloudinary from "../config/cloudinary.js";
 import logger from "../utils/logger.js";
 
@@ -150,8 +151,16 @@ export const deleteUser = async (req, res) => {
     const user = await User.findById(req.user._id);
     if (!user) return res.status(404).json({ message: "User not found" });
 
-    await user.remove();
-    res.json({ message: "User deleted successfully" });
+    const now = new Date();
+    // Soft-delete all products and services if the user is a seller/provider
+    await Promise.allSettled([
+      Product.updateMany({ seller: user._id }, { $set: { deletedAt: now } }),
+      Service.updateMany({ provider: user._id }, { $set: { deletedAt: now } }),
+      Seller.deleteOne({ user: user._id }),
+    ]);
+
+    await user.deleteOne();
+    res.json({ message: "Account and associated store data deleted successfully" });
   } catch (error) {
     logger.error("Error deleting user:", error);
     res.status(500).json({ message: "Server error" });

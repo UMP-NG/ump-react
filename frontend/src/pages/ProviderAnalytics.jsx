@@ -692,6 +692,8 @@ export default function ProviderAnalytics() {
   async function requestPayout() {
     const amount = Number(payoutAmount);
     if (!amount || amount < 100) { showToast("Minimum payout is ₦100", "error"); return; }
+    const available = user?.earningsBalance || 0;
+    if (amount > available) { showToast(`Insufficient balance. Available: ${naira(available)}`, "error"); return; }
     setPayoutSaving(true);
     try {
       await apiFetch("/api/payouts/request", { method: "POST", body: { amount, accountDetails: bankForm } });
@@ -973,8 +975,8 @@ export default function ProviderAnalytics() {
 
           {/* Payout Summary card */}
           <div style={{ background: "linear-gradient(135deg, var(--navy-800), #1e1b4b)", color: "#fff", borderRadius: "var(--r-xl)", padding: 24, marginBottom: 20 }}>
-            <div style={{ fontSize: "1.25rem", opacity: 0.6, marginBottom: 4 }}>Available for Payout</div>
-            <div style={{ fontSize: "3.6rem", fontWeight: 900, letterSpacing: "-0.04em" }}>{naira(kpis.availableBalance || 0)}</div>
+            <div style={{ fontSize: "1.25rem", opacity: 0.6, marginBottom: 4 }}>Earnings Balance</div>
+            <div style={{ fontSize: "3.6rem", fontWeight: 900, letterSpacing: "-0.04em" }}>{naira(user?.earningsBalance || 0)}</div>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 14, paddingTop: 14, borderTop: "1px solid rgba(255,255,255,.15)" }}>
               <div>
                 <div style={{ fontSize: "1.1rem", opacity: 0.5 }}>Last Payout</div>

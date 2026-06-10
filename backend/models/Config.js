@@ -15,7 +15,7 @@ const configSchema = new mongoose.Schema(
       platformFeeEnabled: { type: Boolean, default: false },
       platformFee:        { type: Number,  default: 5.0, min: 0, max: 100 },   // % of seller subtotal
 
-      minPayout:      { type: Number, default: 2000, min: 0 },
+      minPayout:      { type: Number, default: 100, min: 0 },
       payoutCadence:  { type: String, default: "Daily" },
     },
     flags: {
@@ -50,6 +50,14 @@ const configSchema = new mongoose.Schema(
         annual:  { price: { type: Number, default: 25000 }, label: { type: String, default: "Annual" }, badge: { type: String, default: "Save 31%" } },
       },
     },
+    events: [
+      {
+        title:      { type: String, trim: true },
+        emoji:      { type: String, default: "🎉" },
+        productIds: [{ type: mongoose.Schema.Types.ObjectId, ref: "Product" }],
+        active:     { type: Boolean, default: true },
+      },
+    ],
     updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
   },
   { timestamps: true }

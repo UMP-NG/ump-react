@@ -8,6 +8,7 @@ import {
   incrementSellerView,
   getSellerProfile,
   requestSellerVerification,
+  closeStore,
 } from "../controllers/sellerController.js";
 import { protect, requireRole } from "../middleware/authMiddleware.js";
 import { handleSellerUpload } from "../middleware/uploadHandler.js";
@@ -17,6 +18,7 @@ const router = express.Router();
 router.post("/profile", protect, handleSellerUpload, becomeSeller);
 router.post("/request-verification", protect, requestSellerVerification);
 router.get("/me", protect, requireRole("seller", "admin"), getSellerProfile);
+router.delete("/me", protect, requireRole("seller"), closeStore);
 
 // ✅ List all sellers (public)
 router.get("/", getAllSellers);

@@ -53,6 +53,8 @@ export default function ServiceDetail() {
   const [toast, setToast] = useState(null);
   const [availableCredit, setAvailableCredit] = useState(0);
   const [applyCredit, setApplyCredit] = useState(false);
+  const [offerDescription, setOfferDescription] = useState("");
+  const [offeredPrice, setOfferedPrice] = useState("");
   const [showReport, setShowReport] = useState(false);
   const [negotiateOpen, setNegotiateOpen] = useState(false);
   const [activeImg, setActiveImg] = useState(0);   // must be here — before any early returns
@@ -109,18 +111,31 @@ export default function ServiceDetail() {
     if (!selectedSlot) { showToast("Please select a time slot", "error"); return; }
     if (!bookingDate) { showToast("Please pick a date", "error"); return; }
     if (bookingDate < today) { showToast("Please select today or a future date", "error"); return; }
+    const isNegotiable = service?.pricingType === "negotiable" && !negotiatedRate;
+    if (isNegotiable) {
+      if (!offerDescription.trim()) { showToast("Please describe what you need", "error"); return; }
+      const offerNum = Number(offeredPrice);
+      if (!offeredPrice || isNaN(offerNum) || offerNum <= 0) { showToast("Please enter a valid price offer", "error"); return; }
+    }
     setBookingLoading(true);
     try {
       const effectiveRate = negotiatedRate ?? service?.rate ?? 0;
       const creditToUse = applyCredit ? Math.min(availableCredit, effectiveRate) : 0;
       await apiFetch("/api/bookings", {
         method: "POST",
-        body: { itemId: id, itemType: "service", date: bookingDate, timeSlot: selectedSlot, notes: bookingNotes, ...(negotiationId && { negotiationId }), ...(creditToUse > 0 && { creditToUse }) },
+        body: {
+          itemId: id, itemType: "service", date: bookingDate, timeSlot: selectedSlot, notes: bookingNotes,
+          ...(negotiationId && { negotiationId }),
+          ...(creditToUse > 0 && { creditToUse }),
+          ...(isNegotiable && { offerDescription: offerDescription.trim(), offeredPrice: Number(offeredPrice) }),
+        },
       });
       setBookingOpen(false);
       setSelectedSlot(null);
       setBookingDate("");
       setBookingNotes("");
+      setOfferDescription("");
+      setOfferedPrice("");
       showToast("Booking confirmed! The provider will reach out soon.");
     } catch (err) {
       if (err?.status === 401) { showToast("Please sign in to book", "error"); setTimeout(() => navigate("/login"), 1500); }
@@ -385,7 +400,7 @@ export default function ServiceDetail() {
                   </div>
                 )}
               </div>
-              <button className="icon-btn" onClick={() => { setBookingOpen(false); setSelectedSlot(null); setBookingDate(""); }}>
+              <button className="icon-btn" onClick={() => { setBookingOpen(false); setSelectedSlot(null); setBookingDate(""); setOfferDescription(""); setOfferedPrice(""); }}>
                 <i className="fas fa-xmark" />
               </button>
             </div>
@@ -426,6 +441,30 @@ export default function ServiceDetail() {
             </div>
 
             <form onSubmit={handleBook}>
+              {service?.pricingType === "negotiable" && !negotiatedRate && (
+                <>
+                  <div className="label" style={{ marginBottom: 8 }}>What do you need? <span style={{ color: "var(--accent)" }}>*</span></div>
+                  <textarea
+                    className="textarea"
+                    placeholder="Describe exactly what you want the provider to do…"
+                    value={offerDescription}
+                    onChange={(e) => setOfferDescription(e.target.value)}
+                    style={{ marginBottom: 12 }}
+                    required
+                  />
+                  <div className="label" style={{ marginBottom: 8 }}>Your price offer (₦) <span style={{ color: "var(--accent)" }}>*</span></div>
+                  <input
+                    type="number"
+                    className="input"
+                    placeholder="e.g. 5000"
+                    min={1}
+                    value={offeredPrice}
+                    onChange={(e) => setOfferedPrice(e.target.value)}
+                    style={{ marginBottom: 16 }}
+                    required
+                  />
+                </>
+              )}
               <div className="label" style={{ marginBottom: 8 }}>Notes (optional)</div>
               <textarea
                 className="textarea"

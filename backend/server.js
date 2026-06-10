@@ -7,6 +7,7 @@ import cookie from "cookie";
 import app from "./app.js";
 import Message from "./models/Message.js";
 import { setIO } from "./utils/socket.js";
+import { startAutoCancelJob } from "./utils/autoCancel.js";
 
 dotenv.config();
 
@@ -178,6 +179,8 @@ mongoose
   })
   .then(() => {
     console.log("✅ MongoDB connected");
+
+    startAutoCancelJob();
 
     server.listen(PORT, () => {
       console.log(`✅ Server running on port ${PORT}`);

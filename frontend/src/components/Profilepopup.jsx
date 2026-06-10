@@ -17,6 +17,7 @@ export default function ProfilePopup({ onClose }) {
   const MENU = [
     ...(isAdmin ? [{ icon: "user-shield", label: "Admin panel", path: "/admin", admin: true }] : []),
     { icon: "box-archive",        label: "My orders",           path: "/orders" },
+    { icon: "calendar-check",     label: "My bookings",         path: "/bookings" },
     { icon: "heart",              label: "Wishlist",            path: "/wishlist" },
     ...(!isLimited && isSeller   ? [{ icon: "store",              label: "Seller dashboard",         path: "/seller-dashboard" }] : []),
     ...(!isLimited && isProvider ? [{ icon: "hand-holding-heart", label: "Provider analytics",       path: "/provider-analytics" }] : []),

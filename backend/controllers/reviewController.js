@@ -154,6 +154,46 @@ export const deleteReview = async (req, res) => {
   }
 };
 
+// ✅ Seller reply to a review
+export const replyToReview = async (req, res) => {
+  try {
+    const { reviewId } = req.params;
+    const { reply } = req.body;
+    if (!reply || !reply.trim()) return res.status(400).json({ message: "Reply text is required" });
+
+    const review = await Review.findById(reviewId);
+    if (!review) return res.status(404).json({ message: "Review not found" });
+
+    // Verify the requester owns the reviewed item
+    const MODEL_MAP = { Product, Listing, Service };
+    const Model = MODEL_MAP[review.refModel];
+    if (Model) {
+      const item = await Model.findById(review.refId).select("seller provider owner").lean();
+      const ownerId = (item?.seller || item?.provider || item?.owner)?.toString();
+      if (ownerId !== req.user._id.toString() && !req.user.roles?.includes("admin")) {
+        return res.status(403).json({ message: "Only the seller can reply to this review" });
+      }
+    }
+
+    review.sellerReply = reply.trim();
+    review.sellerRepliedAt = new Date();
+    await review.save();
+
+    // Notify reviewer that seller replied
+    notify(review.author, {
+      type: "review",
+      title: "Seller replied to your review",
+      message: reply.slice(0, 100),
+      link: `/products/${review.refId}`,
+    }).catch(() => {});
+
+    res.json({ success: true, review });
+  } catch (err) {
+    logger.error("replyToReview:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
 // ✅ Get all reviews (admin/public)
 export const getAllReviews = async (req, res) => {
   try {

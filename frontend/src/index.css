@@ -284,6 +284,7 @@ body {
   transition: background .15s, color .15s;
 }
 .chip.active { background: var(--navy-800); color: #fff; }
+[data-theme="dark"] .chip.active { background: var(--accent); }
 .chip.accent { background: var(--accent); color: #fff; }
 .chip.outline { background: transparent; border-color: var(--line-strong); }
 

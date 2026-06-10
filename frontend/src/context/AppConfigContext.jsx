@@ -23,6 +23,7 @@ const AppConfigContext = createContext({
   flags: {},
   fees: DEFAULT_FEES,
   subscriptions: DEFAULT_SUBS,
+  events: [],
   refreshConfig: () => {},
 });
 
@@ -32,6 +33,7 @@ export function AppConfigProvider({ children }) {
   const [flags, setFlags]               = useState({});
   const [fees, setFees]                 = useState(DEFAULT_FEES);
   const [subscriptions, setSubscriptions] = useState(DEFAULT_SUBS);
+  const [events, setEvents]             = useState([]);
 
   const refreshConfig = useCallback(() => {
     bustCache("/api/admins/config/public");
@@ -41,6 +43,7 @@ export function AppConfigProvider({ children }) {
         if (d?.slides) setSlides(d.slides);
         if (d?.flags) setFlags(d.flags);
         if (d?.fees) setFees(f => ({ ...DEFAULT_FEES, ...f, ...d.fees }));
+        if (d?.events) setEvents(d.events);
         if (d?.subscriptions) setSubscriptions(s => {
           const deepMerge = (def, srv) => ({
             monthly: { ...def.monthly, ...(srv?.monthly || {}) },
@@ -60,7 +63,7 @@ export function AppConfigProvider({ children }) {
   }, [refreshConfig]);
 
   return (
-    <AppConfigContext.Provider value={{ logoUrl, slides, flags, fees, subscriptions, refreshConfig }}>
+    <AppConfigContext.Provider value={{ logoUrl, slides, flags, fees, subscriptions, events, refreshConfig }}>
       {children}
     </AppConfigContext.Provider>
   );

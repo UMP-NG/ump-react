@@ -96,7 +96,9 @@ export default function ProductCard({ product, variant = "always", onAddToCart }
       <div className="product-thumb">
         {outOfStock
           ? <span className="product-tag" style={{ background: "#6b7280" }}>Out of Stock</span>
-          : product.tag && <span className="product-tag">{product.tag}</span>}
+          : product.salePrice != null && product.salePrice < product.price
+            ? <span className="product-tag" style={{ background: "#ef4444" }}>Sale</span>
+            : product.tag && <span className="product-tag">{product.tag}</span>}
         <button
           className="product-fav"
           onClick={handleWishlist}
@@ -116,7 +118,14 @@ export default function ProductCard({ product, variant = "always", onAddToCart }
       <div className="product-meta">
         <div className="product-name">{product.name}</div>
         <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 4 }}>
-          <div className="product-price">{naira(product.price)}</div>
+          {product.salePrice != null && product.salePrice < product.price ? (
+            <div style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
+              <div className="product-price" style={{ color: "#ef4444" }}>{naira(product.salePrice)}</div>
+              <div style={{ fontSize: "1rem", color: "var(--ink-4)", textDecoration: "line-through" }}>{naira(product.price)}</div>
+            </div>
+          ) : (
+            <div className="product-price">{naira(product.price)}</div>
+          )}
           {product.rating && (
             <div className="rating" style={{ fontSize: "1.1rem" }}>
               <i className="fas fa-star star" /> {product.rating}

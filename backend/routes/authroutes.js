@@ -21,6 +21,9 @@ import {
   disputeVerifyIdentity,
   changePassword,
   setPassword,
+  getAddresses,
+  saveAddress,
+  deleteAddress,
 } from "../controllers/authController.js";
 import { protect } from "../middleware/authMiddleware.js";
 import {
@@ -60,6 +63,12 @@ router.get ("/referral/stats",            protect, getReferralStats);
 
 // ── Referral public lookup ────────────────────────────────────────────────────
 router.get("/referral/:code",  referralLimiter,      lookupReferralCode);
+
+// ── Saved addresses ───────────────────────────────────────────────────────────
+router.get   ("/addresses",              protect, getAddresses);
+router.post  ("/addresses",              protect, saveAddress);
+router.put   ("/addresses/:id",          protect, saveAddress);
+router.delete("/addresses/:id",          protect, deleteAddress);
 
 // ── Identity verification ─────────────────────────────────────────────────────
 router.get ("/verify-identity/status",    protect, identityLimiter, getVerifyIdentityStatus);

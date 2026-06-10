@@ -2,6 +2,7 @@ import Order from "../models/Order.js";
 import Review from "../models/Review.js";
 import Report from "../models/Report.js";
 import logger from "../utils/logger.js";
+import { notify } from "../utils/notify.js";
 
 export const getAdminDisputes = async (req, res) => {
   try {
@@ -39,6 +40,11 @@ export const resolveDispute = async (req, res) => {
     order.status = outcomeStatusMap[outcome] || "completed";
     order.disputeOutcome = outcome; order.disputeNote = note; order.disputeResolvedAt = new Date(); order.disputeResolvedBy = req.user._id;
     await order.save({ validateModifiedOnly: true });
+
+    const resolvedMsg = `Dispute resolved: ${outcome}. ${note || ""}`.trim();
+    if (order.buyer) notify(order.buyer, { type: "order", title: "Dispute resolved", message: resolvedMsg, link: `/orders/${order._id}` }).catch(() => {});
+    if (order.seller) notify(order.seller, { type: "order", title: "Dispute resolved", message: resolvedMsg, link: `/orders/${order._id}` }).catch(() => {});
+
     res.json({ success: true });
   } catch (err) {
     logger.error("resolveDispute:", err);
@@ -121,6 +127,16 @@ export const resolveReport = async (req, res) => {
     report.status     = action === "remove" ? "removed" : action === "review" ? "reviewed" : "dismissed";
     report.resolution = resolution || ""; report.resolvedBy = req.user._id; report.resolvedAt = new Date();
     await report.save();
+
+    if (report.reporter) {
+      notify(report.reporter, {
+        type: "account",
+        title: "Your report was reviewed",
+        message: `Your report has been ${report.status}.${resolution ? " " + resolution : ""}`,
+        link: "/",
+      }).catch(() => {});
+    }
+
     res.json({ success: true });
   } catch (err) {
     logger.error("resolveReport:", err);

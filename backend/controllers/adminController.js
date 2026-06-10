@@ -148,8 +148,17 @@ export const deleteSeller = async (req, res) => {
     const seller = await Seller.findById(req.params.sellerId);
     if (!seller) return res.status(404).json({ message: "Seller not found" });
 
+    const now = new Date();
+    await Promise.allSettled([
+      // Soft-delete all products and services belonging to this seller
+      Product.updateMany({ seller: seller.user }, { $set: { deletedAt: now } }),
+      Service.updateMany({ provider: seller.user }, { $set: { deletedAt: now } }),
+      // Remove seller role from the linked user account
+      seller.user && User.findByIdAndUpdate(seller.user, { $pull: { roles: "seller" } }),
+    ]);
+
     await seller.deleteOne();
-    res.json({ message: "Seller deleted successfully" });
+    res.json({ message: "Store deleted — products, services, and seller role removed." });
   } catch (error) {
     res.status(500).json({ message: "Server error" });
   }

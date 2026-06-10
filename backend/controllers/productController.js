@@ -3,6 +3,7 @@ import Review from "../models/Review.js";
 import Seller from "../models/Seller.js";
 import cloudinary from "../config/cloudinary.js";
 import logger from "../utils/logger.js";
+import { notify } from "../utils/notify.js";
 
 const escapeRegex = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -415,6 +416,17 @@ export const updateProduct = async (req, res) => {
       product.specs = req.body.specs;
     }
 
+    // --- Flash sale fields
+    const oldPrice = product.price;
+    const oldSalePrice = product.salePrice;
+    if (req.body.salePrice !== undefined) {
+      const sp = req.body.salePrice === null || req.body.salePrice === "" ? null : Number(req.body.salePrice);
+      product.salePrice = (!isNaN(sp) && sp != null && sp >= 0) ? sp : null;
+    }
+    if (req.body.saleEndsAt !== undefined) {
+      product.saleEndsAt = req.body.saleEndsAt || null;
+    }
+
     // --- Colors normalization
     if (req.body.colors) {
       const colors = Array.isArray(req.body.colors)
@@ -474,6 +486,24 @@ export const updateProduct = async (req, res) => {
 
     // --- Save
     const updatedProduct = await product.save();
+
+    // Notify price-drop watchers if effective price dropped
+    const newEffective = updatedProduct.salePrice != null && updatedProduct.salePrice < updatedProduct.price
+      ? updatedProduct.salePrice : updatedProduct.price;
+    const oldEffective = oldSalePrice != null && oldSalePrice < oldPrice ? oldSalePrice : oldPrice;
+    if (newEffective < oldEffective && updatedProduct.priceWatchers?.length > 0) {
+      const savings = Math.round(((oldEffective - newEffective) / oldEffective) * 100);
+      for (const watcher of updatedProduct.priceWatchers) {
+        if (watcher.priceAtSubscription > newEffective) {
+          notify(watcher.user.toString(), {
+            type: "account",
+            title: "Price drop alert!",
+            message: `${updatedProduct.name} dropped by ${savings}% to ₦${newEffective.toLocaleString("en-NG")}`,
+            link: `/products/${updatedProduct._id}`,
+          }).catch(() => {});
+        }
+      }
+    }
 
     res.json({
       success: true,
@@ -692,6 +722,79 @@ export const trackProductView = async (req, res) => {
   } catch (err) {
     logger.error("❌ Error tracking view:", err);
     res.status(500).json({ message: "Server error tracking view" });
+  }
+};
+
+// POST /api/products/:id/notify-restock  — toggle restock alert subscription
+export const toggleRestockAlert = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const product = await Product.findById(req.params.id).select("restockSubscribers stock name");
+    if (!product) return res.status(404).json({ message: "Product not found" });
+    if ((product.stock || 0) > 0) return res.status(400).json({ message: "Product is currently in stock" });
+
+    const idx = product.restockSubscribers.findIndex((id) => id.toString() === userId.toString());
+    if (idx >= 0) {
+      product.restockSubscribers.splice(idx, 1);
+      await product.save();
+      return res.json({ subscribed: false });
+    }
+    product.restockSubscribers.push(userId);
+    await product.save();
+    res.json({ subscribed: true });
+  } catch (err) {
+    logger.error("toggleRestockAlert:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+// POST /api/products/:id/watch-price  — toggle price-drop alert
+export const togglePriceWatch = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const product = await Product.findById(req.params.id).select("priceWatchers price name");
+    if (!product) return res.status(404).json({ message: "Product not found" });
+
+    const idx = product.priceWatchers.findIndex((w) => w.user.toString() === userId.toString());
+    if (idx >= 0) {
+      product.priceWatchers.splice(idx, 1);
+      await product.save();
+      return res.json({ watching: false });
+    }
+    product.priceWatchers.push({ user: userId, priceAtSubscription: product.salePrice ?? product.price });
+    await product.save();
+    res.json({ watching: true, currentPrice: product.salePrice ?? product.price });
+  } catch (err) {
+    logger.error("togglePriceWatch:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+// GET /api/products/following  — products from sellers the logged-in user follows
+export const getFollowingFeed = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    // User.following holds Seller ObjectIds
+    const User = (await import("../models/User.js")).default;
+    const user = await User.findById(userId).select("following").lean();
+    if (!user?.following?.length) return res.json({ products: [] });
+
+    // Resolve seller._id → seller.user so we can filter products by seller (user)
+    const sellers = await Seller.find({ _id: { $in: user.following } }).select("user").lean();
+    const sellerUserIds = sellers.map((s) => s.user);
+    if (!sellerUserIds.length) return res.json({ products: [] });
+
+    const limit = Math.min(parseInt(req.query.limit) || 20, 50);
+    const products = await Product.find({ seller: { $in: sellerUserIds }, isAvailable: true })
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .populate("seller", "name avatar")
+      .lean();
+
+    res.json({ products });
+  } catch (err) {
+    logger.error("getFollowingFeed:", err);
+    res.status(500).json({ message: "Server error" });
   }
 };
 

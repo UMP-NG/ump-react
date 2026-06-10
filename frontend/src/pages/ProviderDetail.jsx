@@ -179,52 +179,43 @@ export default function ProviderDetail() {
             No services listed yet
           </div>
         ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {services.map((sv) => {
               const imgUrl = sv.images?.[0]?.url || null;
+              const fp = formatPrice(sv);
               return (
                 <div
                   key={sv._id}
                   className="card"
-                  style={{ padding: 14, display: "flex", gap: 12, cursor: "pointer" }}
+                  style={{ padding: "10px 12px", display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}
                   onClick={() => navigate(`/services/${sv._id}`)}
                 >
-                  <div style={{ width: 80, height: 80, borderRadius: 12, overflow: "hidden", flexShrink: 0, background: "var(--surface)" }}>
+                  <div style={{ width: 54, height: 54, borderRadius: 10, overflow: "hidden", flexShrink: 0, background: "var(--surface)" }}>
                     {imgUrl
                       ? <img src={imgUrl} alt={sv.title} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                       : <Ph kind={sv.major?.toLowerCase() || "default"} label={sv.major || ""} />}
                   </div>
 
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
-                      <div style={{ fontSize: "1.4rem", fontWeight: 700, lineHeight: 1.3 }}>{sv.title || sv.name}</div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                      <span style={{ fontSize: "1.35rem", fontWeight: 700, lineHeight: 1.2 }}>{sv.title || sv.name}</span>
                       {sv.available === false && (
-                        <span style={{ fontSize: "1rem", padding: "2px 7px", borderRadius: 10, background: "#fee2e2", color: "#dc2626", fontWeight: 600, flexShrink: 0 }}>Unavailable</span>
+                        <span style={{ fontSize: "1rem", padding: "1px 6px", borderRadius: 8, background: "#fee2e2", color: "#dc2626", fontWeight: 600 }}>Off</span>
                       )}
                     </div>
-                    {sv.desc && (
-                      <div style={{ fontSize: "1.2rem", color: "var(--ink-3)", marginTop: 3, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>
-                        {sv.desc}
-                      </div>
-                    )}
-                    {(sv.rating || 0) > 0 && (
-                      <div className="rating" style={{ marginTop: 4 }}>
-                        <i className="fas fa-star star" /> {sv.rating}
-                        <span className="count">({sv.reviewsCount || 0})</span>
-                      </div>
-                    )}
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8 }}>
-                      <span style={{ fontSize: "1.5rem", fontWeight: 800, color: "var(--accent)" }}>
-                        {formatPrice(sv)}
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 3 }}>
+                      <span style={{ fontSize: "1.3rem", fontWeight: 800, color: fp.accent !== false ? "var(--accent)" : "var(--ink-2)" }}>
+                        {fp.label}<span style={{ fontSize: "1rem", fontWeight: 500, color: "var(--ink-3)" }}>{fp.sub}</span>
                       </span>
-                      <button
-                        className="btn btn-sm btn-dark"
-                        onClick={(e) => { e.stopPropagation(); navigate(`/services/${sv._id}`); }}
-                      >
-                        Book
-                      </button>
+                      {(sv.rating || 0) > 0 && (
+                        <span className="rating" style={{ fontSize: "1.1rem" }}>
+                          <i className="fas fa-star star" /> {sv.rating}
+                        </span>
+                      )}
                     </div>
                   </div>
+
+                  <i className="fas fa-chevron-right" style={{ color: "var(--ink-4)", fontSize: "1rem", flexShrink: 0 }} />
                 </div>
               );
             })}

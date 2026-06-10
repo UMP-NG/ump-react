@@ -5,6 +5,7 @@ import Category from "../models/Category.js";
 import logger from "../utils/logger.js";
 import { startOf, sellerStatus } from "./adminHelpers.js";
 import { mask } from "../utils/fieldEncryption.js";
+import { notify } from "../utils/notify.js";
 
 export const getAdminSellers = async (req, res) => {
   try {
@@ -70,6 +71,7 @@ export const reinstateSeller = async (req, res) => {
     seller.isSuspended = false;
     await seller.save();
     logger.info(`[admin] seller reinstated: ${seller._id} (${seller.storeName}) by admin ${req.user?._id}`);
+    if (seller.user) notify(seller.user, { type: "account", title: "Store reinstated", message: "Your store has been reinstated by an admin.", link: "/seller-dashboard" }).catch(() => {});
     res.json({ success: true });
   } catch (err) {
     logger.error("reinstateSeller:", err);
@@ -86,6 +88,7 @@ export const restrictSeller = async (req, res) => {
     seller.isSubscribed = false;
     await seller.save();
     logger.info(`[admin] seller restricted: ${seller._id} (${seller.storeName}) by admin ${req.user?._id}`);
+    if (seller.user) notify(seller.user, { type: "account", title: "Store suspended", message: "Your store has been suspended by an admin.", link: "/seller-dashboard" }).catch(() => {});
     res.json({ success: true });
   } catch (err) {
     logger.error("restrictSeller:", err);

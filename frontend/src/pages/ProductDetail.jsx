@@ -6,6 +6,7 @@ import Ph from "../components/Ph";
 import { getImageUrl, naira } from "../components/ProductCard";
 import { apiFetch } from "../utils/api";
 import { useCart } from "../context/CartContext";
+import { useUser } from "../context/UserContext";
 import Skel from "../components/Skel";
 import ReportModal from "../components/ReportModal";
 import NegotiationModal from "../components/NegotiationModal";
@@ -14,6 +15,7 @@ const TABS = [
   { key: "description",  label: "Description" },
   { key: "specs",        label: "Specifications" },
   { key: "reviews",      label: "Reviews" },
+  { key: "qa",           label: "Q&A" },
 ];
 
 function Stars({ value, onChange, readonly }) {
@@ -42,6 +44,7 @@ export default function ProductDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { addToCart } = useCart();
+  const { user } = useUser();
   const [product, setProduct]   = useState(null);
   const [tab, setTab]           = useState("description");
   const [showReport, setShowReport] = useState(false);
@@ -63,6 +66,24 @@ export default function ProductDetail() {
   const [isDesktop, setIsDesktop] = useState(() => window.innerWidth >= 768);
   const [negotiateOpen, setNegotiateOpen] = useState(false);
   const toastTimer = useRef(null);
+  // Restock alert & price watch
+  const [restockSubscribed, setRestockSubscribed] = useState(false);
+  const [watchingPrice, setWatchingPrice] = useState(false);
+  const [restockLoading, setRestockLoading] = useState(false);
+  const [watchLoading, setWatchLoading] = useState(false);
+  // Q&A
+  const [questions, setQuestions] = useState([]);
+  const [qaLoading, setQaLoading] = useState(false);
+  const [newQuestion, setNewQuestion] = useState("");
+  const [qaSubmitting, setQaSubmitting] = useState(false);
+  // Seller reply UI
+  const [replyingTo, setReplyingTo] = useState(null);
+  const [replyText, setReplyText] = useState("");
+  const [replyLoading, setReplyLoading] = useState(false);
+  // Q&A answering (seller)
+  const [answeringQ, setAnsweringQ] = useState(null);
+  const [answerText, setAnswerText] = useState("");
+  const [answerLoading, setAnswerLoading] = useState(false);
 
   useEffect(() => {
     const mq = window.matchMedia("(min-width: 768px)");
@@ -102,6 +123,73 @@ export default function ProductDetail() {
         setHasPurchased(err?.status === 401 ? false : "error");
       });
   }, [tab, id]);
+
+  useEffect(() => {
+    if (tab !== "qa" || !id) return;
+    setQaLoading(true);
+    apiFetch(`/api/questions/${id}`)
+      .then((d) => setQuestions(d.questions || []))
+      .catch(() => {})
+      .finally(() => setQaLoading(false));
+  }, [tab, id]);
+
+  async function handleRestockAlert() {
+    if (!user) { showToast("Please sign in to get notified"); return; }
+    setRestockLoading(true);
+    try {
+      const res = await apiFetch(`/api/products/${id}/notify-restock`, { method: "POST" });
+      setRestockSubscribed(res.subscribed);
+      showToast(res.subscribed ? "We'll notify you when back in stock!" : "Notification removed");
+    } catch (err) { showToast(err?.message || "Failed"); }
+    finally { setRestockLoading(false); }
+  }
+
+  async function handleWatchPrice() {
+    if (!user) { showToast("Please sign in to watch prices"); return; }
+    setWatchLoading(true);
+    try {
+      const res = await apiFetch(`/api/products/${id}/watch-price`, { method: "POST" });
+      setWatchingPrice(res.watching);
+      showToast(res.watching ? "Price drop alert set! We'll notify you." : "Price watch removed");
+    } catch (err) { showToast(err?.message || "Failed"); }
+    finally { setWatchLoading(false); }
+  }
+
+  async function submitQuestion() {
+    if (!newQuestion.trim()) return;
+    setQaSubmitting(true);
+    try {
+      const res = await apiFetch(`/api/questions/${id}`, { method: "POST", body: { question: newQuestion } });
+      setQuestions((prev) => [res.question, ...prev]);
+      setNewQuestion("");
+      showToast("Question posted!");
+    } catch (err) { showToast(err?.message || "Failed to post question"); }
+    finally { setQaSubmitting(false); }
+  }
+
+  async function submitReply(reviewId) {
+    if (!replyText.trim()) return;
+    setReplyLoading(true);
+    try {
+      const res = await apiFetch(`/api/reviews/${reviewId}/reply`, { method: "PUT", body: { reply: replyText } });
+      setReviews((prev) => prev.map((r) => r._id === reviewId ? res.review : r));
+      setReplyingTo(null); setReplyText("");
+      showToast("Reply posted!");
+    } catch (err) { showToast(err?.message || "Failed"); }
+    finally { setReplyLoading(false); }
+  }
+
+  async function submitAnswer(questionId) {
+    if (!answerText.trim()) return;
+    setAnswerLoading(true);
+    try {
+      const res = await apiFetch(`/api/questions/${questionId}/answer`, { method: "POST", body: { answer: answerText } });
+      setQuestions((prev) => prev.map((q) => q._id === questionId ? res.question : q));
+      setAnsweringQ(null); setAnswerText("");
+      showToast("Answer posted!");
+    } catch (err) { showToast(err?.message || "Failed to post answer"); }
+    finally { setAnswerLoading(false); }
+  }
 
   function showToast(msg) {
     clearTimeout(toastTimer.current);
@@ -217,6 +305,10 @@ export default function ProductDetail() {
   const images = product.images?.length > 0 ? product.images : [null];
   const imgSrc = getImageUrl(images[thumb]);
   const seller = product.seller;
+  const isSeller = !!user && (
+    user.roles?.includes("admin") ||
+    seller?._id?.toString() === user._id?.toString()
+  );
   const hasSpecs = product.specs && Object.keys(product.specs).length > 0;
   const logoUrl = typeof seller?.logo === "string" ? seller.logo : seller?.logo?.url;
   const variantStock = Array.isArray(product.variants) ? product.variants.reduce((s, v) => s + (v.stock || 0), 0) : 0;
@@ -284,7 +376,17 @@ export default function ProductDetail() {
       </div>
       <h1 style={{ fontSize: isDesktop ? "2.6rem" : "2.2rem", fontWeight: 800, letterSpacing: "-0.02em", margin: "0 0 8px", lineHeight: 1.2 }}>{product.name}</h1>
       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 16 }}>
-        <div style={{ fontSize: "2.8rem", fontWeight: 800, color: "var(--accent)", letterSpacing: "-0.02em" }}>{naira(product.price)}</div>
+        {product.salePrice != null && product.salePrice < product.price ? (
+          <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+            <div style={{ fontSize: "2.8rem", fontWeight: 800, color: "#ef4444", letterSpacing: "-0.02em" }}>{naira(product.salePrice)}</div>
+            <div style={{ fontSize: "1.8rem", fontWeight: 600, color: "var(--ink-4)", textDecoration: "line-through" }}>{naira(product.price)}</div>
+            <span style={{ padding: "2px 10px", borderRadius: "var(--r-pill)", background: "#fef2f2", color: "#ef4444", fontSize: "1.1rem", fontWeight: 700 }}>
+              -{Math.round((1 - product.salePrice / product.price) * 100)}% OFF
+            </span>
+          </div>
+        ) : (
+          <div style={{ fontSize: "2.8rem", fontWeight: 800, color: "var(--accent)", letterSpacing: "-0.02em" }}>{naira(product.price)}</div>
+        )}
         {outOfStock && (
           <span style={{ padding: "4px 12px", borderRadius: "var(--r-pill)", background: "#f3f4f6", color: "#6b7280", fontSize: "1.2rem", fontWeight: 700 }}>Out of Stock</span>
         )}
@@ -294,6 +396,13 @@ export default function ProductDetail() {
           </span>
         )}
       </div>
+      {/* Sale countdown */}
+      {product.saleEndsAt && new Date(product.saleEndsAt) > new Date() && (
+        <div style={{ marginBottom: 12, padding: "8px 14px", borderRadius: "var(--r-md)", background: "#fef2f2", color: "#dc2626", fontSize: "1.25rem", fontWeight: 600 }}>
+          <i className="fas fa-clock" style={{ marginRight: 6 }} />
+          Sale ends {new Date(product.saleEndsAt).toLocaleDateString("en-NG", { weekday: "short", day: "numeric", month: "short" })}
+        </div>
+      )}
 
       {/* Color swatches */}
       {Array.isArray(product.colors) && product.colors.length > 0 && (
@@ -395,6 +504,123 @@ export default function ProductDetail() {
                     </div>
                   </div>
                   {r.text && <p style={{ fontSize: "1.3rem", color: "var(--ink-2)", margin: 0, lineHeight: 1.6 }}>{r.text}</p>}
+
+                  {/* Seller reply — show if present */}
+                  {r.sellerReply && (
+                    <div style={{ marginTop: 8, padding: "8px 12px", background: "var(--surface)", borderRadius: "var(--r-md)", borderLeft: "3px solid var(--accent)" }}>
+                      <div style={{ fontSize: "1.1rem", fontWeight: 700, color: "var(--accent)", marginBottom: 3 }}>Seller reply</div>
+                      <p style={{ margin: 0, fontSize: "1.2rem", color: "var(--ink-2)", lineHeight: 1.5 }}>{r.sellerReply}</p>
+                    </div>
+                  )}
+
+                  {/* Reply form — seller/admin only, only if no reply yet */}
+                  {isSeller && !r.sellerReply && (
+                    replyingTo === r._id ? (
+                      <div style={{ marginTop: 8 }}>
+                        <textarea
+                          value={replyText}
+                          onChange={(e) => setReplyText(e.target.value)}
+                          placeholder="Write your reply…"
+                          rows={2}
+                          style={{ width: "100%", padding: "8px 10px", borderRadius: "var(--r-md)", border: "1px solid var(--line)", fontSize: "1.2rem", fontFamily: "var(--font-sans)", resize: "vertical", boxSizing: "border-box", background: "var(--white)", color: "var(--ink-1)", outline: "none" }}
+                        />
+                        <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+                          <button className="btn btn-primary" style={{ flex: 1, padding: "6px 12px", fontSize: "1.2rem" }} onClick={() => submitReply(r._id)} disabled={replyLoading}>
+                            {replyLoading ? <i className="fas fa-spinner fa-spin" /> : "Post reply"}
+                          </button>
+                          <button className="btn btn-ghost" style={{ padding: "6px 12px", fontSize: "1.2rem" }} onClick={() => { setReplyingTo(null); setReplyText(""); }}>Cancel</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button className="btn btn-ghost" style={{ marginTop: 6, fontSize: "1.1rem", padding: "4px 10px" }} onClick={() => { setReplyingTo(r._id); setReplyText(""); }}>
+                        <i className="fas fa-reply" style={{ marginRight: 4 }} /> Reply as seller
+                      </button>
+                    )
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        )}
+
+        {tab === "qa" && (
+          <div>
+            {/* Ask a question */}
+            {user ? (
+              <div style={{ marginBottom: 20, padding: 14, background: "var(--surface)", borderRadius: "var(--r-md)" }}>
+                <div style={{ fontSize: "1.3rem", fontWeight: 700, marginBottom: 10 }}>Ask the seller</div>
+                <textarea
+                  value={newQuestion}
+                  onChange={(e) => setNewQuestion(e.target.value)}
+                  placeholder="What would you like to know about this product?"
+                  rows={2}
+                  style={{ width: "100%", padding: "10px 12px", borderRadius: "var(--r-md)", border: "1px solid var(--line)", fontSize: "1.3rem", fontFamily: "var(--font-sans)", resize: "vertical", boxSizing: "border-box", background: "var(--white)", color: "var(--ink-1)", outline: "none" }}
+                />
+                <button className="btn btn-primary" style={{ marginTop: 8, width: "100%" }} onClick={submitQuestion} disabled={qaSubmitting || !newQuestion.trim()}>
+                  {qaSubmitting ? <i className="fas fa-spinner fa-spin" /> : "Post question"}
+                </button>
+              </div>
+            ) : (
+              <div style={{ marginBottom: 20, padding: 14, background: "var(--surface)", borderRadius: "var(--r-md)", display: "flex", alignItems: "center", gap: 10 }}>
+                <i className="fas fa-lock" style={{ color: "var(--ink-4)", fontSize: "1.4rem", flexShrink: 0 }} />
+                <p style={{ margin: 0, fontSize: "1.3rem", color: "var(--ink-2)", lineHeight: 1.5 }}>
+                  <button onClick={() => navigate("/login")} style={{ background: "none", border: "none", color: "var(--accent)", cursor: "pointer", fontFamily: "inherit", fontSize: "inherit", fontWeight: 700, padding: 0 }}>Sign in</button> to ask the seller a question.
+                </p>
+              </div>
+            )}
+
+            {/* Questions list */}
+            {qaLoading ? (
+              <div style={{ textAlign: "center", padding: "20px 0" }}>
+                <i className="fas fa-spinner fa-spin" style={{ color: "var(--ink-4)", fontSize: "1.6rem" }} />
+              </div>
+            ) : questions.length === 0 ? (
+              <p style={{ fontSize: "1.4rem", color: "var(--ink-3)", textAlign: "center", padding: "16px 0" }}>No questions yet. Be the first to ask!</p>
+            ) : (
+              questions.map((q) => (
+                <div key={q._id} style={{ padding: "12px 0", borderBottom: "1px solid var(--line)" }}>
+                  <div style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 6 }}>
+                    <i className="fas fa-circle-question" style={{ color: "var(--accent)", fontSize: "1.2rem", marginTop: 3, flexShrink: 0 }} />
+                    <div style={{ flex: 1 }}>
+                      <p style={{ margin: 0, fontSize: "1.3rem", fontWeight: 600, color: "var(--ink-1)", lineHeight: 1.5 }}>{q.question}</p>
+                      <div style={{ fontSize: "1.1rem", color: "var(--ink-4)", marginTop: 2 }}>
+                        {q.asker?.name || "Anonymous"} · {new Date(q.createdAt).toLocaleDateString()}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Answers */}
+                  {q.answers?.length > 0 && q.answers.map((a, i) => (
+                    <div key={i} style={{ marginLeft: 20, marginTop: 6, padding: "8px 12px", background: "var(--surface)", borderRadius: "var(--r-md)", borderLeft: "3px solid var(--accent)" }}>
+                      <div style={{ fontSize: "1.1rem", fontWeight: 700, color: "var(--accent)", marginBottom: 3 }}>Seller</div>
+                      <p style={{ margin: 0, fontSize: "1.2rem", color: "var(--ink-2)", lineHeight: 1.5 }}>{a.answer}</p>
+                    </div>
+                  ))}
+
+                  {/* Answer form — seller/admin only */}
+                  {isSeller && (
+                    answeringQ === q._id ? (
+                      <div style={{ marginLeft: 20, marginTop: 8 }}>
+                        <textarea
+                          value={answerText}
+                          onChange={(e) => setAnswerText(e.target.value)}
+                          placeholder="Write your answer…"
+                          rows={2}
+                          style={{ width: "100%", padding: "8px 10px", borderRadius: "var(--r-md)", border: "1px solid var(--line)", fontSize: "1.2rem", fontFamily: "var(--font-sans)", resize: "vertical", boxSizing: "border-box", background: "var(--white)", color: "var(--ink-1)", outline: "none" }}
+                        />
+                        <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+                          <button className="btn btn-primary" style={{ flex: 1, padding: "6px 12px", fontSize: "1.2rem" }} onClick={() => submitAnswer(q._id)} disabled={answerLoading}>
+                            {answerLoading ? <i className="fas fa-spinner fa-spin" /> : "Post answer"}
+                          </button>
+                          <button className="btn btn-ghost" style={{ padding: "6px 12px", fontSize: "1.2rem" }} onClick={() => { setAnsweringQ(null); setAnswerText(""); }}>Cancel</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button className="btn btn-ghost" style={{ marginLeft: 20, marginTop: 6, fontSize: "1.1rem", padding: "4px 10px" }} onClick={() => { setAnsweringQ(q._id); setAnswerText(""); }}>
+                        <i className="fas fa-pen" style={{ marginRight: 4 }} /> Answer
+                      </button>
+                    )
+                  )}
                 </div>
               ))
             )}
@@ -490,6 +716,16 @@ export default function ProductDetail() {
             <i className="fas fa-handshake" /> Negotiate price
           </button>
         )}
+        {/* Restock alert — only when out of stock */}
+        {outOfStock && (
+          <button className="btn btn-ghost" style={{ width: "100%", marginTop: 8, gap: 8 }} onClick={handleRestockAlert} disabled={restockLoading}>
+            {restockLoading ? <i className="fas fa-spinner fa-spin" /> : restockSubscribed ? <><i className="fas fa-bell-slash" /> Remove restock alert</> : <><i className="fas fa-bell" /> Notify me when back in stock</>}
+          </button>
+        )}
+        {/* Price watch — always shown */}
+        <button className="btn btn-ghost" style={{ width: "100%", marginTop: 8, gap: 8, color: watchingPrice ? "var(--accent)" : undefined }} onClick={handleWatchPrice} disabled={watchLoading}>
+          {watchLoading ? <i className="fas fa-spinner fa-spin" /> : watchingPrice ? <><i className="fas fa-eye-slash" /> Stop watching price</> : <><i className="fas fa-tag" /> Watch for price drop</>}
+        </button>
         <div style={{ marginTop: 14, padding: "10px 12px", background: "rgba(245,158,11,.06)", border: "1px solid rgba(245,158,11,.22)", borderRadius: "var(--r-md)", display: "flex", gap: 10, alignItems: "flex-start" }}>
           <i className="fas fa-shield-halved" style={{ color: "#f59e0b", marginTop: 2, flexShrink: 0, fontSize: "1.2rem" }} />
           <p style={{ margin: 0, fontSize: "1.15rem", color: "var(--ink-2)", lineHeight: 1.55 }}>

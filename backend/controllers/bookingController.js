@@ -238,6 +238,12 @@ export const acceptBooking = async (req, res) => {
           receiver: booking.user,
           text: `✅ Your booking for "${item.title || item.name}" on ${booking.date} at ${booking.timeSlot} has been confirmed!`,
         });
+        await notify(booking.user, {
+          type: "order",
+          title: "Booking confirmed!",
+          message: `Your booking for "${item.title || item.name}" on ${booking.date} at ${booking.timeSlot} has been confirmed.`,
+          link: "/bookings",
+        }).catch(() => {});
       }
     } catch (msgErr) {
       logger.warn("⚠️ Could not send acceptance notification:", msgErr);
@@ -288,6 +294,12 @@ export const rejectBooking = async (req, res) => {
           receiver: booking.user,
           text: `❌ Your booking for "${item.title || item.name}" on ${booking.date} at ${booking.timeSlot} has been rejected. Please try another date/provider.`,
         });
+        await notify(booking.user, {
+          type: "order",
+          title: "Booking rejected",
+          message: `Your booking for "${item.title || item.name}" was not accepted. Try another date or provider.`,
+          link: "/services",
+        }).catch(() => {});
       }
     } catch (msgErr) {
       logger.warn("⚠️ Could not send rejection notification:", msgErr);
@@ -300,6 +312,45 @@ export const rejectBooking = async (req, res) => {
     });
   } catch (error) {
     logger.error("❌ Error rejecting booking:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+// ===============================
+// COMPLETE BOOKING (by client or provider)
+// ===============================
+export const completeBooking = async (req, res) => {
+  try {
+    const booking = await Booking.findById(req.params.bookingId);
+    if (!booking) return res.status(404).json({ message: "Booking not found" });
+    if (booking.status !== "confirmed") return res.status(400).json({ message: "Only confirmed bookings can be completed" });
+
+    const isClient   = booking.user.toString()     === req.user._id.toString();
+    const isProvider = booking.provider.toString()  === req.user._id.toString();
+    if (!isClient && !isProvider && !req.user.roles?.includes("admin")) {
+      return res.status(403).json({ message: "Unauthorized" });
+    }
+
+    booking.status = "completed";
+    await booking.save();
+
+    // Credit provider's earnings wallet
+    const earnings = booking.negotiatedRate || 0;
+    if (earnings > 0) {
+      await User.findByIdAndUpdate(booking.provider, { $inc: { earningsBalance: earnings } });
+    }
+
+    // Notify provider
+    notify(booking.provider, {
+      type: "order",
+      title: "Booking completed",
+      message: earnings > 0 ? `₦${earnings.toLocaleString("en-NG")} has been added to your wallet.` : "Your booking has been marked as completed.",
+      link: "/provider-dashboard",
+    }).catch(() => {});
+
+    res.json({ success: true, booking });
+  } catch (err) {
+    logger.error("completeBooking:", err);
     res.status(500).json({ message: "Server error" });
   }
 };

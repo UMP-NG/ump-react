@@ -41,6 +41,20 @@ const userSchema = new mongoose.Schema(
     address: { type: String, trim: true },
     bio: { type: String, trim: true },
 
+    // Saved shipping addresses for faster checkout
+    addresses: [{
+      label:     { type: String, trim: true },   // e.g. "Hostel Room", "Home"
+      name:      { type: String, trim: true },
+      phone:     { type: String, trim: true },
+      address:   { type: String, trim: true },
+      city:      { type: String, trim: true },
+      state:     { type: String, trim: true },
+      isDefault: { type: Boolean, default: false },
+    }],
+
+    // Earnings wallet for service providers (credited on booking completion)
+    earningsBalance: { type: Number, default: 0, min: 0 },
+
     // ===============================
     // SELLER SNAPSHOT (LIGHT ONLY)
     // ===============================

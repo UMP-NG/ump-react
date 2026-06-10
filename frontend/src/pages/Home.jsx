@@ -71,12 +71,13 @@ export default function Home() {
   const navigate = useNavigate();
   const { user } = useUser();
   const showToast = useToast();
-  const { slides: configSlides } = useAppConfig();
+  const { slides: configSlides, events } = useAppConfig();
   const [products, setProducts] = useState([]);
   const [productsLoading, setProductsLoading] = useState(true);
   const [cats, setCats] = useState(FALLBACK_CATS);
   const [topSellers, setTopSellers] = useState([]);
   const [sellersLoading, setSellersLoading] = useState(true);
+  const [followingFeed, setFollowingFeed] = useState([]);
   const [activeCat, setActiveCat] = useState(0);
   const [slide, setSlide] = useState(0);
   const slideTimer = useRef(null);
@@ -117,7 +118,7 @@ export default function Home() {
   }
 
   useEffect(() => {
-    apiFetch("/api/products?limit=8&sort=newest")
+    apiFetch("/api/products?limit=8&sort=random")
       .then((d) => setProducts(d.products || d || []))
       .catch(() => {})
       .finally(() => setProductsLoading(false));
@@ -152,7 +153,14 @@ export default function Home() {
       })
       .catch(() => {})
       .finally(() => setSellersLoading(false));
-  }, []);
+
+    // Following feed — only fetch if user is logged in and following someone
+    if (user?.following?.length) {
+      apiFetch("/api/products/following")
+        .then((d) => setFollowingFeed(d.products || []))
+        .catch(() => {});
+    }
+  }, [user]);
 
   return (
     <div className="page">
@@ -295,6 +303,40 @@ export default function Home() {
             ))
         }
       </div>
+
+      {/* Admin-curated event/holiday sections — hidden when empty */}
+      {(events || []).filter((ev) => ev.products?.length > 0).map((ev) => (
+        <div key={ev._id || ev.title}>
+          <div className="section-title">
+            <h2>{ev.emoji} {ev.title}</h2>
+            <span className="more" onClick={() => navigate("/market")} style={{ cursor: "pointer" }}>See all</span>
+          </div>
+          <div className="h-scroll">
+            {ev.products.map((p) => (
+              <div key={p._id} style={{ width: 160, flexShrink: 0 }}>
+                <ProductCard product={p} variant="always" onAddToCart={() => {}} />
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+
+      {/* Following feed — only shown when user follows sellers with products */}
+      {followingFeed.length > 0 && (
+        <>
+          <div className="section-title">
+            <h2><i className="fas fa-user-check" style={{ color: "var(--accent)", marginRight: 8 }} />From sellers you follow</h2>
+            <span className="more" onClick={() => navigate("/market")} style={{ cursor: "pointer" }}>See all</span>
+          </div>
+          <div className="h-scroll">
+            {followingFeed.map((p) => (
+              <div key={p._id} style={{ width: 160, flexShrink: 0 }}>
+                <ProductCard product={p} variant="always" onAddToCart={() => {}} />
+              </div>
+            ))}
+          </div>
+        </>
+      )}
 
       {/* What we do */}
       <div className="section-title"><h2><i className="fas fa-lightbulb" style={{ color: "var(--accent)", marginRight: 8 }} />What we do</h2></div>

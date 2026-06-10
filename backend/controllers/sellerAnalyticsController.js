@@ -164,13 +164,12 @@ export const getSellerDashboard = async (req, res) => {
           : 100
         : ((thisWeekOrders - lastWeekOrders) / lastWeekOrders) * 100;
 
-    const netRevenue = Math.floor(totalRevenue * 0.95);
     res.json({
       notifications,
       walletBalance: seller.pendingPayout || 0,
       profile: seller,
       kpis: {
-        totalRevenue: netRevenue,
+        totalRevenue,
         inventoryValue,
         ordersThisWeek: thisWeekOrders,
         ordersPctChange,

@@ -4,6 +4,7 @@ import mongoose from "mongoose";
 import { getIO } from "../utils/socket.js";
 import cloudinary from "../config/cloudinary.js";
 import logger from "../utils/logger.js";
+import { notify } from "../utils/notify.js";
 
 // ---------- SEND MESSAGE ----------
 export const sendMessage = async (req, res) => {
@@ -55,6 +56,14 @@ export const sendMessage = async (req, res) => {
     } else if (process.env.NODE_ENV !== "production") {
       logger.warn("⚠️  Socket.io unavailable — real-time delivery skipped for message", message._id);
     }
+
+    // Push notification to receiver
+    notify(receiver.toString(), {
+      type: "message",
+      title: `New message from ${req.user.name || "someone"}`,
+      message: (text || "").slice(0, 100),
+      link: "/messages",
+    }).catch(() => {});
 
     res.status(201).json({ success: true, message });
   } catch (error) {

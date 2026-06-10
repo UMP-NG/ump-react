@@ -74,8 +74,10 @@ export default function InstallPrompt() {
   const bannerBase = {
     position: "fixed",
     bottom: 72,
-    left: 16,
-    right: 16,
+    left: "50%",
+    transform: "translateX(-50%)",
+    width: "calc(100% - 32px)",
+    maxWidth: 420,
     zIndex: 1500,
     background: "#0f172a",
     color: "#fff",

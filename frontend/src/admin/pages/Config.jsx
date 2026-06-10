@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { apiFetch } from '../../utils/api';
 import { useAppConfig } from '../../context/AppConfigContext';
 
@@ -42,6 +42,18 @@ export default function Config() {
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState('');
 
+  // Events / holiday sections
+  const [events, setEventsState] = useState([]);
+  const [newEvent, setNewEvent] = useState({ title: '', emoji: '🎉' });
+  const [eventSaving, setEventSaving] = useState(false);
+  const [productQuery, setProductQuery] = useState({});   // eventId → search string
+  const [productResults, setProductResults] = useState({}); // eventId → [{_id, name, images}]
+  const [productSearching, setProductSearching] = useState({});
+
+  const loadEvents = useCallback(() => {
+    apiFetch('/api/admins/events').then(d => setEventsState(d?.events || [])).catch(() => {});
+  }, []);
+
   useEffect(() => {
     apiFetch('/api/admins/config').then(d => {
       if (d?.fees) setFees(f => ({ ...f, ...d.fees }));
@@ -60,7 +72,8 @@ export default function Config() {
         };
       });
     }).catch(() => {});
-  }, []);
+    loadEvents();
+  }, [loadEvents]);
 
   async function save() {
     const serviceFee       = parseFloat(fees.serviceFee);
@@ -159,6 +172,53 @@ export default function Config() {
     } finally {
       setSlideUploading(prev => { const n = new Set(prev); n.delete(idx); return n; });
     }
+  }
+
+  async function createEvent() {
+    if (!newEvent.title.trim()) return;
+    setEventSaving(true);
+    try {
+      await apiFetch('/api/admins/events', { method: 'POST', body: { title: newEvent.title.trim(), emoji: newEvent.emoji || '🎉', productIds: [], active: true } });
+      setNewEvent({ title: '', emoji: '🎉' });
+      loadEvents();
+      refreshConfig();
+    } catch {} finally { setEventSaving(false); }
+  }
+
+  async function deleteEventById(eventId) {
+    if (!confirm('Delete this event section?')) return;
+    await apiFetch(`/api/admins/events/${eventId}`, { method: 'DELETE' });
+    loadEvents(); refreshConfig();
+  }
+
+  async function toggleEventActive(ev) {
+    await apiFetch(`/api/admins/events/${ev._id}`, { method: 'PUT', body: { title: ev.title, emoji: ev.emoji, productIds: (ev.productIds || []).map(id => id.toString ? id.toString() : id), active: !ev.active } });
+    loadEvents(); refreshConfig();
+  }
+
+  async function removeProductFromEvent(ev, productId) {
+    const ids = (ev.productIds || []).map(id => id.toString ? id.toString() : id).filter(id => id !== productId.toString());
+    await apiFetch(`/api/admins/events/${ev._id}`, { method: 'PUT', body: { title: ev.title, emoji: ev.emoji, productIds: ids, active: ev.active } });
+    loadEvents(); refreshConfig();
+  }
+
+  async function searchProducts(eventId, q) {
+    if (!q.trim()) { setProductResults(prev => ({ ...prev, [eventId]: [] })); return; }
+    setProductSearching(prev => ({ ...prev, [eventId]: true }));
+    try {
+      const d = await apiFetch(`/api/products?q=${encodeURIComponent(q)}&limit=6`);
+      setProductResults(prev => ({ ...prev, [eventId]: d.products || d || [] }));
+    } catch {} finally { setProductSearching(prev => ({ ...prev, [eventId]: false })); }
+  }
+
+  async function addProductToEvent(ev, product) {
+    const currentIds = (ev.productIds || []).map(id => id.toString ? id.toString() : id);
+    if (currentIds.includes(product._id)) return;
+    const ids = [...currentIds, product._id];
+    await apiFetch(`/api/admins/events/${ev._id}`, { method: 'PUT', body: { title: ev.title, emoji: ev.emoji, productIds: ids, active: ev.active } });
+    setProductQuery(prev => ({ ...prev, [ev._id]: '' }));
+    setProductResults(prev => ({ ...prev, [ev._id]: [] }));
+    loadEvents(); refreshConfig();
   }
 
   return (
@@ -454,6 +514,109 @@ export default function Config() {
               </div>
             ))}
           </div>
+        </div>
+      </div>
+
+      {/* ── Events / Holiday sections ────────────────────────────────────── */}
+      <div className="adm-card" style={{ marginTop: 24 }}>
+        <div className="adm-card-head">
+          <h3>Event sections</h3>
+          <span className="muted" style={{ fontSize: '1.2rem' }}>Curated product collections shown on the home page (e.g. Valentine's Gifts, Back to School). Hidden when empty.</span>
+        </div>
+        <div className="adm-card-body">
+          {/* Create new event */}
+          <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
+            <input
+              className="adm-input"
+              placeholder="Event emoji (e.g. 💝)"
+              value={newEvent.emoji}
+              onChange={e => setNewEvent(n => ({ ...n, emoji: e.target.value }))}
+              style={{ width: 80, flexShrink: 0 }}
+            />
+            <input
+              className="adm-input"
+              placeholder="Section title (e.g. Valentine's Gifts)"
+              value={newEvent.title}
+              onChange={e => setNewEvent(n => ({ ...n, title: e.target.value }))}
+              style={{ flex: 1, minWidth: 180 }}
+            />
+            <button className="abtn primary" onClick={createEvent} disabled={eventSaving || !newEvent.title.trim()}>
+              {eventSaving ? <i className="fa-solid fa-spinner fa-spin" /> : '+ Add section'}
+            </button>
+          </div>
+
+          {events.length === 0 && (
+            <div className="muted" style={{ fontSize: '1.2rem' }}>No event sections yet. Add one above.</div>
+          )}
+
+          {events.map(ev => (
+            <div key={ev._id} style={{ border: '1px solid var(--adm-line)', borderRadius: 10, padding: 16, marginBottom: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, gap: 8 }}>
+                <div style={{ fontWeight: 700, fontSize: '1.4rem' }}>{ev.emoji} {ev.title}</div>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <span style={{ fontSize: '1.1rem', color: ev.active ? '#16a34a' : '#94a3b8' }}>{ev.active ? 'Visible' : 'Hidden'}</span>
+                  <span className={`adm-toggle${ev.active ? ' on' : ''}`} onClick={() => toggleEventActive(ev)} />
+                  <button className="abtn ghost sm" onClick={() => deleteEventById(ev._id)} style={{ color: '#ef4444' }}>
+                    <i className="fa-solid fa-trash" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Current products */}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+                {(ev.productIds || []).length === 0 && (
+                  <span className="muted" style={{ fontSize: '1.2rem' }}>No products yet — search below to add some.</span>
+                )}
+                {(ev.productIds || []).map(pid => {
+                  const pidStr = pid.toString ? pid.toString() : pid;
+                  return (
+                    <span key={pidStr} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'var(--adm-surface)', borderRadius: 6, padding: '3px 8px', fontSize: '1.2rem' }}>
+                      <span className="mono" style={{ fontSize: '1rem', color: '#94a3b8' }}>{pidStr.slice(-6)}</span>
+                      <button onClick={() => removeProductFromEvent(ev, pidStr)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: '0 2px', fontSize: '1.1rem' }}>×</button>
+                    </span>
+                  );
+                })}
+              </div>
+
+              {/* Product search */}
+              <div style={{ position: 'relative' }}>
+                <input
+                  className="adm-input"
+                  placeholder="Search products to add…"
+                  value={productQuery[ev._id] || ''}
+                  onChange={e => {
+                    const q = e.target.value;
+                    setProductQuery(prev => ({ ...prev, [ev._id]: q }));
+                    searchProducts(ev._id, q);
+                  }}
+                  style={{ width: '100%' }}
+                />
+                {productSearching[ev._id] && <i className="fa-solid fa-spinner fa-spin" style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />}
+                {(productResults[ev._id] || []).length > 0 && (
+                  <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: 'var(--adm-bg)', border: '1px solid var(--adm-line)', borderRadius: 8, zIndex: 50, maxHeight: 220, overflowY: 'auto', boxShadow: '0 4px 16px rgba(0,0,0,.15)' }}>
+                    {productResults[ev._id].map(p => (
+                      <div
+                        key={p._id}
+                        onClick={() => addProductToEvent(ev, p)}
+                        style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid var(--adm-line)' }}
+                        onMouseEnter={e => e.currentTarget.style.background = 'var(--adm-surface)'}
+                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                      >
+                        {p.images?.[0]?.url && (
+                          <img src={p.images[0].url} alt="" style={{ width: 32, height: 32, borderRadius: 6, objectFit: 'cover', flexShrink: 0 }} />
+                        )}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontWeight: 600, fontSize: '1.25rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</div>
+                          <div className="muted" style={{ fontSize: '1.1rem' }}>₦{Number(p.price).toLocaleString()}</div>
+                        </div>
+                        <i className="fa-solid fa-plus" style={{ color: '#f97316', flexShrink: 0 }} />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     </>

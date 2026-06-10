@@ -3,6 +3,7 @@ import AuditLog from "../models/AuditLog.js";
 import Service from "../models/Service.js";
 import Booking from "../models/Booking.js";
 import logger from "../utils/logger.js";
+import { notify } from "../utils/notify.js";
 
 export const getAdminUsers = async (req, res) => {
   try {
@@ -35,6 +36,7 @@ export const banUser = async (req, res) => {
     if (user.roles.includes("admin")) return res.status(403).json({ message: "Cannot ban an admin" });
     user.status = "banned";
     await user.save({ validateModifiedOnly: true });
+    notify(user._id, { type: "account", title: "Account suspended", message: "Your account has been suspended by an admin.", link: "/settings" }).catch(() => {});
     res.json({ success: true });
   } catch (err) {
     logger.error("banUser:", err);
@@ -48,6 +50,7 @@ export const unbanUser = async (req, res) => {
     if (!user) return res.status(404).json({ message: "User not found" });
     user.status = "active";
     await user.save({ validateModifiedOnly: true });
+    notify(user._id, { type: "account", title: "Account restored", message: "Your account has been restored. Welcome back!", link: "/" }).catch(() => {});
     res.json({ success: true });
   } catch (err) {
     logger.error("unbanUser:", err);

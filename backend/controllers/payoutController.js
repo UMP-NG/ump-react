@@ -5,6 +5,7 @@ import Seller from "../models/Seller.js";
 import Config from "../models/Config.js";
 import logger from "../utils/logger.js";
 import { decrypt, mask } from "../utils/fieldEncryption.js";
+import { notify } from "../utils/notify.js";
 
 // Fix #10a: read bank details from Seller model where they are actually stored
 export const getPayoutDetails = async (req, res) => {
@@ -49,7 +50,7 @@ export const requestPayout = async (req, res) => {
 
     // Fix #17: enforce the platform minimum payout from Config (default ₦2000)
     const config = await Config.findOne().select("fees").lean();
-    const minPayout = config?.fees?.minPayout ?? 2000;
+    const minPayout = config?.fees?.minPayout ?? 100;
     if (amount < minPayout)
       return res.status(400).json({ message: `Minimum payout is ₦${minPayout.toLocaleString("en-NG")}` });
 
@@ -75,14 +76,23 @@ export const requestPayout = async (req, res) => {
       );
 
       // Payout is always saved as "pending" — admin reviews and processes manually
-    } else if (roles.includes("walker") || roles.includes("service_provider")) {
-      // Service providers have no separate wallet model yet — block payouts until implemented
-      return res.status(400).json({ message: "Payout for this account type requires manual admin processing. Please contact support." });
+    } else if (roles.includes("service_provider")) {
+      const user = await User.findById(userId).select("earningsBalance").lean();
+      const balance = user?.earningsBalance || 0;
+      if (balance < amount) return res.status(400).json({ message: "Insufficient earnings balance" });
+      await User.findByIdAndUpdate(userId, { $inc: { earningsBalance: -amount } });
+      payoutData.provider = userId;
     } else {
       return res.status(403).json({ message: "Unauthorized role" });
     }
 
     const payout = await Payout.create(payoutData);
+    notify(userId, {
+      type: "payout",
+      title: "Payout requested",
+      message: `Your payout request of ₦${Number(amount).toLocaleString("en-NG")} has been submitted and is under review.`,
+      link: "/seller-dashboard",
+    }).catch(() => {});
     res.json({ success: true, message: "Payout request submitted — our team will review and process it within 1–2 business days.", payout });
   } catch (err) {
     logger.error("requestPayout error:", err);

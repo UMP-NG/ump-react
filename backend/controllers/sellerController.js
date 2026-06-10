@@ -1,5 +1,7 @@
 import Seller from "../models/Seller.js";
 import User from "../models/User.js";
+import Product from "../models/Product.js";
+import Service from "../models/Service.js";
 import logger from "../utils/logger.js";
 
 export const becomeSeller = async (req, res) => {
@@ -218,6 +220,29 @@ export const incrementSellerView = async (req, res) => {
     res.json({ message: "Seller view counted", views: seller.views });
   } catch (error) {
     res.status(500).json({ message: error.message });
+  }
+};
+
+// Seller closes their own store — deletes products, services, and Seller profile,
+// removes the "seller" role, but keeps the user account intact.
+export const closeStore = async (req, res) => {
+  try {
+    const userId = req.user._id;
+    const seller = await Seller.findOne({ user: userId });
+    if (!seller) return res.status(404).json({ message: "Store not found" });
+
+    const now = new Date();
+    await Promise.allSettled([
+      Product.updateMany({ seller: userId }, { $set: { deletedAt: now } }),
+      Service.updateMany({ provider: userId }, { $set: { deletedAt: now } }),
+      User.findByIdAndUpdate(userId, { $pull: { roles: { $in: ["seller", "service_provider"] } } }),
+    ]);
+    await seller.deleteOne();
+
+    res.json({ message: "Store closed. Your account remains active." });
+  } catch (err) {
+    logger.error("closeStore:", err);
+    res.status(500).json({ message: "Server error" });
   }
 };
 

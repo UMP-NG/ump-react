@@ -6,6 +6,7 @@ import Product from "../models/Product.js";
 import Service from "../models/Service.js";
 import { getIO } from "../utils/socket.js";
 import logger from "../utils/logger.js";
+import { notify } from "../utils/notify.js";
 
 // Normalise image data which may be stored as a string URL or as { url, publicId }
 function extractImage(img) {
@@ -102,6 +103,13 @@ export const createNegotiation = async (req, res) => {
       io.to(buyerId.toString()).emit("new_message", populated);
     }
 
+    notify(sellerId.toString(), {
+      type: "account",
+      title: "New price offer",
+      message: `Someone offered ₦${Number(parsed).toLocaleString()} for "${itemName}"`,
+      link: "/messages",
+    }).catch(() => {});
+
     res.status(201).json({ success: true, negotiation, message });
   } catch (err) {
     logger.error("❌ Error creating negotiation:", err);
@@ -175,6 +183,15 @@ export const respondToNegotiation = async (req, res) => {
         status: negotiation.status,
       });
     }
+
+    notify(negotiation.buyer.toString(), {
+      type: "account",
+      title: action === "accept" ? "Offer accepted!" : "Offer rejected",
+      message: action === "accept"
+        ? `Your offer of ₦${Number(negotiation.proposedPrice).toLocaleString()} for "${negotiation.itemName}" was accepted!`
+        : `Your offer for "${negotiation.itemName}" was rejected — the original price applies.`,
+      link: "/messages",
+    }).catch(() => {});
 
     res.json({ success: true, negotiation });
   } catch (err) {

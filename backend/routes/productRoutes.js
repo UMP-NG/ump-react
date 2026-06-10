@@ -13,6 +13,9 @@ import {
   getMyProducts,
   trackProductView,
   getProductsByCategory,
+  toggleRestockAlert,
+  togglePriceWatch,
+  getFollowingFeed,
 } from "../controllers/productController.js";
 import { uploadListingMedia } from "../middleware/upload.js"; // ✅ Use single config
 
@@ -32,6 +35,7 @@ router.get("/category/:categoryId", getProductsByCategory);
 // 🛒 Seller-only Routes
 // ------------------------------
 router.get("/my", protect, requireRole("seller"), getMyProducts);
+router.get("/following", protect, getFollowingFeed);
 
 // ------------------------------
 // 🛒 Protected Create/Update/Delete Routes
@@ -56,6 +60,8 @@ router.delete("/:id", protect, requireRole("seller", "admin"), deleteProduct);
 
 router.post("/:id/view", optionalAuth, trackProductView);
 router.get("/:id/related", getRelatedProducts);
+router.post("/:id/notify-restock", protect, toggleRestockAlert);
+router.post("/:id/watch-price", protect, togglePriceWatch);
 
 // 🧩 Dynamic route (MUST be last)
 router.get("/", getAllProducts);

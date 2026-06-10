@@ -1,6 +1,6 @@
 import express from "express";
 import Admin from "../models/Admin.js";
-import { bulkImportProducts, updateUserRole, deleteUser, updateProduct, deleteProduct, updateListing, deleteListing, updateService, deleteService, updateOrder, deleteOrder, updateSellerStatus } from "../controllers/adminController.js";
+import { bulkImportProducts, updateUserRole, deleteUser, updateProduct, deleteProduct, updateListing, deleteListing, updateService, deleteService, updateOrder, deleteOrder, updateSellerStatus, deleteSeller } from "../controllers/adminController.js";
 import { protect, requireRole } from "../middleware/authMiddleware.js";
 import { uploadSingle } from "../middleware/upload.js";
 import logger from "../utils/logger.js";
@@ -49,6 +49,9 @@ import {
   publicConfig,
   getConfig,
   saveConfig,
+  getEvents,
+  saveEvent,
+  deleteEvent,
   inviteAdmin,
   getIdentityVerifications,
   approveIdentityVerification,
@@ -99,6 +102,7 @@ router.get   ("/sellers",                    ...adm, getAdminSellers);
 router.post  ("/sellers/:sellerId/approve",  ...adm, reinstateSeller);
 router.post  ("/sellers/:sellerId/reject",   ...adm, restrictSeller);
 router.put   ("/sellers/:sellerId/status",   ...adm, updateSellerStatus);
+router.delete("/sellers/:sellerId",          ...adm, deleteSeller);
 
 // ── Orders ─────────────────────────────────────────────────────────────────
 router.get   ("/orders/summary",    ...adm, getOrdersSummary);
@@ -150,6 +154,12 @@ router.delete("/broadcasts/:broadcastId",     ...adm, deleteBroadcast);
 router.get("/config/public", publicConfig); // logo + slides only — safe for unauthenticated callers
 router.get("/config", ...adm, getConfig);  // full config — admin only
 router.put("/config", ...adm, saveConfig);
+
+// ── Events / holiday sections ───────────────────────────────────────────────
+router.get   ("/events",              ...adm, getEvents);
+router.post  ("/events",              ...adm, saveEvent);
+router.put   ("/events/:eventId",     ...adm, saveEvent);
+router.delete("/events/:eventId",     ...adm, deleteEvent);
 
 // ── Listings ───────────────────────────────────────────────────────────────
 router.get   ("/listings",                ...adm, getAdminListings);

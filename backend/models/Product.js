@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import crypto from "crypto";
 
 // ====== PRODUCT SCHEMA ======
 const productSchema = new mongoose.Schema(
@@ -110,6 +111,19 @@ const productSchema = new mongoose.Schema(
     amenities: [String],
     distance: String,
 
+    // ── Flash Sale ──────────────────────────────────────────────────────────────
+    salePrice:  { type: Number, default: null, min: 0 },
+    saleEndsAt: { type: Date,   default: null },
+
+    // ── Restock alerts ──────────────────────────────────────────────────────────
+    restockSubscribers: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+
+    // ── Price-drop watchers ──────────────────────────────────────────────────────
+    priceWatchers: [{
+      user:                { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+      priceAtSubscription: { type: Number },
+    }],
+
     // Soft-delete: set instead of destroying the document.
     // Orders referencing this product keep their product snapshot intact.
     deletedAt: { type: Date, default: null },
@@ -119,12 +133,15 @@ const productSchema = new mongoose.Schema(
 
 // ====== PRE-SAVE HOOKS ======
 productSchema.pre("save", function (next) {
-  // ✅ Generate slug if missing
+  // Generate slug on first save — always includes a random 6-char hex suffix so
+  // two sellers (or the same seller) can create products with identical names
+  // without hitting the unique index.
   if (!this.slug && this.name) {
-    this.slug = this.name
+    const base = this.name
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/(^-|-$)+/g, "");
+    this.slug = `${base}-${crypto.randomBytes(3).toString("hex")}`;
   }
 
   // ✅ Auto-update availability

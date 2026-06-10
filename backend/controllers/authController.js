@@ -42,6 +42,7 @@ import Follow from "../models/Follow.js";
 import PushSub from "../models/PushSub.js";
 import { getFirebaseAuth } from "../config/firebaseAdmin.js";
 import { notify } from "../utils/notify.js";
+import { sendPushToUser } from "./pushController.js";
 import { getIO } from "../utils/socket.js";
 import logger from "../utils/logger.js";
 
@@ -317,7 +318,12 @@ export const login = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    const existingUser = await User.findOne({ email });
+    // Also match schoolEmail so users can still log in with their original
+    // address after an account merge (source email gets anonymised, but
+    // primary retains it as schoolEmail).
+    const existingUser = await User.findOne({
+      $or: [{ email: email.toLowerCase() }, { schoolEmail: email.toLowerCase() }],
+    });
     if (!existingUser) {
       // Generic message — avoids revealing whether the email is registered
       return res.status(400).json({ message: "Invalid email or password" });
@@ -775,6 +781,21 @@ async function mergeAccounts(primary, source) {
     $set.serviceProviderInfo = source.serviceProviderInfo;
   }
 
+  // Preserve all login methods after merge:
+  // If the primary is a Google account and the source has password auth,
+  // copy the source's hashed password so the user can still log in with
+  // their original email + password via the schoolEmail lookup in login().
+  const sourceOriginalEmail = source.email;
+  if (primary.googleAccount && source.password && !source.googleAccount) {
+    $set.password = source.password;
+  }
+  // Store source's original email as the primary's schoolEmail so login
+  // with the old address still resolves to the primary account.
+  if (!primary.schoolEmail && sourceOriginalEmail && !sourceOriginalEmail.includes("@ump-merged.internal")) {
+    $set.schoolEmail = sourceOriginalEmail.toLowerCase();
+    $set.schoolEmailVerified = true;
+  }
+
   await User.findByIdAndUpdate(dst, {
     $set,
     $inc:      { referralCredit: source.referralCredit || 0 },
@@ -961,6 +982,10 @@ async function _notifyAdmins(title, message, link) {
         })
       );
     }
+    // Browser push for each admin
+    for (const a of adminIds) {
+      sendPushToUser(a._id, { title, body: message, data: { url: link } }).catch(() => {});
+    }
   } catch (err) {
     logger.error("[notifyAdmins]", err.message);
   }
@@ -1121,6 +1146,53 @@ export const changePassword = async (req, res) => {
     user.password = newPassword;
     await user.save();
     res.json({ success: true, message: "Password updated successfully" });
+  } catch (err) {
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+// ── Saved Addresses ────────────────────────────────────────────────────────────
+export const getAddresses = async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id).select("addresses").lean();
+    res.json({ addresses: user?.addresses || [] });
+  } catch (err) {
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+export const saveAddress = async (req, res) => {
+  try {
+    const { label, name, phone, address, city, state, isDefault, _id } = req.body;
+    const user = await User.findById(req.user._id).select("addresses");
+
+    if (_id) {
+      // Update existing
+      const addr = user.addresses.id(_id);
+      if (!addr) return res.status(404).json({ message: "Address not found" });
+      Object.assign(addr, { label, name, phone, address, city, state });
+      if (isDefault) user.addresses.forEach((a) => { a.isDefault = a._id.toString() === _id; });
+    } else {
+      // Add new
+      if (isDefault) user.addresses.forEach((a) => { a.isDefault = false; });
+      user.addresses.push({ label, name, phone, address, city, state, isDefault: !!isDefault });
+    }
+
+    await user.save();
+    res.json({ success: true, addresses: user.addresses });
+  } catch (err) {
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+export const deleteAddress = async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id).select("addresses");
+    const addr = user.addresses.id(req.params.id);
+    if (!addr) return res.status(404).json({ message: "Address not found" });
+    addr.deleteOne();
+    await user.save();
+    res.json({ success: true, addresses: user.addresses });
   } catch (err) {
     res.status(500).json({ message: "Server error" });
   }

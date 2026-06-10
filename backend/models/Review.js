@@ -28,6 +28,9 @@ const reviewSchema = new mongoose.Schema(
       required: true,
       trim: true,
     },
+
+    sellerReply:     { type: String, trim: true, default: null },
+    sellerRepliedAt: { type: Date, default: null },
   },
   { timestamps: true }
 );

@@ -25,6 +25,8 @@ export default function Cart() {
   const [isDark] = useTheme();
   const [stepError, setStepError] = useState("");
   const [promoCode, setPromoCode] = useState("");
+  const [coupon, setCoupon] = useState(null); // { discount, couponId, discountType, discountValue }
+  const [couponLoading, setCouponLoading] = useState(false);
   const [provider, setProvider] = useState("flutterwave");
   const [showDeliveryConfirm, setShowDeliveryConfirm] = useState(false);
   const [deliveryMethod, setDeliveryMethod] = useState("pickup"); // "pickup" | "delivery"
@@ -36,6 +38,7 @@ export default function Cart() {
   const [payLink, setPayLink] = useState("");
   const [showLinkSheet, setShowLinkSheet] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
+  const [savedAddresses, setSavedAddresses] = useState([]);
 
   useEffect(() => {
     apiFetch("/api/cart")
@@ -43,6 +46,13 @@ export default function Cart() {
       .catch(() => setItems([]))
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    apiFetch("/api/auth/addresses")
+      .then((d) => setSavedAddresses(d.addresses || []))
+      .catch(() => {});
+  }, [user]);
 
   // Reset the "Pay" button spinner when returning via browser back/forward cache
   useEffect(() => {
@@ -102,6 +112,7 @@ export default function Cart() {
     return s + unitPrice * (i.quantity || i.qty || 1);
   }, 0);
   const creditToApply = applyCredit ? Math.min(creditBalance, sub) : 0;
+  const couponDiscount = coupon?.discount || 0;
   const serviceCharge = fees.serviceChargeEnabled
     ? items.reduce((total, i) => {
         const unitPrice = i.negotiatedPrice || i.product?.price || i.price || 0;
@@ -109,7 +120,22 @@ export default function Cart() {
         return total + Math.min(fees.serviceChargeMax, Math.round(itemTotal * (fees.serviceFee / 100)));
       }, 0)
     : 0;
-  const orderTotal = Math.max(0, sub + serviceCharge - creditToApply);
+  const orderTotal = Math.max(0, sub + serviceCharge - creditToApply - couponDiscount);
+
+  async function applyPromoCode() {
+    if (!promoCode.trim()) return;
+    setCouponLoading(true);
+    try {
+      const res = await apiFetch("/api/coupons/apply", { method: "POST", body: { code: promoCode.trim(), orderAmount: sub } });
+      setCoupon(res);
+      showToast(`Coupon applied — saving ${naira(res.discount)}!`, "success");
+    } catch (err) {
+      showToast(err?.message || "Invalid coupon code", "error");
+      setCoupon(null);
+    } finally {
+      setCouponLoading(false);
+    }
+  }
 
   function getProductId(it) {
     return typeof it.product === "object" ? it.product?._id : it.product;
@@ -193,6 +219,8 @@ export default function Cart() {
           blackboxFee: deliveryMethod === "delivery" ? bbxFee : 0,
           dropoffArea: bbxDropoffArea || "",
           creditToUse: creditToApply,
+          couponId: coupon?.couponId || null,
+          couponDiscount,
         },
       });
       const createdOrders = orderRes.orders || (orderRes.order ? [orderRes.order] : [orderRes]);
@@ -313,17 +341,27 @@ export default function Cart() {
                     })}
                   </div>
 
-                  {/* Promo code — coming soon */}
-                  <div style={{ display: "flex", gap: 8, marginBottom: 12, opacity: 0.55 }}>
-                    <input
-                      className="input"
-                      placeholder="Promo / coupon code (coming soon)"
-                      value={promoCode}
-                      onChange={(e) => setPromoCode(e.target.value)}
-                      style={{ flex: 1 }}
-                      disabled
-                    />
-                    <button className="btn btn-ghost" disabled>Apply</button>
+                  {/* Promo / coupon code */}
+                  <div style={{ marginBottom: 12 }}>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <input
+                        className="input"
+                        placeholder="Promo / coupon code"
+                        value={promoCode}
+                        onChange={(e) => { setPromoCode(e.target.value); if (coupon) setCoupon(null); }}
+                        style={{ flex: 1 }}
+                        onKeyDown={(e) => e.key === "Enter" && applyPromoCode()}
+                      />
+                      <button className="btn btn-ghost" onClick={applyPromoCode} disabled={couponLoading || !promoCode.trim()}>
+                        {couponLoading ? <i className="fas fa-spinner fa-spin" /> : coupon ? "✓ Applied" : "Apply"}
+                      </button>
+                    </div>
+                    {coupon && (
+                      <div style={{ marginTop: 6, fontSize: "1.2rem", color: "#22c55e", display: "flex", alignItems: "center", gap: 6 }}>
+                        <i className="fas fa-tag" /> Coupon saves you {naira(coupon.discount)}!
+                        <button onClick={() => { setCoupon(null); setPromoCode(""); }} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--ink-4)", marginLeft: 4, fontSize: "1rem" }}>✕</button>
+                      </div>
+                    )}
                   </div>
 
                   {/* Order total — hidden on desktop (sidebar shows it) */}
@@ -394,6 +432,26 @@ export default function Cart() {
           {/* Step 2: Delivery */}
           {step === 2 && (
             <div style={{ paddingBottom: 24 }}>
+              {/* Saved addresses quick-fill */}
+              {savedAddresses.length > 0 && (
+                <div className="card" style={{ padding: 14, marginBottom: 14 }}>
+                  <div style={{ fontWeight: 700, fontSize: "1.3rem", marginBottom: 10 }}><i className="fas fa-bookmark" style={{ marginRight: 6, color: "var(--accent)" }} />Use a saved address</div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {savedAddresses.map((addr) => (
+                      <button
+                        key={addr._id}
+                        type="button"
+                        onClick={() => setDelivery((d) => ({ ...d, name: addr.name || d.name, phone: addr.phone || d.phone, street: addr.address || d.street, city: addr.city || d.city, state: addr.state || d.state }))}
+                        style={{ textAlign: "left", padding: "10px 12px", borderRadius: "var(--r-md)", border: "1px solid var(--line)", background: "var(--surface)", cursor: "pointer", fontFamily: "var(--font-sans)" }}
+                      >
+                        <div style={{ fontWeight: 700, fontSize: "1.2rem" }}>{addr.label || addr.name}</div>
+                        <div style={{ fontSize: "1.15rem", color: "var(--ink-3)", marginTop: 2 }}>{[addr.address, addr.city, addr.state].filter(Boolean).join(", ")}</div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="card" style={{ padding: 16, marginBottom: 16 }}>
                 <div className="label">Full name *</div>
                 <input className="input" value={delivery.name} onChange={(e) => setDelivery({ ...delivery, name: e.target.value })} placeholder="Aisha Ogundimu" />

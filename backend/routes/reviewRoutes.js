@@ -5,6 +5,7 @@ import {
   getAllReviews,
   updateReview,
   deleteReview,
+  replyToReview,
 } from "../controllers/reviewController.js";
 import { protect, requireRole } from "../middleware/authMiddleware.js";
 
@@ -34,6 +35,13 @@ router.delete(
   protect,
   requireRole("user", "seller", "service_provider", "admin"),
   deleteReview
+);
+
+router.put(
+  "/:reviewId/reply",
+  protect,
+  requireRole("seller", "service_provider", "admin"),
+  replyToReview
 );
 
 export default router;

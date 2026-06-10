@@ -10,6 +10,7 @@ import { audit } from "../utils/auditLog.js";
 import { confirmAllOrders } from "../utils/confirmOrders.js";
 import logger from "../utils/logger.js";
 import { encrypt, decrypt, mask } from "../utils/fieldEncryption.js";
+import { notify } from "../utils/notify.js";
 
 // ─── Subscription helpers ─────────────────────────────────────────────────────
 // Prices come from the Config document so admins can edit them without a deploy
@@ -49,6 +50,13 @@ async function activateSubscription(payment) {
       "serviceProviderInfo.subscriptionExpiresAt": expiresAt,
     });
   }
+
+  notify(payment.user, {
+    type: "account",
+    title: "Subscription activated!",
+    message: `Your ${plan} ${type} subscription is now active.`,
+    link: type === "provider" ? "/provider-dashboard" : "/seller-dashboard",
+  }).catch(() => {});
 }
 
 // ─── Initialize subscription payment ─────────────────────────────────────────

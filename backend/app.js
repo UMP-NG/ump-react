@@ -82,6 +82,8 @@ import pushRoutes from "./routes/pushRoutes.js";
 import negotiationRoutes from "./routes/negotiationRoutes.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 import uploadRoute from "./routes/uploadRoute.js";
+import couponRoutes from "./routes/couponRoutes.js";
+import questionRoutes from "./routes/questionRoutes.js";
 
 const app = express();
 const __filename = fileURLToPath(import.meta.url);
@@ -320,6 +322,8 @@ app.use("/api/reports", reportRoutes);
 app.use("/api/push",   pushRoutes);
 app.use("/api/upload", uploadRoute);
 app.use("/api/negotiations", negotiationRoutes);
+app.use("/api/coupons",     couponRoutes);
+app.use("/api/questions",   questionRoutes);
 
 // ── Health check ─────────────────────────────────────────────────────────────
 // Used by Render's health-check pings and uptime monitors.
@@ -346,6 +350,39 @@ app.use(errorHandler);
 // ----------------------------
 app.get("/api/test", (req, res) => {
   res.json({ message: "Backend is working!" });
+});
+
+// OG meta tags for product pages — detected social crawlers get OG-enriched HTML;
+// real browsers get the SPA index.html normally via the catch-all below.
+const BOT_UA = /facebookexternalhit|twitterbot|whatsapp|linkedinbot|telegrambot|slackbot|discordbot|applebot|googlebot|bingbot/i;
+app.get("/products/:id", async (req, res, next) => {
+  try {
+    if (!BOT_UA.test(req.headers["user-agent"] || "")) return next();
+    const Product = (await import("./models/Product.js")).default;
+    const product = await Product.findById(req.params.id)
+      .select("name desc images price slug")
+      .lean()
+      .catch(() => null);
+    if (!product) return next();
+    const title = product.name || "Product — UMP";
+    const desc  = product.desc ? product.desc.slice(0, 200) : `₦${Number(product.price).toLocaleString()} on UMP`;
+    const image = product.images?.[0]?.url || "";
+    const url   = `${req.protocol}://${req.get("host")}/products/${req.params.id}`;
+    return res.type("html").send(`<!DOCTYPE html><html><head>
+<meta charset="UTF-8"/>
+<title>${title}</title>
+<meta property="og:type" content="product"/>
+<meta property="og:title" content="${title}"/>
+<meta property="og:description" content="${desc}"/>
+${image ? `<meta property="og:image" content="${image}"/>` : ""}
+<meta property="og:url" content="${url}"/>
+<meta name="twitter:card" content="summary_large_image"/>
+<meta name="twitter:title" content="${title}"/>
+<meta name="twitter:description" content="${desc}"/>
+${image ? `<meta name="twitter:image" content="${image}"/>` : ""}
+<script>window.location.replace("${url}");</script>
+</head><body></body></html>`);
+  } catch { next(); }
 });
 
 // Catch-all: serve React app for SPA routing (only when frontend build exists)

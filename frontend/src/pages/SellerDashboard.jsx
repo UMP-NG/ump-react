@@ -168,6 +168,8 @@ function QuickEditModal({ product, onClose, onSave, showToast }) {
       ? product.images.map((img) => (typeof img === "string" ? { url: img, publicId: "" } : img))
       : [],
     removeImages: [],
+    salePrice: product.salePrice != null ? product.salePrice : "",
+    saleEndsAt: product.saleEndsAt ? new Date(product.saleEndsAt).toISOString().slice(0, 16) : "",
   });
   const [saving, setSaving] = useState(false);
   const [colorInput, setColorInput] = useState({ name: "", code: "#e0e0e0" });
@@ -210,6 +212,8 @@ function QuickEditModal({ product, onClose, onSave, showToast }) {
           colors: form.colors,
           specs: specsObj,
           removeImages: form.removeImages,
+          salePrice: form.salePrice !== "" ? Number(form.salePrice) : null,
+          saleEndsAt: form.saleEndsAt || null,
         },
       });
       showToast("Product updated", "success");
@@ -271,6 +275,26 @@ function QuickEditModal({ product, onClose, onSave, showToast }) {
           <div style={{ marginBottom: 14 }}>
             <label style={lSty}>Description</label>
             <textarea style={{ ...iSty, height: 80, resize: "vertical" }} value={form.desc} onChange={set("desc")} placeholder="Product description..." />
+          </div>
+
+          {/* Flash Sale */}
+          <div style={{ marginBottom: 14, padding: "12px 14px", borderRadius: "var(--r-md)", border: "1px solid rgba(239,68,68,.3)", background: "rgba(239,68,68,.04)" }}>
+            <label style={{ ...lSty, color: "#dc2626", marginBottom: 8 }}><i className="fas fa-bolt" style={{ marginRight: 5 }} /> Flash Sale (optional)</label>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+              <div>
+                <label style={lSty}>Sale Price (₦)</label>
+                <input style={iSty} type="number" min="0" value={form.salePrice} onChange={set("salePrice")} placeholder="e.g. 3500" />
+              </div>
+              <div>
+                <label style={lSty}>Sale Ends At</label>
+                <input style={iSty} type="datetime-local" value={form.saleEndsAt} onChange={set("saleEndsAt")} />
+              </div>
+            </div>
+            {form.salePrice && Number(form.salePrice) > 0 && (
+              <button className="btn btn-ghost" style={{ marginTop: 8, fontSize: "1.1rem", padding: "4px 10px", color: "#dc2626" }} onClick={() => setForm((f) => ({ ...f, salePrice: "", saleEndsAt: "" }))}>
+                <i className="fas fa-xmark" style={{ marginRight: 4 }} /> Clear sale
+              </button>
+            )}
           </div>
 
           {/* Images */}
