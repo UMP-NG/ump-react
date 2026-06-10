@@ -355,6 +355,15 @@ app.get("/api/test", (req, res) => {
 // OG meta tags for product pages — detected social crawlers get OG-enriched HTML;
 // real browsers get the SPA index.html normally via the catch-all below.
 const BOT_UA = /facebookexternalhit|twitterbot|whatsapp|linkedinbot|telegrambot|slackbot|discordbot|applebot|googlebot|bingbot/i;
+// Escape HTML entities to prevent XSS in OG tag injection
+function escHtml(str) {
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#x27;");
+}
 app.get("/products/:id", async (req, res, next) => {
   try {
     if (!BOT_UA.test(req.headers["user-agent"] || "")) return next();
@@ -364,8 +373,8 @@ app.get("/products/:id", async (req, res, next) => {
       .lean()
       .catch(() => null);
     if (!product) return next();
-    const title = product.name || "Product — UMP";
-    const desc  = product.desc ? product.desc.slice(0, 200) : `₦${Number(product.price).toLocaleString()} on UMP`;
+    const title = escHtml(product.name || "Product — UMP");
+    const desc  = escHtml(product.desc ? product.desc.slice(0, 200) : `₦${Number(product.price).toLocaleString()} on UMP`);
     const image = product.images?.[0]?.url || "";
     const url   = `${req.protocol}://${req.get("host")}/products/${req.params.id}`;
     return res.type("html").send(`<!DOCTYPE html><html><head>
@@ -374,13 +383,13 @@ app.get("/products/:id", async (req, res, next) => {
 <meta property="og:type" content="product"/>
 <meta property="og:title" content="${title}"/>
 <meta property="og:description" content="${desc}"/>
-${image ? `<meta property="og:image" content="${image}"/>` : ""}
-<meta property="og:url" content="${url}"/>
+${image ? `<meta property="og:image" content="${escHtml(image)}"/>` : ""}
+<meta property="og:url" content="${escHtml(url)}"/>
 <meta name="twitter:card" content="summary_large_image"/>
 <meta name="twitter:title" content="${title}"/>
 <meta name="twitter:description" content="${desc}"/>
-${image ? `<meta name="twitter:image" content="${image}"/>` : ""}
-<script>window.location.replace("${url}");</script>
+${image ? `<meta name="twitter:image" content="${escHtml(image)}"/>` : ""}
+<script>window.location.replace("${escHtml(url)}");</script>
 </head><body></body></html>`);
   } catch { next(); }
 });

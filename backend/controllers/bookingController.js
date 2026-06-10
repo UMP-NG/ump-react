@@ -14,7 +14,7 @@ import logger from "../utils/logger.js";
 // ===============================
 export const createBooking = async (req, res) => {
   try {
-    const { itemId, itemType, date, timeSlot, notes, negotiationId, creditToUse } = req.body;
+    const { itemId, itemType, date, timeSlot, notes, negotiationId, creditToUse, offerDescription, offeredPrice } = req.body;
 
     if (!itemId || !itemType || !date || !timeSlot) {
       return res.status(400).json({ message: "Missing required fields." });
@@ -55,6 +55,7 @@ export const createBooking = async (req, res) => {
     // Resolve negotiated rate for service bookings
     let negotiatedRate = null;
     let resolvedNegotiationId = null;
+    let resolvedOfferDescription = null;
     if (itemType === "service" && negotiationId) {
       if (!mongoose.Types.ObjectId.isValid(negotiationId)) {
         return res.status(400).json({ message: "Invalid negotiation ID." });
@@ -68,6 +69,13 @@ export const createBooking = async (req, res) => {
         if (neg.messageId) {
           await Message.findByIdAndUpdate(neg.messageId, { "meta.status": "applied" });
         }
+      }
+    } else if (itemType === "service" && !negotiationId && offeredPrice) {
+      // Negotiable service booked directly with a price offer from the booking form
+      const parsed = Number(offeredPrice);
+      if (!isNaN(parsed) && parsed > 0) {
+        negotiatedRate = parsed;
+        resolvedOfferDescription = typeof offerDescription === "string" ? offerDescription.trim() : null;
       }
     }
 
@@ -101,6 +109,7 @@ export const createBooking = async (req, res) => {
         notes,
         creditUsed: creditApplied,
         ...(negotiatedRate !== null && { negotiatedRate, negotiationId: resolvedNegotiationId }),
+        ...(resolvedOfferDescription && { offerDescription: resolvedOfferDescription }),
       });
     } catch (createErr) {
       // Unique index violation — two requests raced past the findOne check
@@ -115,7 +124,7 @@ export const createBooking = async (req, res) => {
       const user = await User.findById(req.user._id).lean();
       if (user) {
       const itemName = item.name || item.title || "Service/Listing";
-      const bookingMessage = `📅 New Booking Request\n\nName: ${user.name}\nEmail: ${user.email}\nService: ${itemName}\nDate: ${date}\nTime: ${timeSlot}${negotiatedRate !== null ? `\nAgreed rate: ₦${Number(negotiatedRate).toLocaleString()}` : ""}\n${notes ? `Notes: ${notes}` : ""}`;
+      const bookingMessage = `📅 New Booking Request\n\nName: ${user.name}\nEmail: ${user.email}\nService: ${itemName}\nDate: ${date}\nTime: ${timeSlot}${negotiatedRate !== null ? `\nOffered rate: ₦${Number(negotiatedRate).toLocaleString()}` : ""}${resolvedOfferDescription ? `\nOffer description: ${resolvedOfferDescription}` : ""}\n${notes ? `Notes: ${notes}` : ""}`;
 
       await Message.create({
         sender: req.user._id,
@@ -321,34 +330,39 @@ export const rejectBooking = async (req, res) => {
 // ===============================
 export const completeBooking = async (req, res) => {
   try {
-    const booking = await Booking.findById(req.params.bookingId);
+    // Populate item so we can read its rate for non-negotiated bookings
+    const booking = await Booking.findById(req.params.bookingId).populate("item", "rate title name");
     if (!booking) return res.status(404).json({ message: "Booking not found" });
     if (booking.status !== "confirmed") return res.status(400).json({ message: "Only confirmed bookings can be completed" });
 
-    const isClient   = booking.user.toString()     === req.user._id.toString();
-    const isProvider = booking.provider.toString()  === req.user._id.toString();
+    const isClient   = booking.user.toString()    === req.user._id.toString();
+    const isProvider = booking.provider.toString() === req.user._id.toString();
     if (!isClient && !isProvider && !req.user.roles?.includes("admin")) {
       return res.status(403).json({ message: "Unauthorized" });
     }
 
-    booking.status = "completed";
-    await booking.save();
+    // Atomic status update — prevents double-completion race condition
+    const updated = await Booking.findOneAndUpdate(
+      { _id: booking._id, status: "confirmed" },
+      { $set: { status: "completed" } },
+      { new: true }
+    );
+    if (!updated) return res.status(409).json({ message: "Booking has already been completed or modified" });
 
-    // Credit provider's earnings wallet
-    const earnings = booking.negotiatedRate || 0;
+    // Credit provider's earnings — negotiated rate takes priority, falls back to item's listed rate
+    const earnings = booking.negotiatedRate ?? booking.item?.rate ?? 0;
     if (earnings > 0) {
       await User.findByIdAndUpdate(booking.provider, { $inc: { earningsBalance: earnings } });
     }
 
-    // Notify provider
     notify(booking.provider, {
       type: "order",
       title: "Booking completed",
-      message: earnings > 0 ? `₦${earnings.toLocaleString("en-NG")} has been added to your wallet.` : "Your booking has been marked as completed.",
-      link: "/provider-dashboard",
+      message: earnings > 0 ? `₦${Number(earnings).toLocaleString("en-NG")} has been added to your wallet.` : "Your booking has been marked as completed.",
+      link: "/provider-analytics",
     }).catch(() => {});
 
-    res.json({ success: true, booking });
+    res.json({ success: true, booking: updated });
   } catch (err) {
     logger.error("completeBooking:", err);
     res.status(500).json({ message: "Server error" });

@@ -8,18 +8,20 @@ import { naira } from "../components/ProductCard";
 import { apiFetch } from "../utils/api";
 import Skel from "../components/Skel";
 
-const PRICING_LABEL = {
-  fixed:        (r, cur) => `${cur === "USD" ? "$" : "₦"}${Number(r).toLocaleString()}`,
-  hourly:       (r, cur) => `${cur === "USD" ? "$" : "₦"}${Number(r).toLocaleString()}/hr`,
-  per_project:  (r, cur) => `${cur === "USD" ? "$" : "₦"}${Number(r).toLocaleString()} / project`,
-  starting_from:(r, cur) => `From ${cur === "USD" ? "$" : "₦"}${Number(r).toLocaleString()}`,
-  negotiable:   () => "Negotiable",
-  free:         () => "Free",
+const PRICING_SUFFIX = {
+  hourly:        "/hr",
+  per_project:   " / project",
+  starting_from: "",
+  fixed:         "",
 };
 
 function formatPrice(service) {
-  const fn = PRICING_LABEL[service.pricingType] || PRICING_LABEL.fixed;
-  return fn(service.rate || 0, service.currency || "NGN");
+  if (service.pricingType === "negotiable") return { label: "Negotiable", sub: "", accent: false };
+  if (service.pricingType === "free")       return { label: "Free",       sub: "", accent: false };
+  const sym = service.currency === "USD" ? "$" : "₦";
+  const amt = `${sym}${Number(service.rate || 0).toLocaleString()}`;
+  const sub = PRICING_SUFFIX[service.pricingType] || "";
+  return { label: amt, sub, accent: true };
 }
 
 export default function ProviderDetail() {

@@ -288,7 +288,7 @@ export default function Home() {
 
       {/* Trending products */}
       <div className="section-title">
-        <h2>Trending now <i className="fas fa-fire" style={{ color: "var(--accent)" }} /></h2>
+        <h2>Featured <i className="fas fa-fire" style={{ color: "var(--accent)" }} /></h2>
         <span className="more" onClick={() => navigate("/market")} style={{ cursor: "pointer" }}>See all</span>
       </div>
       <div className="h-scroll">

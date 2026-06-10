@@ -47,10 +47,12 @@ const bookingSchema = new mongoose.Schema(
       trim: true,
     },
 
-    // Negotiated price (services only) — set when buyer books after a negotiation is accepted
-    negotiatedRate:  { type: Number, default: null },
-    negotiationId:   { type: mongoose.Schema.Types.ObjectId, ref: "Negotiation", default: null },
-    creditUsed:      { type: Number, default: 0, min: 0 },
+    // Negotiated price (services only) — set when buyer books after a negotiation is accepted,
+    // or when buyer submits an offer on a negotiable service booking form.
+    negotiatedRate:   { type: Number, default: null },
+    negotiationId:    { type: mongoose.Schema.Types.ObjectId, ref: "Negotiation", default: null },
+    offerDescription: { type: String, trim: true, default: null },
+    creditUsed:       { type: Number, default: 0, min: 0 },
 
     status: {
       type: String,

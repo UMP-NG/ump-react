@@ -6,16 +6,18 @@ export const applyCoupon = async (req, res) => {
   try {
     const { code, orderAmount } = req.body;
     if (!code) return res.status(400).json({ message: "Coupon code is required" });
+    const amount = Number(orderAmount);
+    if (!amount || amount <= 0) return res.status(400).json({ message: "A valid order amount is required" });
 
     const coupon = await Coupon.findOne({ code: code.trim().toUpperCase(), active: true });
     if (!coupon) return res.status(404).json({ message: "Invalid or expired coupon code" });
     if (coupon.expiresAt && coupon.expiresAt < new Date()) return res.status(400).json({ message: "This coupon has expired" });
     if (coupon.maxUses !== null && coupon.usedCount >= coupon.maxUses) return res.status(400).json({ message: "This coupon has reached its usage limit" });
-    if (orderAmount < (coupon.minOrderAmount || 0)) return res.status(400).json({ message: `Minimum order amount for this coupon is ₦${coupon.minOrderAmount.toLocaleString("en-NG")}` });
+    if (amount < (coupon.minOrderAmount || 0)) return res.status(400).json({ message: `Minimum order amount for this coupon is ₦${coupon.minOrderAmount.toLocaleString("en-NG")}` });
 
     const discount = coupon.discountType === "percent"
-      ? Math.min((coupon.discountValue / 100) * orderAmount, orderAmount)
-      : Math.min(coupon.discountValue, orderAmount);
+      ? Math.min((Math.min(coupon.discountValue, 100) / 100) * amount, amount)
+      : Math.min(coupon.discountValue, amount);
 
     res.json({ valid: true, discount: Math.round(discount), couponId: coupon._id, discountType: coupon.discountType, discountValue: coupon.discountValue });
   } catch (err) {
@@ -51,10 +53,20 @@ export const createCoupon = async (req, res) => {
 // PUT /api/coupons/:id — admin: update coupon
 export const updateCoupon = async (req, res) => {
   try {
-    const coupon = await Coupon.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    const { code, discountType, discountValue, minOrderAmount, maxUses, expiresAt, active } = req.body;
+    const updates = {};
+    if (code !== undefined)            updates.code = String(code).trim().toUpperCase();
+    if (discountType !== undefined)    updates.discountType = discountType;
+    if (discountValue !== undefined)   updates.discountValue = Number(discountValue);
+    if (minOrderAmount !== undefined)  updates.minOrderAmount = Number(minOrderAmount) || 0;
+    if (maxUses !== undefined)         updates.maxUses = maxUses ? Number(maxUses) : null;
+    if (expiresAt !== undefined)       updates.expiresAt = expiresAt || null;
+    if (active !== undefined)          updates.active = Boolean(active);
+    const coupon = await Coupon.findByIdAndUpdate(req.params.id, updates, { new: true, runValidators: true });
     if (!coupon) return res.status(404).json({ message: "Coupon not found" });
     res.json({ success: true, coupon });
   } catch (err) {
+    logger.error("updateCoupon:", err);
     res.status(500).json({ message: "Server error" });
   }
 };

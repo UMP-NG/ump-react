@@ -90,6 +90,7 @@ export const deleteQuestion = async (req, res) => {
     await q.deleteOne();
     res.json({ success: true });
   } catch (err) {
+    logger.error("deleteQuestion:", err);
     res.status(500).json({ message: "Server error" });
   }
 };

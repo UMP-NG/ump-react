@@ -77,10 +77,13 @@ export const requestPayout = async (req, res) => {
 
       // Payout is always saved as "pending" — admin reviews and processes manually
     } else if (roles.includes("service_provider")) {
-      const user = await User.findById(userId).select("earningsBalance").lean();
-      const balance = user?.earningsBalance || 0;
-      if (balance < amount) return res.status(400).json({ message: "Insufficient earnings balance" });
-      await User.findByIdAndUpdate(userId, { $inc: { earningsBalance: -amount } });
+      // Atomic check-and-deduct — prevents race condition double-spend
+      const updated = await User.findOneAndUpdate(
+        { _id: userId, earningsBalance: { $gte: amount } },
+        { $inc: { earningsBalance: -amount } },
+        { new: false }
+      );
+      if (!updated) return res.status(400).json({ message: "Insufficient earnings balance" });
       payoutData.provider = userId;
     } else {
       return res.status(403).json({ message: "Unauthorized role" });

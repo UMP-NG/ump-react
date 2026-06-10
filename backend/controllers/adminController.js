@@ -154,11 +154,11 @@ export const deleteSeller = async (req, res) => {
       Product.updateMany({ seller: seller.user }, { $set: { deletedAt: now } }),
       Service.updateMany({ provider: seller.user }, { $set: { deletedAt: now } }),
       // Remove seller role from the linked user account
-      seller.user && User.findByIdAndUpdate(seller.user, { $pull: { roles: "seller" } }),
+      seller.user && User.findByIdAndUpdate(seller.user, { $pull: { roles: { $in: ["seller", "service_provider"] } } }),
     ]);
 
     await seller.deleteOne();
-    res.json({ message: "Store deleted — products, services, and seller role removed." });
+    res.json({ message: "Store deleted — products, services, and seller/provider roles removed." });
   } catch (error) {
     res.status(500).json({ message: "Server error" });
   }

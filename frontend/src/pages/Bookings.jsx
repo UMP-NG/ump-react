@@ -23,21 +23,24 @@ function StatusPill({ status }) {
   );
 }
 
+// booking.item is the populated Service or Listing document
+// booking.itemModel is "Service" or "Listing"
 function ReviewModal({ booking, onClose, onDone }) {
   const [rating, setRating] = useState(0);
   const [text, setText] = useState("");
   const [saving, setSaving] = useState(false);
   const showToast = useToast();
 
-  const serviceId = booking.service?._id || booking.listing?._id;
-  const refModel = booking.service ? "Service" : "Listing";
+  const refId = booking.item?._id;
+  const refModel = booking.itemModel; // "Service" or "Listing"
+  const itemTitle = booking.item?.title || booking.item?.name || "this service";
 
   async function submit(e) {
     e.preventDefault();
     if (!rating) { showToast("Please select a star rating", "warn"); return; }
     setSaving(true);
     try {
-      await apiFetch("/api/reviews", { method: "POST", body: { refModel, refId: serviceId, rating, text } });
+      await apiFetch("/api/reviews", { method: "POST", body: { refModel, refId, rating, text } });
       showToast("Review submitted!", "success");
       onDone(booking._id);
       onClose();
@@ -57,7 +60,7 @@ function ReviewModal({ booking, onClose, onDone }) {
         </div>
         <form onSubmit={submit} style={{ padding: 20 }}>
           <div style={{ fontSize: "1.3rem", color: "var(--ink-2)", marginBottom: 14 }}>
-            Rate your experience with <strong>{booking.service?.title || booking.listing?.title || "this service"}</strong>
+            Rate your experience with <strong>{itemTitle}</strong>
           </div>
           <div style={{ display: "flex", gap: 4, marginBottom: 14 }}>
             {[1, 2, 3, 4, 5].map((n) => (
@@ -102,8 +105,8 @@ export default function Bookings() {
   async function markComplete(booking) {
     setCompleting(booking._id);
     try {
-      await apiFetch(`/api/bookings/${booking._id}/complete`, { method: "PUT" });
-      setBookings((prev) => prev.map((b) => b._id === booking._id ? { ...b, status: "completed" } : b));
+      const res = await apiFetch(`/api/bookings/${booking._id}/complete`, { method: "PUT" });
+      setBookings((prev) => prev.map((b) => b._id === booking._id ? { ...b, status: "completed", ...(res.booking || {}) } : b));
       showToast("Booking marked as completed", "success");
     } catch (err) {
       showToast(err?.message || "Failed to complete booking", "error");
@@ -115,8 +118,10 @@ export default function Bookings() {
   const STATUS_FILTERS = ["All", "Pending", "Confirmed", "Completed", "Rejected"];
   const filtered = filter === "All" ? bookings : bookings.filter((b) => b.status === filter.toLowerCase());
 
-  const itemName = (b) => b.service?.title || b.listing?.title || "Service";
+  // booking.item is the populated Service/Listing; booking.itemModel tells us which
+  const itemName = (b) => b.item?.title || b.item?.name || "Service";
   const providerName = (b) => b.provider?.name || b.provider?.businessName || "Provider";
+  const itemRate = (b) => b.negotiatedRate ?? b.item?.rate ?? 0;
 
   return (
     <div className="page">
@@ -152,50 +157,53 @@ export default function Bookings() {
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-            {filtered.map((b) => (
-              <div key={b._id} className="card" style={{ padding: 16 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
-                  <div>
-                    <div style={{ fontWeight: 700, fontSize: "1.4rem" }}>{itemName(b)}</div>
-                    <div style={{ fontSize: "1.2rem", color: "var(--ink-3)", marginTop: 2 }}>with {providerName(b)}</div>
+            {filtered.map((b) => {
+              const rate = itemRate(b);
+              return (
+                <div key={b._id} className="card" style={{ padding: 16 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: "1.4rem" }}>{itemName(b)}</div>
+                      <div style={{ fontSize: "1.2rem", color: "var(--ink-3)", marginTop: 2 }}>with {providerName(b)}</div>
+                    </div>
+                    <StatusPill status={b.status} />
                   </div>
-                  <StatusPill status={b.status} />
-                </div>
 
-                <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 16px", fontSize: "1.2rem", color: "var(--ink-2)", marginBottom: 10 }}>
-                  <span><i className="fas fa-calendar" style={{ marginRight: 4, color: "var(--accent)" }} />{b.date ? new Date(b.date).toLocaleDateString("en-NG", { weekday: "short", day: "numeric", month: "short", year: "numeric" }) : "—"}</span>
-                  {b.time && <span><i className="fas fa-clock" style={{ marginRight: 4, color: "var(--accent)" }} />{b.time}</span>}
-                  {b.amount > 0 && <span><i className="fas fa-money-bill" style={{ marginRight: 4, color: "var(--accent)" }} />{naira(b.amount)}</span>}
-                </div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "6px 16px", fontSize: "1.2rem", color: "var(--ink-2)", marginBottom: 10 }}>
+                    <span><i className="fas fa-calendar" style={{ marginRight: 4, color: "var(--accent)" }} />{b.date ? new Date(b.date).toLocaleDateString("en-NG", { weekday: "short", day: "numeric", month: "short", year: "numeric" }) : "—"}</span>
+                    {b.timeSlot && <span><i className="fas fa-clock" style={{ marginRight: 4, color: "var(--accent)" }} />{b.timeSlot}</span>}
+                    {rate > 0 && <span><i className="fas fa-money-bill" style={{ marginRight: 4, color: "var(--accent)" }} />{naira(rate)}</span>}
+                  </div>
 
-                {b.notes && <p style={{ margin: "0 0 10px", fontSize: "1.2rem", color: "var(--ink-3)", fontStyle: "italic" }}>{b.notes}</p>}
+                  {b.notes && <p style={{ margin: "0 0 10px", fontSize: "1.2rem", color: "var(--ink-3)", fontStyle: "italic" }}>{b.notes}</p>}
 
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  {b.status === "confirmed" && (
-                    <button
-                      className="btn btn-primary btn-sm"
-                      onClick={() => markComplete(b)}
-                      disabled={completing === b._id}
-                    >
-                      {completing === b._id ? <i className="fas fa-spinner fa-spin" /> : <><i className="fas fa-check" /> Mark as Completed</>}
-                    </button>
-                  )}
-                  {b.status === "completed" && !reviewed.has(b._id) && (b.service || b.listing) && (
-                    <button className="btn btn-ghost btn-sm" onClick={() => setReviewFor(b)}>
-                      <i className="fas fa-star" style={{ color: "#f59e0b", marginRight: 4 }} /> Leave a Review
-                    </button>
-                  )}
-                  {reviewed.has(b._id) && (
-                    <span style={{ fontSize: "1.2rem", color: "#16a34a" }}><i className="fas fa-check" style={{ marginRight: 4 }} />Review submitted</span>
-                  )}
-                  {b.service && (
-                    <button className="btn btn-ghost btn-sm" onClick={() => navigate(`/services/${b.service._id}`)}>
-                      View Service
-                    </button>
-                  )}
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                    {b.status === "confirmed" && (
+                      <button
+                        className="btn btn-primary btn-sm"
+                        onClick={() => markComplete(b)}
+                        disabled={completing === b._id}
+                      >
+                        {completing === b._id ? <i className="fas fa-spinner fa-spin" /> : <><i className="fas fa-check" /> Mark as Completed</>}
+                      </button>
+                    )}
+                    {b.status === "completed" && !reviewed.has(b._id) && b.item && (
+                      <button className="btn btn-ghost btn-sm" onClick={() => setReviewFor(b)}>
+                        <i className="fas fa-star" style={{ color: "#f59e0b", marginRight: 4 }} /> Leave a Review
+                      </button>
+                    )}
+                    {reviewed.has(b._id) && (
+                      <span style={{ fontSize: "1.2rem", color: "#16a34a" }}><i className="fas fa-check" style={{ marginRight: 4 }} />Review submitted</span>
+                    )}
+                    {b.itemModel === "Service" && b.item?._id && (
+                      <button className="btn btn-ghost btn-sm" onClick={() => navigate(`/services/${b.item._id}`)}>
+                        View Service
+                      </button>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

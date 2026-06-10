@@ -164,13 +164,15 @@ export const replyToReview = async (req, res) => {
     const review = await Review.findById(reviewId);
     if (!review) return res.status(404).json({ message: "Review not found" });
 
-    // Verify the requester owns the reviewed item
+    // Verify the requester owns the reviewed item — deny if model is unrecognised
     const MODEL_MAP = { Product, Listing, Service };
     const Model = MODEL_MAP[review.refModel];
-    if (Model) {
+    if (!Model) return res.status(400).json({ message: "Invalid review type" });
+
+    if (!req.user.roles?.includes("admin")) {
       const item = await Model.findById(review.refId).select("seller provider owner").lean();
       const ownerId = (item?.seller || item?.provider || item?.owner)?.toString();
-      if (ownerId !== req.user._id.toString() && !req.user.roles?.includes("admin")) {
+      if (ownerId !== req.user._id.toString()) {
         return res.status(403).json({ message: "Only the seller can reply to this review" });
       }
     }
@@ -179,12 +181,18 @@ export const replyToReview = async (req, res) => {
     review.sellerRepliedAt = new Date();
     await review.save();
 
-    // Notify reviewer that seller replied
+    // Build a sensible deep-link based on what was reviewed
+    const reviewLink = review.refModel === "Product"
+      ? `/products/${review.refId}`
+      : review.refModel === "Service"
+        ? `/services/${review.refId}`
+        : `/hostel/${review.refId}`;
+
     notify(review.author, {
       type: "review",
       title: "Seller replied to your review",
       message: reply.slice(0, 100),
-      link: `/products/${review.refId}`,
+      link: reviewLink,
     }).catch(() => {});
 
     res.json({ success: true, review });

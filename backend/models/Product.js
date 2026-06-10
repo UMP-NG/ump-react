@@ -121,7 +121,7 @@ const productSchema = new mongoose.Schema(
     // ── Price-drop watchers ──────────────────────────────────────────────────────
     priceWatchers: [{
       user:                { type: mongoose.Schema.Types.ObjectId, ref: "User" },
-      priceAtSubscription: { type: Number },
+      priceAtSubscription: { type: Number, min: 0 },
     }],
 
     // Soft-delete: set instead of destroying the document.

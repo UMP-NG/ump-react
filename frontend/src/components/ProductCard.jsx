@@ -89,6 +89,9 @@ export default function ProductCard({ product, variant = "always", onAddToCart }
   const totalStock = (product?.stock || 0) + (Array.isArray(product?.variants) ? product.variants.reduce((s, v) => s + (v.stock || 0), 0) : 0);
   const outOfStock = totalStock <= 0;
   const cls = `product-card${variant === "hover" ? " hover-reveal" : ""}`;
+  const isActiveSale = product?.salePrice != null &&
+    product.salePrice < product.price &&
+    (!product.saleEndsAt || new Date(product.saleEndsAt) > new Date());
 
   return (
     <>
@@ -96,7 +99,7 @@ export default function ProductCard({ product, variant = "always", onAddToCart }
       <div className="product-thumb">
         {outOfStock
           ? <span className="product-tag" style={{ background: "#6b7280" }}>Out of Stock</span>
-          : product.salePrice != null && product.salePrice < product.price
+          : isActiveSale
             ? <span className="product-tag" style={{ background: "#ef4444" }}>Sale</span>
             : product.tag && <span className="product-tag">{product.tag}</span>}
         <button
@@ -118,7 +121,7 @@ export default function ProductCard({ product, variant = "always", onAddToCart }
       <div className="product-meta">
         <div className="product-name">{product.name}</div>
         <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 4 }}>
-          {product.salePrice != null && product.salePrice < product.price ? (
+          {isActiveSale ? (
             <div style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
               <div className="product-price" style={{ color: "#ef4444" }}>{naira(product.salePrice)}</div>
               <div style={{ fontSize: "1rem", color: "var(--ink-4)", textDecoration: "line-through" }}>{naira(product.price)}</div>

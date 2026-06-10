@@ -109,7 +109,7 @@ function CouponModal({ coupon, onClose, onSave }) {
 export default function Coupons() {
   const [coupons, setCoupons] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [modal, setModal] = useState(null);
+  const [modal, setModal] = useState(false); // false=closed, true=new, coupon obj=edit
   const [deleting, setDeleting] = useState(null);
   const [toggling, setToggling] = useState(null);
 
@@ -143,7 +143,7 @@ export default function Coupons() {
   async function handleToggle(coupon) {
     setToggling(coupon._id);
     try {
-      const res = await apiFetch(`/api/coupons/${coupon._id}`, { method: 'PUT', body: { ...coupon, active: !coupon.active } });
+      const res = await apiFetch(`/api/coupons/${coupon._id}`, { method: 'PUT', body: { active: !coupon.active } });
       setCoupons((prev) => prev.map((c) => c._id === coupon._id ? res.coupon : c));
     } catch { /* ignore */ }
     finally { setToggling(null); }
@@ -153,8 +153,8 @@ export default function Coupons() {
 
   return (
     <>
-      {modal !== undefined && modal !== false && (
-        <CouponModal coupon={modal === true ? null : modal} onClose={() => setModal(null)} onSave={handleSave} />
+      {modal !== false && (
+        <CouponModal coupon={modal === true ? null : modal} onClose={() => setModal(false)} onSave={handleSave} />
       )}
 
       <div className="adm-page-head">

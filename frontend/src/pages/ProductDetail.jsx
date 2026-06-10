@@ -133,6 +133,8 @@ export default function ProductDetail() {
       .finally(() => setQaLoading(false));
   }, [tab, id]);
 
+  useEffect(() => () => clearTimeout(toastTimer.current), []);
+
   async function handleRestockAlert() {
     if (!user) { showToast("Please sign in to get notified"); return; }
     setRestockLoading(true);

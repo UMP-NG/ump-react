@@ -6,8 +6,8 @@ const questionSchema = new mongoose.Schema(
     asker:    { type: mongoose.Schema.Types.ObjectId, ref: "User",    required: true },
     question: { type: String, required: true, trim: true, maxlength: 500 },
     answers: [{
-      user:      { type: mongoose.Schema.Types.ObjectId, ref: "User" },
-      answer:    { type: String, trim: true, maxlength: 1000 },
+      user:      { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true },
+      answer:    { type: String, required: true, trim: true, maxlength: 1000 },
       createdAt: { type: Date, default: Date.now },
     }],
   },

@@ -1418,7 +1418,10 @@ export default function SellerDashboard() {
       showToast(result?.message || "Payout request submitted", "success");
       setPayoutAmount("");
       setKpis((k) => ({ ...k, walletBalance: (k?.walletBalance || 0) - amount }));
-      apiFetch("/api/payouts").then((d) => setPayouts(d.payouts || d || [])).catch(() => {});
+      try {
+        const pData = await apiFetch("/api/payouts");
+        setPayouts(pData.payouts || pData || []);
+      } catch { /* ignore refresh failure */ }
     } catch (err) {
       showToast(err?.message || "Failed to request payout", "error");
     } finally { setPayoutSaving(false); }

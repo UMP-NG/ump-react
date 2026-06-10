@@ -1163,17 +1163,27 @@ export const getAddresses = async (req, res) => {
 
 export const saveAddress = async (req, res) => {
   try {
-    const { label, name, phone, address, city, state, isDefault, _id } = req.body;
+    const { label, name, phone, address, city, state, isDefault } = req.body;
+    // Route param ID (PUT /addresses/:id) takes priority over legacy body _id
+    const addressId = req.params.id || null;
+
+    if (!address?.trim() || !city?.trim()) {
+      return res.status(400).json({ message: "Address and city are required" });
+    }
+
     const user = await User.findById(req.user._id).select("addresses");
 
-    if (_id) {
-      // Update existing
-      const addr = user.addresses.id(_id);
+    if (addressId) {
+      // Update existing by route param
+      const addr = user.addresses.id(addressId);
       if (!addr) return res.status(404).json({ message: "Address not found" });
       Object.assign(addr, { label, name, phone, address, city, state });
-      if (isDefault) user.addresses.forEach((a) => { a.isDefault = a._id.toString() === _id; });
+      if (isDefault) user.addresses.forEach((a) => { a.isDefault = a._id.toString() === addressId; });
     } else {
-      // Add new
+      // Add new (POST /addresses)
+      if (user.addresses.length >= 10) {
+        return res.status(400).json({ message: "Maximum of 10 saved addresses allowed" });
+      }
       if (isDefault) user.addresses.forEach((a) => { a.isDefault = false; });
       user.addresses.push({ label, name, phone, address, city, state, isDefault: !!isDefault });
     }

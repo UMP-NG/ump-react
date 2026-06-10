@@ -493,16 +493,17 @@ export const updateProduct = async (req, res) => {
     const oldEffective = oldSalePrice != null && oldSalePrice < oldPrice ? oldSalePrice : oldPrice;
     if (newEffective < oldEffective && updatedProduct.priceWatchers?.length > 0) {
       const savings = Math.round(((oldEffective - newEffective) / oldEffective) * 100);
-      for (const watcher of updatedProduct.priceWatchers) {
-        if (watcher.priceAtSubscription > newEffective) {
-          notify(watcher.user.toString(), {
-            type: "account",
-            title: "Price drop alert!",
-            message: `${updatedProduct.name} dropped by ${savings}% to ₦${newEffective.toLocaleString("en-NG")}`,
-            link: `/products/${updatedProduct._id}`,
-          }).catch(() => {});
-        }
-      }
+      const notifyPayload = {
+        type: "account",
+        title: "Price drop alert!",
+        message: `${updatedProduct.name} dropped by ${savings}% to ₦${newEffective.toLocaleString("en-NG")}`,
+        link: `/products/${updatedProduct._id}`,
+      };
+      Promise.allSettled(
+        updatedProduct.priceWatchers
+          .filter((w) => w.priceAtSubscription > newEffective)
+          .map((w) => notify(w.user.toString(), notifyPayload))
+      );
     }
 
     res.json({
