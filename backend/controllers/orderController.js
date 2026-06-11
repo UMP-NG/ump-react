@@ -206,13 +206,24 @@ export const checkoutCart = async (req, res) => {
       creditRemaining -= orderCredit;
 
       const sel = deliverySelections[sid] || {};
-      const orderDeliveryMethod = VALID_METHODS.includes(sel.method) ? sel.method : "pickup";
+      const requestedMethod = VALID_METHODS.includes(sel.method) ? sel.method : "pickup";
 
-      // Validate fee server-side: pickup is always free; cap self-delivery at ₦50,000
+      // Fetch seller delivery config once — needed for fee validation and method authorization
+      const sellerDoc = await Seller.findOne({ user: sid }).select("delivery storeName").lean();
+      const dlv = sellerDoc?.delivery || {};
+
+      // Ensure the requested delivery method is actually enabled by the seller
+      const methodEnabled =
+        requestedMethod === "pickup"     ? (dlv.pickup?.enabled !== false) :
+        requestedMethod === "self"       ? !!dlv.selfDelivery?.enabled :
+        requestedMethod === "shipbubble" ? !!dlv.shipbubble?.enabled : false;
+
+      const orderDeliveryMethod = methodEnabled ? requestedMethod : "pickup";
+
+      // Validate fee server-side
       let orderDeliveryFee = 0;
       if (orderDeliveryMethod === "self") {
-        const sellerDoc = await Seller.findOne({ user: sid }).select("delivery.selfDelivery.fee").lean();
-        orderDeliveryFee = Math.max(0, sellerDoc?.delivery?.selfDelivery?.fee || 0);
+        orderDeliveryFee = Math.max(0, dlv.selfDelivery?.fee || 0);
       } else if (orderDeliveryMethod === "shipbubble") {
         // Fee comes from buyer's rate selection — cap at ₦50,000 to prevent manipulation
         orderDeliveryFee = Math.min(Math.max(0, Number(sel.fee) || 0), 50000);

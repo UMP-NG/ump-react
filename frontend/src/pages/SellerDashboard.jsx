@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { naira } from "../components/ProductCard";
 import { apiFetch } from "../utils/api";
@@ -1104,6 +1104,9 @@ export default function SellerDashboard() {
   };
   const [deliveryConfig, setDeliveryConfig] = useState(DEFAULT_DELIVERY_CONFIG);
   const [deliveryConfigSaving, setDeliveryConfigSaving] = useState(false);
+  const [deliveryConfigured, setDeliveryConfigured] = useState(true); // assume true until profile loads
+  const [deliveryModalDismissed, setDeliveryModalDismissed] = useState(false);
+  const deliveryCardRef = useRef(null);
 
   // Promote
   const [adCampaigns, setAdCampaigns] = useState([]);
@@ -1174,14 +1177,17 @@ export default function SellerDashboard() {
         if (dash.profile.notificationPreferences) {
           setDashNotifs((n) => ({ ...n, ...dash.profile.notificationPreferences }));
         }
-        if (dash.profile.delivery) {
+        const dlv = dash.profile.delivery;
+        const hasDelivery = dlv && (dlv.pickup?.enabled || dlv.selfDelivery?.enabled || dlv.shipbubble?.enabled);
+        setDeliveryConfigured(!!hasDelivery);
+        if (dlv) {
           setDeliveryConfig((prev) => ({
-            pickup:       { ...prev.pickup,       ...(dash.profile.delivery.pickup       || {}) },
-            selfDelivery: { ...prev.selfDelivery, ...(dash.profile.delivery.selfDelivery || {}) },
+            pickup:       { ...prev.pickup,       ...(dlv.pickup       || {}) },
+            selfDelivery: { ...prev.selfDelivery, ...(dlv.selfDelivery || {}) },
             shipbubble:   {
               ...prev.shipbubble,
-              ...(dash.profile.delivery.shipbubble || {}),
-              pickupAddress: { ...prev.shipbubble.pickupAddress, ...(dash.profile.delivery.shipbubble?.pickupAddress || {}) },
+              ...(dlv.shipbubble || {}),
+              pickupAddress: { ...prev.shipbubble.pickupAddress, ...(dlv.shipbubble?.pickupAddress || {}) },
             },
           }));
         }
@@ -1397,6 +1403,7 @@ export default function SellerDashboard() {
     setDeliveryConfigSaving(true);
     try {
       await apiFetch("/api/sellers/delivery", { method: "PUT", body: deliveryConfig });
+      setDeliveryConfigured(true);
       showToast("Delivery settings saved", "success");
     } catch (err) {
       showToast(err?.message || "Failed to save delivery settings", "error");
@@ -1539,6 +1546,38 @@ export default function SellerDashboard() {
       )}
 
       <Alerts orders={orders} products={products} kpis={kpis} setTab={setTab} />
+
+      {/* ── Delivery setup required banner ── */}
+      {!loading && !deliveryConfigured && tab !== "Settings" && (
+        <div style={{
+          marginBottom: 16, padding: "14px 16px", borderRadius: "var(--r-md)",
+          background: "linear-gradient(135deg, rgba(249,115,22,.12) 0%, rgba(234,88,12,.08) 100%)",
+          border: "1.5px solid rgba(249,115,22,.4)",
+          display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap",
+        }}>
+          <div style={{ width: 40, height: 40, borderRadius: "50%", background: "rgba(249,115,22,.15)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <i className="fas fa-truck" style={{ color: "var(--accent)", fontSize: "1.6rem" }} />
+          </div>
+          <div style={{ flex: 1, minWidth: 200 }}>
+            <div style={{ fontWeight: 800, fontSize: "1.4rem", color: "var(--ink-1)", marginBottom: 2 }}>
+              Set up your delivery options
+            </div>
+            <div style={{ fontSize: "1.2rem", color: "var(--ink-2)", lineHeight: 1.5 }}>
+              Buyers can't checkout from your store until you configure at least one delivery method — pickup, self-delivery, or courier.
+            </div>
+          </div>
+          <button
+            className="btn btn-primary btn-sm"
+            style={{ flexShrink: 0 }}
+            onClick={() => {
+              setTab("Settings");
+              setTimeout(() => deliveryCardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 120);
+            }}
+          >
+            <i className="fas fa-gear" style={{ marginRight: 6 }} />Set up delivery
+          </button>
+        </div>
+      )}
 
       {/* ── Dashboard Home ── */}
       {tab === "Home" && (
@@ -2530,8 +2569,13 @@ export default function SellerDashboard() {
           </div>
 
           {/* Delivery Configuration */}
-          <div className="card" style={{ padding: 20, marginBottom: 16 }}>
+          <div ref={deliveryCardRef} className="card" style={{ padding: 20, marginBottom: 16, scrollMarginTop: 16, outline: !deliveryConfigured ? "2px solid var(--accent)" : "none", outlineOffset: 2 }}>
             <h3 style={{ margin: "0 0 4px", fontSize: "1.6rem", fontWeight: 700 }}><i className="fas fa-truck" style={{ marginRight: 8, color: "var(--accent)" }} />Delivery Options</h3>
+            {!deliveryConfigured && (
+              <div style={{ marginBottom: 12, padding: "8px 12px", background: "rgba(249,115,22,.08)", border: "1px solid rgba(249,115,22,.3)", borderRadius: "var(--r-md)", fontSize: "1.2rem", color: "var(--accent)", fontWeight: 600 }}>
+                <i className="fas fa-circle-exclamation" style={{ marginRight: 6 }} />Required — configure at least one method so buyers can check out from your store.
+              </div>
+            )}
             <p style={{ margin: "0 0 16px", fontSize: "1.2rem", color: "var(--ink-3)" }}>Configure how buyers can receive their orders. At least one method must be enabled.</p>
 
             {/* Pickup */}
@@ -2705,6 +2749,40 @@ export default function SellerDashboard() {
           onConfirm={handleStoreCropConfirm}
           onCancel={() => { setStoreCropSrc(null); setStoreCropTarget(null); }}
         />
+      )}
+
+      {/* Delivery setup modal — fires on load if not configured */}
+      {!loading && !deliveryConfigured && !deliveryModalDismissed && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.65)", zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+          <div className="card" style={{ maxWidth: 420, width: "100%", padding: 28, textAlign: "center", position: "relative" }}>
+            <div style={{ width: 64, height: 64, borderRadius: "50%", background: "rgba(249,115,22,.12)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px" }}>
+              <i className="fas fa-truck" style={{ fontSize: "2.4rem", color: "var(--accent)" }} />
+            </div>
+            <h2 style={{ margin: "0 0 8px", fontSize: "1.9rem", fontWeight: 900 }}>Set up delivery first</h2>
+            <p style={{ margin: "0 0 20px", fontSize: "1.3rem", color: "var(--ink-2)", lineHeight: 1.6 }}>
+              Buyers <strong>can't check out</strong> from your store until you configure at least one delivery option — pickup, self-delivery, or courier.
+            </p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <button
+                className="btn btn-primary"
+                onClick={() => {
+                  setDeliveryModalDismissed(true);
+                  setTab("Settings");
+                  setTimeout(() => deliveryCardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 150);
+                }}
+              >
+                <i className="fas fa-gear" style={{ marginRight: 8 }} />Set up delivery now
+              </button>
+              <button
+                className="btn btn-ghost"
+                style={{ fontSize: "1.2rem", color: "var(--ink-3)" }}
+                onClick={() => setDeliveryModalDismissed(true)}
+              >
+                Remind me later
+              </button>
+            </div>
+          </div>
+        </div>
       )}
       <FloatingChat />
       <div className="seller-dash">
