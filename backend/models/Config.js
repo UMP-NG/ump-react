@@ -50,6 +50,11 @@ const configSchema = new mongoose.Schema(
         annual:  { price: { type: Number, default: 25000 }, label: { type: String, default: "Annual" }, badge: { type: String, default: "Save 31%" } },
       },
     },
+    adPlans: {
+      "3days":  { price: { type: Number, default: 1500 }, label: { type: String, default: "Starter"  } },
+      "7days":  { price: { type: Number, default: 3000 }, label: { type: String, default: "Standard" } },
+      "14days": { price: { type: Number, default: 5500 }, label: { type: String, default: "Premium"  } },
+    },
     events: [
       {
         title:      { type: String, trim: true },

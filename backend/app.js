@@ -84,6 +84,8 @@ import { errorHandler } from "./middleware/errorHandler.js";
 import uploadRoute from "./routes/uploadRoute.js";
 import couponRoutes from "./routes/couponRoutes.js";
 import questionRoutes from "./routes/questionRoutes.js";
+import adRoutes       from "./routes/adRoutes.js";
+import deliveryRoutes from "./routes/deliveryRoutes.js";
 
 const app = express();
 const __filename = fileURLToPath(import.meta.url);
@@ -324,6 +326,8 @@ app.use("/api/upload", uploadRoute);
 app.use("/api/negotiations", negotiationRoutes);
 app.use("/api/coupons",     couponRoutes);
 app.use("/api/questions",   questionRoutes);
+app.use("/api/ads",         adRoutes);
+app.use("/api/delivery",    deliveryRoutes);
 
 // ── Health check ─────────────────────────────────────────────────────────────
 // Used by Render's health-check pings and uptime monitors.

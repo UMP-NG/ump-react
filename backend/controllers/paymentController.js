@@ -11,6 +11,7 @@ import { confirmAllOrders } from "../utils/confirmOrders.js";
 import logger from "../utils/logger.js";
 import { encrypt, decrypt, mask } from "../utils/fieldEncryption.js";
 import { notify } from "../utils/notify.js";
+import { activateAdCampaign } from "./adController.js";
 
 // ─── Subscription helpers ─────────────────────────────────────────────────────
 // Prices come from the Config document so admins can edit them without a deploy
@@ -475,13 +476,21 @@ export const paystackWebhook = async (req, res) => {
           { reference: data.reference },
           { $set: { status: "success", paidAt: new Date(), metadata: data } }
         );
-        // Route to subscription activation or order confirmation based on payment type
+        // Route to the correct post-payment handler based on payment type
         if (payment.metadata?.subscriptionPlan) {
           await activateSubscription(payment);
           audit("WEBHOOK_SUBSCRIPTION_ACTIVATED", {
             entity: "Payment", entityId: payment._id,
             amount: data.amount / 100,
             meta: { reference: data.reference, plan: payment.metadata.subscriptionPlan, type: payment.metadata.subscriptionType },
+            req,
+          });
+        } else if (payment.metadata?.type === "ad") {
+          await activateAdCampaign(payment);
+          audit("WEBHOOK_AD_ACTIVATED", {
+            entity: "Payment", entityId: payment._id,
+            amount: data.amount / 100,
+            meta: { reference: data.reference, plan: payment.metadata.adPlan, productId: payment.metadata.productId },
             req,
           });
         } else {

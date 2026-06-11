@@ -9,7 +9,6 @@ import Negotiation from "../models/Negotiation.js";
 import Config from "../models/Config.js";
 import PDFDocument from "pdfkit";
 import cloudinary from "../config/cloudinary.js";
-import axios from "axios";
 import { audit } from "../utils/auditLog.js";
 import { notify } from "../utils/notify.js";
 import logger from "../utils/logger.js";
@@ -125,12 +124,10 @@ export const checkoutCart = async (req, res) => {
       return res.status(400).json({ message: "Cart is empty" });
     }
 
-    let { paymentMethod, shippingAddress, deliveryMethod, blackboxFee, dropoffArea, creditToUse } = req.body;
-    deliveryMethod = deliveryMethod === "delivery" ? "delivery" : "pickup";
-    blackboxFee = deliveryMethod === "delivery" ? Math.max(0, Number(blackboxFee) || 0) : 0;
-    if (deliveryMethod === "delivery" && blackboxFee === 0) {
-      return res.status(400).json({ message: "Please select a delivery rate from the BlackBox widget before checking out." });
-    }
+    let { paymentMethod, shippingAddress, deliverySelections, creditToUse } = req.body;
+    // deliverySelections: { [sellerId]: { method: "pickup"|"self"|"shipbubble", fee: number } }
+    deliverySelections = deliverySelections || {};
+    const VALID_METHODS = ["pickup", "self", "shipbubble"];
     paymentMethod = paymentMethod?.toLowerCase().trim();
 
     const PAYMENT_MAP = {
@@ -208,20 +205,22 @@ export const checkoutCart = async (req, res) => {
         : Math.min(Math.round((subtotal / cartTotal) * creditApplied), creditRemaining);
       creditRemaining -= orderCredit;
 
+      const sel = deliverySelections[sid] || {};
+      const orderDeliveryMethod = VALID_METHODS.includes(sel.method) ? sel.method : "pickup";
+      const orderDeliveryFee    = Math.max(0, Number(sel.fee) || 0);
+
       const order = new Order({
         buyer: userId,
         seller: new mongoose.Types.ObjectId(sid),
         items: orderItems,
         subtotal,
         serviceCharge,
-        deliveryFee: 0,
-        totalAmount: Math.max(0, subtotal + serviceCharge - orderCredit),
+        deliveryFee: orderDeliveryMethod === "pickup" ? 0 : orderDeliveryFee,
+        totalAmount: Math.max(0, subtotal + serviceCharge + (orderDeliveryMethod === "pickup" ? 0 : orderDeliveryFee) - orderCredit),
         creditUsed: orderCredit,
         shippingAddress: shippingAddress || {},
         paymentMethod,
-        deliveryMethod,
-        blackboxFee: isFirstOrder ? blackboxFee : 0,
-        dropoffArea: dropoffArea || "",
+        deliveryMethod: orderDeliveryMethod,
         status: "pending",
         deliveryCode: generateDeliveryCode(),
       });
@@ -400,9 +399,8 @@ export const updateOrderStatus = async (req, res) => {
     if (order.status === "partial" && status !== "cancelled")
       return res.status(400).json({ message: "Partial delivery in progress — use the delivery code to confirm remaining items" });
 
-    // Fix #2: delivery orders must be completed via the buyer's delivery code,
-    // not by the seller directly marking them as completed
-    if (status === "completed" && order.deliveryMethod === "delivery" && !order.deliveryCodeUsed)
+    // Non-pickup orders must be completed via the buyer's delivery code
+    if (status === "completed" && order.deliveryMethod !== "pickup" && !order.deliveryCodeUsed)
       return res.status(400).json({ message: "Delivery orders must be completed by the buyer confirming the delivery code — use the 'Confirm delivery' flow instead." });
 
     // Fix #11: prevent double-crediting if escrow was already released
@@ -928,88 +926,10 @@ export const getCurrentOrder = async (req, res) => {
   }
 };
 
-// POST /api/orders/:orderId/book-dispatch
-// Called by SELLER — books a BlackBox delivery ride for this order.
-export const bookDispatch = async (req, res) => {
-  try {
-    const order = await Order.findById(req.params.orderId).populate("items.product", "name");
-    if (!order) return res.status(404).json({ message: "Order not found" });
-
-    if (order.deliveryMethod !== "delivery")
-      return res.status(400).json({ message: "This order is for pickup — no dispatch needed" });
-
-    if (order.paymentStatus !== "paid")
-      return res.status(400).json({ message: "Cannot book dispatch — payment not confirmed" });
-
-    if (order.blackboxTrackingId)
-      return res.status(400).json({ message: "Dispatch already booked", trackingId: order.blackboxTrackingId });
-
-    // Confirm the requesting user owns this order (admins bypass this check)
-    const isAdmin = req.user.roles?.includes("admin");
-    if (!isAdmin) {
-      const uid         = req.user._id.toString();
-      const directMatch = order.seller?.toString() === uid;
-      const itemMatch   = order.items.some((i) => i.product?.seller?.toString() === uid);
-      if (!directMatch && !itemMatch) {
-        return res.status(403).json({ message: "Not authorised" });
-      }
-    }
-
-    const packageDescription = order.items
-      .map((i) => `${i.product?.name || "Item"} ×${i.quantity}`)
-      .join(", ");
-
-    const bbxRes = await axios.post(
-      "https://app.blackboxng.com/api/public/import-delivery",
-      {
-        platform: "ump",
-        platform_order_id: order._id.toString(),
-        recipient_name: order.shippingAddress?.name || "",
-        recipient_phone: order.shippingAddress?.phone || "",
-        dropoff_area: order.dropoffArea || "Yaba",
-        dropoff_address: order.shippingAddress?.address || "",
-        package_description: packageDescription,
-        payment_method: "sender_pays",
-        is_express: false,
-      },
-      {
-        headers: { Authorization: `Bearer ${process.env.BLACKBOX_API_KEY}`, "Content-Type": "application/json" },
-        timeout: 15000,
-      }
-    );
-
-    const trackingId = bbxRes.data?.tracking_id || bbxRes.data?.data?.tracking_id;
-    if (!trackingId) {
-      return res.status(502).json({ message: "BlackBox did not return a tracking ID — dispatch may still have been created. Contact support." });
-    }
-
-    // Save tracking ID first; if save fails, return the tracking ID so it's not lost
-    order.blackboxTrackingId = trackingId;
-    order.status = "shipped";
-    try {
-      await order.save();
-    } catch (saveErr) {
-      logger.error("bookDispatch: API succeeded but DB save failed", saveErr.message);
-      return res.status(207).json({
-        success: false,
-        trackingId,
-        message: "Dispatch was booked with BlackBox but we failed to save it. Please record this tracking ID and contact support.",
-      });
-    }
-
-    notify(order.buyer, {
-      type: "order",
-      title: "Your order is on the way!",
-      message: `Your order is being dispatched. BlackBox tracking ID: ${trackingId}`,
-      link: "/orders",
-    });
-
-    return res.json({ success: true, trackingId, message: "Dispatch booked successfully" });
-  } catch (err) {
-    logger.error("bookDispatch error:", err.response?.data || err.message);
-    return res.status(500).json({ message: err.response?.data?.message || "Failed to book dispatch" });
-  }
-};
+// Dispatch booking moved to POST /api/delivery/book/:orderId (deliveryController.js)
+// This stub is kept so existing route files don't break during migration.
+export const bookDispatch = async (_req, res) =>
+  res.status(410).json({ message: "Use POST /api/delivery/book/:orderId instead" });
 
 export const confirmTransfer = async (req, res) => {
   try {

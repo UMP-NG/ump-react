@@ -32,7 +32,8 @@ const NAV_GROUPS = [
     { id: 'analytics', path: '/admin/analytics', icon: 'fa-chart-line', name: 'Analytics' },
     { id: 'broadcast', path: '/admin/broadcast', icon: 'fa-bullhorn',   name: 'Notifications' },
     { id: 'config',    path: '/admin/config',    icon: 'fa-sliders',    name: 'Site Configuration' },
-    { id: 'coupons',   path: '/admin/coupons',   icon: 'fa-ticket',     name: 'Coupons' },
+    { id: 'coupons',   path: '/admin/coupons',   icon: 'fa-ticket',        name: 'Coupons' },
+    { id: 'ads',       path: '/admin/ads',       icon: 'fa-rectangle-ad',  name: 'Ad Campaigns' },
     { id: 'admins',    path: '/admin/admins',    icon: 'fa-user-shield', name: 'Admin Accounts' },
   ]},
 ];

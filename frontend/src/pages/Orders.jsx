@@ -418,13 +418,36 @@ export default function Orders() {
                   <div style={{ borderTop: "1px solid var(--line)", padding: 14 }}>
                     <OrderTimeline status={o.status} />
 
-                    {/* Tracking number */}
-                    {o.trackingNumber && (
-                      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: "var(--r-md)", background: "rgba(59,130,246,.07)", border: "1px solid rgba(59,130,246,.2)", marginBottom: 12 }}>
-                        <i className="fas fa-truck" style={{ color: "#3b82f6", fontSize: "1.4rem", flexShrink: 0 }} />
+                    {/* Delivery method info */}
+                    {o.deliveryMethod && (
+                      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: "var(--r-md)", background: "var(--surface)", border: "1px solid var(--line)", marginBottom: 12 }}>
+                        <i className={`fas ${o.deliveryMethod === "pickup" ? "fa-person-walking" : o.deliveryMethod === "self" ? "fa-bicycle" : "fa-truck"}`}
+                          style={{ color: "var(--accent)", fontSize: "1.4rem", flexShrink: 0 }} />
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontWeight: 700, fontSize: "1.2rem" }}>
+                            {o.deliveryMethod === "pickup" ? "Self Pickup" : o.deliveryMethod === "self" ? "Seller Delivery" : "Courier Delivery"}
+                          </div>
+                          {o.deliveryFee > 0 && (
+                            <div style={{ fontSize: "1.15rem", color: "var(--ink-3)" }}>Fee: ₦{Number(o.deliveryFee).toLocaleString()}</div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Shipbubble tracking */}
+                    {o.deliveryMethod === "shipbubble" && o.shipbubble?.trackingNumber && (
+                      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: "var(--r-md)", background: "rgba(139,92,246,.07)", border: "1px solid rgba(139,92,246,.2)", marginBottom: 12 }}>
+                        <i className="fas fa-truck" style={{ color: "#8b5cf6", fontSize: "1.4rem", flexShrink: 0 }} />
                         <div>
-                          <div style={{ fontSize: "1.1rem", color: "var(--ink-3)", fontWeight: 600 }}>TRACKING NUMBER</div>
-                          <div style={{ fontSize: "1.3rem", fontWeight: 700, color: "#1d4ed8" }}>{o.trackingNumber}</div>
+                          <div style={{ fontSize: "1.1rem", color: "var(--ink-3)", fontWeight: 600 }}>TRACKING</div>
+                          <div style={{ fontSize: "1.3rem", fontWeight: 700, color: "#6d28d9" }}>
+                            {o.shipbubble.courierName && <>{o.shipbubble.courierName} · </>}{o.shipbubble.trackingNumber}
+                          </div>
+                          {o.shipbubble.trackingUrl && (
+                            <a href={o.shipbubble.trackingUrl} target="_blank" rel="noreferrer" style={{ fontSize: "1.15rem", color: "#8b5cf6" }}>
+                              <i className="fas fa-arrow-up-right-from-square" style={{ marginRight: 4 }} />Track shipment
+                            </a>
+                          )}
                         </div>
                       </div>
                     )}
@@ -437,17 +460,6 @@ export default function Orders() {
                           <div style={{ fontSize: "1.2rem", fontWeight: 700, color: "#1d4ed8" }}>Payment held in escrow</div>
                           <div style={{ fontSize: "1.1rem", color: "var(--ink-3)" }}>Funds are secure with UMP and will be released to the seller once your order is delivered.</div>
                         </div>
-                      </div>
-                    )}
-
-                    {/* Delivery fee — buyer pays rider directly via transfer */}
-                    {o.deliveryMethod === "delivery" && o.blackboxFee > 0 && (
-                      <div style={{ margin: "0 0 12px", padding: "12px 16px", borderRadius: "var(--r-md)", background: "rgba(245,158,11,.08)", border: "1px solid rgba(245,158,11,.3)", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: "1.2rem", color: "#92400e" }}>
-                          <i className="fas fa-motorcycle" style={{ flexShrink: 0 }} />
-                          <span>Pay dispatch rider via transfer</span>
-                        </div>
-                        <strong style={{ fontSize: "1.5rem", color: "#b45309", flexShrink: 0 }}>₦{Number(o.blackboxFee).toLocaleString()}</strong>
                       </div>
                     )}
 

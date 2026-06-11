@@ -22,6 +22,7 @@ import Reports from './pages/Reports';
 import Verifications from './pages/Verifications';
 import Placeholder from './pages/Placeholder';
 import Coupons from './pages/Coupons';
+import Ads from './pages/Ads';
 
 export default function AdminRoutes() {
   return (
@@ -48,6 +49,7 @@ export default function AdminRoutes() {
           <Route path="config"     element={<Config />} />
           <Route path="admins"     element={<Admins />} />
           <Route path="coupons"    element={<Coupons />} />
+          <Route path="ads"        element={<Ads />} />
         </Route>
       </Route>
     </Routes>

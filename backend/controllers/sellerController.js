@@ -226,6 +226,34 @@ export const incrementSellerView = async (req, res) => {
 
 // Seller closes their own store — deletes products, services, and Seller profile,
 // removes the "seller" role, but keeps the user account intact.
+// PUT /api/sellers/delivery — seller saves their delivery configuration
+export const saveDeliveryConfig = async (req, res) => {
+  try {
+    const { pickup, selfDelivery, shipbubble } = req.body;
+
+    const anyEnabled = pickup?.enabled || selfDelivery?.enabled || shipbubble?.enabled;
+    if (!anyEnabled)
+      return res.status(400).json({ message: "At least one delivery method must be enabled" });
+
+    const update = {};
+    if (pickup       !== undefined) update["delivery.pickup"]       = pickup;
+    if (selfDelivery !== undefined) update["delivery.selfDelivery"] = selfDelivery;
+    if (shipbubble   !== undefined) update["delivery.shipbubble"]   = shipbubble;
+
+    const seller = await Seller.findOneAndUpdate(
+      { user: req.user._id },
+      { $set: update },
+      { new: true }
+    );
+    if (!seller) return res.status(404).json({ message: "Seller profile not found" });
+
+    res.json({ success: true, delivery: seller.delivery });
+  } catch (err) {
+    logger.error("saveDeliveryConfig:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
 export const closeStore = async (req, res) => {
   try {
     const userId = req.user._id;

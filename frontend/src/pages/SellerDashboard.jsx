@@ -16,9 +16,16 @@ const NAV = [
   { id: "Products",   icon: "boxes-stacked",   label: "Products" },
   { id: "Apartments", icon: "building",        label: "Apartments" },
   { id: "Messages",   icon: "message",         label: "Messages",   action: "navigate" },
+  { id: "Promote",    icon: "rectangle-ad",    label: "Promote Products" },
   { id: "Payouts",    icon: "wallet",          label: "Payouts" },
   { id: "Settings",   icon: "gear",            label: "Settings" },
 ];
+
+const AD_PLAN_DESCS = {
+  "3days":  "Great for a quick boost",
+  "7days":  "Best value for most sellers",
+  "14days": "Maximum visibility for two weeks",
+};
 
 // ─── Sidebar ──────────────────────────────────────────────────────────────────
 function Sidebar({ tab, setTab, navigate, profile, user, unreadMessages }) {
@@ -1090,6 +1097,25 @@ export default function SellerDashboard() {
   const [notifSaving, setNotifSaving] = useState(false);
   const [dashPolicy, setDashPolicy] = useState({ returnPolicy: "", fulfillmentTime: "" });
   const [policySaving, setPolicySaving] = useState(false);
+  const DEFAULT_DELIVERY_CONFIG = {
+    pickup:       { enabled: true,  instructions: "" },
+    selfDelivery: { enabled: false, fee: 0, coverage: "", estimatedDays: "1–3 days" },
+    shipbubble:   { enabled: false, pickupAddress: { name: "", phone: "", email: "", street: "", city: "", state: "" } },
+  };
+  const [deliveryConfig, setDeliveryConfig] = useState(DEFAULT_DELIVERY_CONFIG);
+  const [deliveryConfigSaving, setDeliveryConfigSaving] = useState(false);
+
+  // Promote
+  const [adCampaigns, setAdCampaigns] = useState([]);
+  const [adCampaignsLoaded, setAdCampaignsLoaded] = useState(false);
+  const [adProductId, setAdProductId] = useState("");
+  const [adPlan, setAdPlan] = useState("7days");
+  const [adLoading, setAdLoading] = useState(false);
+  const [adPlans, setAdPlans] = useState([
+    { key: "3days",  label: "Starter",  days: 3,  price: 1500 },
+    { key: "7days",  label: "Standard", days: 7,  price: 3000 },
+    { key: "14days", label: "Premium",  days: 14, price: 5500 },
+  ]);
 
   // Payouts
   const [bankForm, setBankForm] = useState({ bankName: "", bankCode: "", accountNumber: "", accountName: "" });
@@ -1148,6 +1174,17 @@ export default function SellerDashboard() {
         if (dash.profile.notificationPreferences) {
           setDashNotifs((n) => ({ ...n, ...dash.profile.notificationPreferences }));
         }
+        if (dash.profile.delivery) {
+          setDeliveryConfig((prev) => ({
+            pickup:       { ...prev.pickup,       ...(dash.profile.delivery.pickup       || {}) },
+            selfDelivery: { ...prev.selfDelivery, ...(dash.profile.delivery.selfDelivery || {}) },
+            shipbubble:   {
+              ...prev.shipbubble,
+              ...(dash.profile.delivery.shipbubble || {}),
+              pickupAddress: { ...prev.shipbubble.pickupAddress, ...(dash.profile.delivery.shipbubble?.pickupAddress || {}) },
+            },
+          }));
+        }
       }
       if (bankDets?.accountDetails) {
         setBankForm((f) => ({ ...f, ...bankDets.accountDetails }));
@@ -1172,6 +1209,18 @@ export default function SellerDashboard() {
       .then((d) => setBanks(d.banks || []))
       .catch(() => {});
   }, [tab, banks.length]);
+
+  // ── Load ad campaigns + plans when Promote tab opens ────────────────────────
+  useEffect(() => {
+    if (tab !== "Promote" || adCampaignsLoaded) return;
+    setAdCampaignsLoaded(true);
+    apiFetch("/api/ads/my")
+      .then((d) => setAdCampaigns(d.campaigns || []))
+      .catch(() => {});
+    apiFetch("/api/ads/plans")
+      .then((d) => { if (d.plans?.length) setAdPlans(d.plans); })
+      .catch(() => {});
+  }, [tab, adCampaignsLoaded]);
 
   // ── Load listings when Apartments tab opens ──────────────────────────────────
   useEffect(() => {
@@ -1342,6 +1391,18 @@ export default function SellerDashboard() {
     } finally { setNotifSaving(false); }
   }
 
+  async function saveDeliverySettings() {
+    const anyEnabled = deliveryConfig.pickup.enabled || deliveryConfig.selfDelivery.enabled || deliveryConfig.shipbubble.enabled;
+    if (!anyEnabled) { showToast("Enable at least one delivery method", "error"); return; }
+    setDeliveryConfigSaving(true);
+    try {
+      await apiFetch("/api/sellers/delivery", { method: "PUT", body: deliveryConfig });
+      showToast("Delivery settings saved", "success");
+    } catch (err) {
+      showToast(err?.message || "Failed to save delivery settings", "error");
+    } finally { setDeliveryConfigSaving(false); }
+  }
+
   // ── Payout handlers ────────────────────────────────────────────────────────────
   async function verifyAccount() {
     if (!bankForm.accountNumber || !bankForm.bankCode) { showToast("Select a bank and enter account number first", "error"); return; }
@@ -1405,6 +1466,19 @@ export default function SellerDashboard() {
       showToast(err?.message || "Invalid delivery code", "error");
     } finally {
       setDeliverySubmitting((s) => { const n = { ...s }; delete n[orderId]; return n; });
+    }
+  }
+
+  async function startAdCampaign() {
+    if (!adProductId) { showToast("Please select a product to promote", "error"); return; }
+    setAdLoading(true);
+    try {
+      const res = await apiFetch("/api/ads/initiate", { method: "POST", body: { productId: adProductId, plan: adPlan } });
+      if (res.authorization_url) window.location.href = res.authorization_url;
+    } catch (err) {
+      showToast(err?.message || "Failed to start ad payment", "error");
+    } finally {
+      setAdLoading(false);
     }
   }
 
@@ -1678,9 +1752,11 @@ export default function SellerDashboard() {
                 const status = o.status || "pending";
                 const isDone = status === "completed" || status === "cancelled";
 
+                const dm = o.deliveryMethod || "pickup";
+                const SHIPPED_LABEL = dm === "pickup" ? "Ready for Pickup" : dm === "self" ? "Out for Delivery" : null; // null = Shipbubble handles its own button
                 const NEXT_ACTION = {
                   pending:   { label: "Confirm Order", newStatus: "confirmed", color: "var(--accent)" },
-                  confirmed: { label: "Mark Shipped",  newStatus: "shipped",   color: "#3b82f6" },
+                  confirmed: SHIPPED_LABEL ? { label: SHIPPED_LABEL, newStatus: "shipped", color: "#3b82f6" } : null,
                   // shipped → completion handled via delivery code input above
                 };
                 const next = NEXT_ACTION[status];
@@ -1692,6 +1768,14 @@ export default function SellerDashboard() {
                         <div style={{ fontFamily: "var(--font-mono)", fontSize: "1.2rem", color: "var(--ink-3)" }}>#{oid.slice(-10)}</div>
                         <div style={{ fontWeight: 700, fontSize: "1.4rem", marginTop: 2 }}>{o.buyer?.name || "Buyer"}</div>
                         <div style={{ fontSize: "1.15rem", color: "var(--ink-3)", marginTop: 1 }}>{new Date(o.createdAt || Date.now()).toLocaleDateString()}</div>
+                        <div style={{ marginTop: 6, display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 8px", borderRadius: 99, fontSize: "1.1rem", fontWeight: 600,
+                          background: dm === "pickup" ? "rgba(249,115,22,.1)" : dm === "self" ? "rgba(59,130,246,.1)" : "rgba(139,92,246,.1)",
+                          color: dm === "pickup" ? "var(--accent)" : dm === "self" ? "#3b82f6" : "#8b5cf6",
+                        }}>
+                          <i className={`fas ${dm === "pickup" ? "fa-person-walking" : dm === "self" ? "fa-bicycle" : "fa-truck"}`} />
+                          {dm === "pickup" ? "Self Pickup" : dm === "self" ? "Seller Delivery" : "Courier"}
+                          {o.deliveryFee > 0 && <span style={{ opacity: .7 }}>· {naira(o.deliveryFee)}</span>}
+                        </div>
                       </div>
                       <div style={{ textAlign: "right" }}>
                         <div style={{ fontSize: "1.8rem", fontWeight: 900, color: "var(--accent)" }}>{naira(o.totalAmount || o.total || 0)}</div>
@@ -1714,10 +1798,28 @@ export default function SellerDashboard() {
                           </span>
                         </div>
                       ))}
-                      {o.shippingAddress?.address && (
-                        <div style={{ marginTop: 8, fontSize: "1.15rem", color: "var(--ink-3)" }}>
-                          <i className="fas fa-location-dot" style={{ marginRight: 4 }} />
-                          {o.shippingAddress.address}{o.shippingAddress.city ? `, ${o.shippingAddress.city}` : ""}
+
+                      {/* Delivery context — shown per method */}
+                      {dm === "pickup" && !isDone && (
+                        <div style={{ marginTop: 10, padding: "8px 10px", background: "rgba(249,115,22,.07)", border: "1px solid rgba(249,115,22,.2)", borderRadius: "var(--r-md)", fontSize: "1.2rem", color: "var(--ink-2)" }}>
+                          <i className="fas fa-person-walking" style={{ color: "var(--accent)", marginRight: 6 }} />
+                          Buyer will come to you — have the order ready for collection.
+                          {o.buyer?.phone && <div style={{ marginTop: 3, color: "var(--ink-3)" }}>Contact: {o.buyer.phone}</div>}
+                        </div>
+                      )}
+                      {dm === "self" && (o.shippingAddress?.address || o.shippingAddress?.city) && !isDone && (
+                        <div style={{ marginTop: 10, padding: "8px 10px", background: "rgba(59,130,246,.07)", border: "1px solid rgba(59,130,246,.2)", borderRadius: "var(--r-md)", fontSize: "1.2rem", color: "var(--ink-2)" }}>
+                          <i className="fas fa-location-dot" style={{ color: "#3b82f6", marginRight: 6 }} />
+                          <strong>Deliver to:</strong>{" "}
+                          {[o.shippingAddress.address, o.shippingAddress.city, o.shippingAddress.state].filter(Boolean).join(", ")}
+                          {o.buyer?.phone && <div style={{ marginTop: 3, color: "var(--ink-3)" }}>Buyer contact: {o.buyer.phone}</div>}
+                        </div>
+                      )}
+                      {dm === "shipbubble" && (o.shippingAddress?.address || o.shippingAddress?.city) && !isDone && (
+                        <div style={{ marginTop: 10, padding: "8px 10px", background: "rgba(139,92,246,.07)", border: "1px solid rgba(139,92,246,.2)", borderRadius: "var(--r-md)", fontSize: "1.2rem", color: "var(--ink-2)" }}>
+                          <i className="fas fa-truck" style={{ color: "#8b5cf6", marginRight: 6 }} />
+                          <strong>Courier delivers to:</strong>{" "}
+                          {[o.shippingAddress.address, o.shippingAddress.city, o.shippingAddress.state].filter(Boolean).join(", ")}
                         </div>
                       )}
                     </div>
@@ -1728,43 +1830,51 @@ export default function SellerDashboard() {
                       </div>
                     )}
 
-                    {/* BlackBox dispatch — shown for delivery orders that are confirmed and not yet shipped */}
-                    {o.deliveryMethod === "delivery" && status === "confirmed" && o.paymentStatus === "paid" && (
-                      <div style={{ padding: "14px 16px", borderBottom: "1px solid var(--line)", background: "rgba(249,115,22,.04)" }}>
-                        {o.blackboxTrackingId ? (
-                          <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: "1.25rem" }}>
-                            <i className="fas fa-motorcycle" style={{ color: "var(--accent)" }} />
-                            <span>Dispatch booked · <strong>Tracking: {o.blackboxTrackingId}</strong></span>
+                    {/* Shipbubble courier booking — shown for shipbubble orders confirmed but not yet shipped */}
+                    {o.deliveryMethod === "shipbubble" && status === "confirmed" && o.paymentStatus === "paid" && (
+                      <div style={{ padding: "14px 16px", borderBottom: "1px solid var(--line)", background: "rgba(139,92,246,.04)" }}>
+                        {o.shipbubble?.shipmentId ? (
+                          <div style={{ fontSize: "1.25rem" }}>
+                            <i className="fas fa-truck" style={{ color: "#8b5cf6", marginRight: 8 }} />
+                            Courier booked
+                            {o.shipbubble.courierName && <> · <strong>{o.shipbubble.courierName}</strong></>}
+                            {o.shipbubble.trackingNumber && <> · Tracking: <strong>{o.shipbubble.trackingNumber}</strong></>}
+                            {o.shipbubble.trackingUrl && (
+                              <a href={o.shipbubble.trackingUrl} target="_blank" rel="noreferrer" style={{ marginLeft: 8, color: "#8b5cf6", fontSize: "1.15rem" }}>
+                                <i className="fas fa-arrow-up-right-from-square" /> Track
+                              </a>
+                            )}
                           </div>
                         ) : (
                           <>
                             <div style={{ fontSize: "1.25rem", fontWeight: 700, marginBottom: 6 }}>
-                              <i className="fas fa-motorcycle" style={{ marginRight: 6, color: "var(--accent)" }} />Ready to dispatch?
+                              <i className="fas fa-truck" style={{ marginRight: 6, color: "#8b5cf6" }} />Ready to ship?
                             </div>
                             <div style={{ fontSize: "1.15rem", color: "var(--ink-3)", marginBottom: 10 }}>
-                              When the order is packed and ready, book a BlackBox rider to deliver it.
+                              Pack the order, then book a courier pickup. The courier will collect from your address.
                             </div>
                             <button
-                              className="btn btn-primary btn-sm"
+                              className="btn btn-sm"
+                              style={{ background: "#8b5cf6", color: "#fff", border: "none" }}
                               disabled={deliverySubmitting[oid]}
                               onClick={async () => {
                                 setDeliverySubmitting((s) => ({ ...s, [oid]: true }));
                                 try {
-                                  const d = await apiFetch(`/api/orders/${oid}/book-dispatch`, { method: "POST" });
+                                  const d = await apiFetch(`/api/delivery/book/${oid}`, { method: "POST" });
                                   setOrders((prev) => prev.map((ord) =>
                                     (ord._id || ord.id) === oid
-                                      ? { ...ord, blackboxTrackingId: d.trackingId, status: "shipped" }
+                                      ? { ...ord, status: "shipped", shipbubble: d.shipbubble }
                                       : ord
                                   ));
-                                  showToast(`Dispatch booked! Tracking: ${d.trackingId}`, "success");
+                                  showToast(`Courier booked! Tracking: ${d.shipbubble?.trackingNumber || "—"}`, "success");
                                 } catch (err) {
-                                  showToast(err?.message || "Failed to book dispatch", "error");
+                                  showToast(err?.message || "Failed to book courier", "error");
                                 } finally {
                                   setDeliverySubmitting((s) => { const n = { ...s }; delete n[oid]; return n; });
                                 }
                               }}
                             >
-                              {deliverySubmitting[oid] ? <i className="fas fa-spinner fa-spin" /> : <><i className="fas fa-motorcycle" /> Book BlackBox Dispatch</>}
+                              {deliverySubmitting[oid] ? <i className="fas fa-spinner fa-spin" /> : <><i className="fas fa-truck" /> Book Courier Pickup</>}
                             </button>
                           </>
                         )}
@@ -2214,6 +2324,103 @@ export default function SellerDashboard() {
         </div>
       )}
 
+      {/* ── Promote tab ── */}
+      {tab === "Promote" && (
+        <div>
+          <h2 style={{ fontSize: "2rem", fontWeight: 800, margin: "0 0 4px" }}>Promote a Product</h2>
+          <p style={{ margin: "0 0 24px", color: "var(--ink-3)", fontSize: "1.3rem" }}>
+            Advertised products appear in the featured slider on the homepage and get a "Sale" badge boost.
+          </p>
+
+          {/* Plan picker */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12, marginBottom: 24 }}>
+            {adPlans.map((p) => (
+              <button
+                key={p.key}
+                onClick={() => setAdPlan(p.key)}
+                style={{
+                  padding: "16px 12px", borderRadius: "var(--r-lg)", border: `2px solid ${adPlan === p.key ? "var(--accent)" : "var(--line)"}`,
+                  background: adPlan === p.key ? "rgba(249,115,22,.06)" : "var(--white)",
+                  cursor: "pointer", textAlign: "left", transition: "border-color .15s",
+                }}
+              >
+                <div style={{ fontWeight: 800, fontSize: "1.5rem", color: adPlan === p.key ? "var(--accent)" : "var(--ink-1)" }}>{p.label}</div>
+                <div style={{ fontSize: "1.2rem", color: "var(--ink-3)", margin: "2px 0 8px" }}>{p.days} days · {AD_PLAN_DESCS[p.key] || ""}</div>
+                <div style={{ fontSize: "1.7rem", fontWeight: 900, color: adPlan === p.key ? "var(--accent)" : "var(--ink-1)" }}>
+                  ₦{p.price.toLocaleString()}
+                </div>
+              </button>
+            ))}
+          </div>
+
+          {/* Product selector */}
+          <div className="card" style={{ padding: 20, marginBottom: 20 }}>
+            <label style={{ display: "block", fontSize: "1.3rem", fontWeight: 700, marginBottom: 8 }}>
+              Select product to promote
+            </label>
+            <select
+              className="input"
+              value={adProductId}
+              onChange={(e) => setAdProductId(e.target.value)}
+              style={{ marginBottom: 16 }}
+            >
+              <option value="">— choose a product —</option>
+              {products.map((p) => (
+                <option key={p._id} value={p._id}>
+                  {p.name} {p.isAdvertised ? "⚡ (currently promoted)" : ""}
+                </option>
+              ))}
+            </select>
+
+            <div style={{ padding: "10px 14px", borderRadius: "var(--r-md)", background: "rgba(59,130,246,.06)", border: "1px solid rgba(59,130,246,.2)", fontSize: "1.2rem", color: "#1d4ed8", marginBottom: 16 }}>
+              <i className="fas fa-circle-info" style={{ marginRight: 6 }} />
+              Payment is processed securely via Paystack. Your ad goes live immediately after payment.
+            </div>
+
+            <button
+              className="btn btn-primary"
+              onClick={startAdCampaign}
+              disabled={adLoading || !adProductId}
+            >
+              {adLoading
+                ? <><i className="fas fa-spinner fa-spin" /> Processing…</>
+                : <><i className="fas fa-rocket" /> Pay ₦{(adPlans.find(p => p.key === adPlan)?.price || 0).toLocaleString()} &amp; Launch Ad</>}
+            </button>
+          </div>
+
+          {/* Campaign history */}
+          <h3 style={{ fontSize: "1.6rem", fontWeight: 800, margin: "0 0 12px" }}>My Campaigns</h3>
+          {adCampaigns.length === 0 ? (
+            <div className="card" style={{ padding: 24, textAlign: "center", color: "var(--ink-3)", fontSize: "1.3rem" }}>
+              No campaigns yet. Promote your first product above!
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {adCampaigns.map((c) => {
+                const statusColor = { active: "#16a34a", expired: "#6b7280", cancelled: "#dc2626", pending_payment: "#d97706" }[c.status] || "#6b7280";
+                return (
+                  <div key={c._id} className="card" style={{ padding: "14px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: "1.3rem" }}>{c.product?.name || "Product"}</div>
+                      <div style={{ fontSize: "1.15rem", color: "var(--ink-3)", marginTop: 2 }}>
+                        {adPlans.find(p => p.key === c.plan)?.label || c.plan}
+                        {c.endsAt && ` · ends ${new Date(c.endsAt).toLocaleDateString("en-NG")}`}
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <span style={{ fontSize: "1.25rem", fontWeight: 700, color: "#111" }}>₦{c.amount?.toLocaleString()}</span>
+                      <span style={{ padding: "3px 10px", borderRadius: 20, fontSize: "1.1rem", fontWeight: 700, background: `${statusColor}18`, color: statusColor }}>
+                        {c.status.replace("_", " ")}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* ── Settings tab ── */}
       {tab === "Settings" && (
         <div>
@@ -2319,6 +2526,109 @@ export default function SellerDashboard() {
             </div>
             <button className="btn btn-primary btn-sm" disabled={storeSaving || storeAvatarUploading || storeBannerUploading} onClick={saveStoreProfile}>
               {storeSaving ? <i className="fas fa-spinner fa-spin" /> : <><i className="fas fa-save" /> Save Store Profile</>}
+            </button>
+          </div>
+
+          {/* Delivery Configuration */}
+          <div className="card" style={{ padding: 20, marginBottom: 16 }}>
+            <h3 style={{ margin: "0 0 4px", fontSize: "1.6rem", fontWeight: 700 }}><i className="fas fa-truck" style={{ marginRight: 8, color: "var(--accent)" }} />Delivery Options</h3>
+            <p style={{ margin: "0 0 16px", fontSize: "1.2rem", color: "var(--ink-3)" }}>Configure how buyers can receive their orders. At least one method must be enabled.</p>
+
+            {/* Pickup */}
+            <div style={{ padding: "14px 0", borderBottom: "1px solid var(--line)" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: "1.3rem" }}><i className="fas fa-person-walking" style={{ color: "var(--accent)", marginRight: 6 }} />Self Pickup</div>
+                  <div style={{ fontSize: "1.15rem", color: "var(--ink-3)" }}>Buyer collects from your store / pickup point</div>
+                </div>
+                <label className="partner-toggle" style={{ flexShrink: 0, marginLeft: 16 }}>
+                  <input type="checkbox" checked={deliveryConfig.pickup.enabled} onChange={(e) => setDeliveryConfig((c) => ({ ...c, pickup: { ...c.pickup, enabled: e.target.checked } }))} />
+                  <span className="partner-toggle-track" />
+                </label>
+              </div>
+              {deliveryConfig.pickup.enabled && (
+                <div>
+                  <label style={lSty}>Pickup Instructions (optional)</label>
+                  <input style={iSty} placeholder="e.g. Block C Shop 12, Moremi Rd — ask for John" value={deliveryConfig.pickup.instructions} onChange={(e) => setDeliveryConfig((c) => ({ ...c, pickup: { ...c.pickup, instructions: e.target.value } }))} />
+                </div>
+              )}
+            </div>
+
+            {/* Self-delivery */}
+            <div style={{ padding: "14px 0", borderBottom: "1px solid var(--line)" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: "1.3rem" }}><i className="fas fa-bicycle" style={{ color: "#3b82f6", marginRight: 6 }} />I Deliver Myself</div>
+                  <div style={{ fontSize: "1.15rem", color: "var(--ink-3)" }}>You personally deliver to buyers — set your fee and coverage area</div>
+                </div>
+                <label className="partner-toggle" style={{ flexShrink: 0, marginLeft: 16 }}>
+                  <input type="checkbox" checked={deliveryConfig.selfDelivery.enabled} onChange={(e) => setDeliveryConfig((c) => ({ ...c, selfDelivery: { ...c.selfDelivery, enabled: e.target.checked } }))} />
+                  <span className="partner-toggle-track" />
+                </label>
+              </div>
+              {deliveryConfig.selfDelivery.enabled && (
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                  <div>
+                    <label style={lSty}>Delivery Fee (₦)</label>
+                    <input style={iSty} type="number" min="0" placeholder="e.g. 500" value={deliveryConfig.selfDelivery.fee} onChange={(e) => setDeliveryConfig((c) => ({ ...c, selfDelivery: { ...c.selfDelivery, fee: Number(e.target.value) } }))} />
+                  </div>
+                  <div>
+                    <label style={lSty}>Estimated Time</label>
+                    <input style={iSty} placeholder="e.g. 1–3 days" value={deliveryConfig.selfDelivery.estimatedDays} onChange={(e) => setDeliveryConfig((c) => ({ ...c, selfDelivery: { ...c.selfDelivery, estimatedDays: e.target.value } }))} />
+                  </div>
+                  <div style={{ gridColumn: "1/-1" }}>
+                    <label style={lSty}>Coverage Area</label>
+                    <input style={iSty} placeholder="e.g. Yaba, Akoka, Bariga" value={deliveryConfig.selfDelivery.coverage} onChange={(e) => setDeliveryConfig((c) => ({ ...c, selfDelivery: { ...c.selfDelivery, coverage: e.target.value } }))} />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Shipbubble courier */}
+            <div style={{ padding: "14px 0 0" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: "1.3rem" }}><i className="fas fa-truck" style={{ color: "#8b5cf6", marginRight: 6 }} />Courier (Shipbubble)</div>
+                  <div style={{ fontSize: "1.15rem", color: "var(--ink-3)" }}>Live courier rates via DHL, GIG, Kwik — buyer picks &amp; pays the courier fee</div>
+                </div>
+                <label className="partner-toggle" style={{ flexShrink: 0, marginLeft: 16 }}>
+                  <input type="checkbox" checked={deliveryConfig.shipbubble.enabled} onChange={(e) => setDeliveryConfig((c) => ({ ...c, shipbubble: { ...c.shipbubble, enabled: e.target.checked } }))} />
+                  <span className="partner-toggle-track" />
+                </label>
+              </div>
+              {deliveryConfig.shipbubble.enabled && (
+                <div>
+                  <div style={{ marginBottom: 8, padding: "8px 10px", background: "rgba(139,92,246,.07)", border: "1px solid rgba(139,92,246,.2)", borderRadius: "var(--r-md)", fontSize: "1.15rem", color: "var(--ink-2)" }}>
+                    <i className="fas fa-circle-info" style={{ color: "#8b5cf6", marginRight: 6 }} />Enter your pickup address so couriers know where to collect orders
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                    <div>
+                      <label style={lSty}>Contact Name</label>
+                      <input style={iSty} placeholder="Full name" value={deliveryConfig.shipbubble.pickupAddress.name} onChange={(e) => setDeliveryConfig((c) => ({ ...c, shipbubble: { ...c.shipbubble, pickupAddress: { ...c.shipbubble.pickupAddress, name: e.target.value } } }))} />
+                    </div>
+                    <div>
+                      <label style={lSty}>Phone</label>
+                      <input style={iSty} placeholder="08012345678" value={deliveryConfig.shipbubble.pickupAddress.phone} onChange={(e) => setDeliveryConfig((c) => ({ ...c, shipbubble: { ...c.shipbubble, pickupAddress: { ...c.shipbubble.pickupAddress, phone: e.target.value } } }))} />
+                    </div>
+                    <div style={{ gridColumn: "1/-1" }}>
+                      <label style={lSty}>Street Address</label>
+                      <input style={iSty} placeholder="e.g. 14 University Road, UNILAG" value={deliveryConfig.shipbubble.pickupAddress.street} onChange={(e) => setDeliveryConfig((c) => ({ ...c, shipbubble: { ...c.shipbubble, pickupAddress: { ...c.shipbubble.pickupAddress, street: e.target.value } } }))} />
+                    </div>
+                    <div>
+                      <label style={lSty}>City</label>
+                      <input style={iSty} placeholder="Lagos" value={deliveryConfig.shipbubble.pickupAddress.city} onChange={(e) => setDeliveryConfig((c) => ({ ...c, shipbubble: { ...c.shipbubble, pickupAddress: { ...c.shipbubble.pickupAddress, city: e.target.value } } }))} />
+                    </div>
+                    <div>
+                      <label style={lSty}>State</label>
+                      <input style={iSty} placeholder="Lagos" value={deliveryConfig.shipbubble.pickupAddress.state} onChange={(e) => setDeliveryConfig((c) => ({ ...c, shipbubble: { ...c.shipbubble, pickupAddress: { ...c.shipbubble.pickupAddress, state: e.target.value } } }))} />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <button className="btn btn-primary btn-sm" style={{ marginTop: 16 }} disabled={deliveryConfigSaving} onClick={saveDeliverySettings}>
+              {deliveryConfigSaving ? <i className="fas fa-spinner fa-spin" /> : <><i className="fas fa-save" /> Save Delivery Options</>}
             </button>
           </div>
 

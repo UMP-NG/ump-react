@@ -111,6 +111,10 @@ const productSchema = new mongoose.Schema(
     amenities: [String],
     distance: String,
 
+    // ── Paid ads ────────────────────────────────────────────────────────────────
+    // null = admin-promoted (never expires); Date = paid campaign expiry
+    adEndsAt: { type: Date, default: null },
+
     // ── Flash Sale ──────────────────────────────────────────────────────────────
     salePrice:  { type: Number, default: null, min: [0, "Sale price cannot be negative"] },
     saleEndsAt: { type: Date,   default: null },

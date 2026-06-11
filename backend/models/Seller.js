@@ -57,6 +57,31 @@ const sellerSchema = new mongoose.Schema(
     views: { type: Number, default: 0 },
     address: { type: String, trim: true },
 
+    // ✅ Delivery configuration
+    delivery: {
+      pickup: {
+        enabled:      { type: Boolean, default: true },
+        instructions: { type: String, default: "" },
+      },
+      selfDelivery: {
+        enabled:       { type: Boolean, default: false },
+        fee:           { type: Number, default: 0, min: 0 },
+        coverage:      { type: String, default: "" },
+        estimatedDays: { type: String, default: "1–3 days" },
+      },
+      shipbubble: {
+        enabled: { type: Boolean, default: false },
+        pickupAddress: {
+          name:   { type: String, default: "" },
+          phone:  { type: String, default: "" },
+          email:  { type: String, default: "" },
+          street: { type: String, default: "" },
+          city:   { type: String, default: "" },
+          state:  { type: String, default: "" },
+        },
+      },
+    },
+
     // ✅ Payout system
     bankDetails: {
       bankName: String,

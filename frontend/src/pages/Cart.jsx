@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import Navbar, { useTheme } from "../components/Navbar";
 import Footer from "../components/Footer";
@@ -29,11 +29,13 @@ export default function Cart() {
   const [couponLoading, setCouponLoading] = useState(false);
   const [provider, setProvider] = useState("flutterwave");
   const [showDeliveryConfirm, setShowDeliveryConfirm] = useState(false);
-  const [deliveryMethod, setDeliveryMethod] = useState("pickup"); // "pickup" | "delivery"
-  const [bbxFee, setBbxFee] = useState(0);
-  const [bbxDropoffArea, setBbxDropoffArea] = useState("");
-  const [pickupAddresses, setPickupAddresses] = useState({}); // { userId: { storeName, address } }
-  const bbxRef = useRef(null);
+  // { [sellerId]: { method:"pickup"|"self"|"shipbubble", fee:number, serviceCode:string } }
+  const [deliverySelections, setDeliverySelections] = useState({});
+  // { [sellerId]: { storeName, delivery: { pickup, selfDelivery, shipbubble } } }
+  const [sellerDeliveryConfigs, setSellerDeliveryConfigs] = useState({});
+  // { [sellerId]: { rates:[], loading:bool, error:string } }
+  const [shipbubbleRates, setShipbubbleRates] = useState({});
+  const shipbubbleDebounce = useRef(null);
   const [linkLoading, setLinkLoading] = useState(false);
   const [payLink, setPayLink] = useState("");
   const [showLinkSheet, setShowLinkSheet] = useState(false);
@@ -63,54 +65,66 @@ export default function Cart() {
     return () => window.removeEventListener("pageshow", handlePageShow);
   }, []);
 
-  // Load BlackBox widget script once when delivery method is selected
+  // Load seller delivery configs when entering Step 2
   useEffect(() => {
-    if (deliveryMethod !== "delivery") return;
-    if (!document.getElementById("bbx-script")) {
-      const s = document.createElement("script");
-      s.id = "bbx-script";
-      s.src = "https://app.blackboxng.com/blackbox-delivery.js";
-      s.async = true;
-      document.body.appendChild(s);
-    }
-  }, [deliveryMethod]);
-
-  // Listen for BlackBox rate selection
-  useEffect(() => {
-    const el = bbxRef.current;
-    if (!el) return;
-    const handler = (e) => {
-      setBbxFee(Number(e.detail?.fee) || 0);
-      setBbxDropoffArea(e.detail?.dropoff_area || "");
-    };
-    el.addEventListener("bbx:rate", handler);
-    return () => el.removeEventListener("bbx:rate", handler);
-  }, [deliveryMethod]);
-
-  // Fetch seller pickup addresses when pickup is selected
-  useEffect(() => {
-    if (deliveryMethod !== "pickup" || items.length === 0) return;
+    if (step !== 2 || items.length === 0) return;
     const sellerIds = [...new Set(items.map((it) => {
       const s = it.product?.seller;
-      return typeof s === "object" ? s?._id : s;
+      return (typeof s === "object" ? s?._id : s)?.toString();
     }).filter(Boolean))];
-    if (sellerIds.length === 0) return;
+    if (!sellerIds.length) return;
+
     Promise.all(sellerIds.map((sid) =>
       apiFetch(`/api/sellers/${sid}`).then((d) => {
         const s = d.seller || d;
-        return { userId: sid, storeName: s.storeName || s.name || "Seller", address: s.address || "" };
-      }).catch(() => ({ userId: sid, storeName: "Seller", address: "" }))
+        return { sid, storeName: s.storeName || s.name || "Seller", delivery: s.delivery || {} };
+      }).catch(() => ({ sid, storeName: "Seller", delivery: {} }))
     )).then((results) => {
-      const map = {};
-      results.forEach(({ userId, storeName, address }) => { map[userId] = { storeName, address }; });
-      setPickupAddresses(map);
+      const configs = {};
+      const defaults = {};
+      results.forEach(({ sid, storeName, delivery }) => {
+        configs[sid] = { storeName, delivery };
+        // Default to first enabled method
+        const method = delivery?.pickup?.enabled !== false ? "pickup"
+          : delivery?.selfDelivery?.enabled ? "self"
+          : delivery?.shipbubble?.enabled   ? "shipbubble"
+          : "pickup";
+        const fee = method === "self" ? (delivery?.selfDelivery?.fee || 0) : 0;
+        defaults[sid] = { method, fee, serviceCode: "" };
+      });
+      setSellerDeliveryConfigs(configs);
+      setDeliverySelections((prev) => ({ ...defaults, ...prev }));
     });
-  }, [deliveryMethod, items]);
+  }, [step, items]);
+
+  // Debounced Shipbubble rate fetch when buyer has city+state and a seller has shipbubble selected
+  useEffect(() => {
+    clearTimeout(shipbubbleDebounce.current);
+    if (!delivery.city || !delivery.state) return;
+    const shipbubbleSellers = Object.entries(deliverySelections)
+      .filter(([, sel]) => sel.method === "shipbubble")
+      .map(([sid]) => sid);
+    if (!shipbubbleSellers.length) return;
+
+    shipbubbleDebounce.current = setTimeout(() => {
+      shipbubbleSellers.forEach((sid) => {
+        setShipbubbleRates((prev) => ({ ...prev, [sid]: { ...prev[sid], loading: true, error: "" } }));
+        apiFetch(
+          `/api/delivery/quote?sellerId=${sid}&buyerName=${encodeURIComponent(delivery.name)}&buyerPhone=${encodeURIComponent(delivery.phone)}&buyerStreet=${encodeURIComponent(delivery.street)}&buyerCity=${encodeURIComponent(delivery.city)}&buyerState=${encodeURIComponent(delivery.state)}`
+        )
+          .then((d) => setShipbubbleRates((prev) => ({ ...prev, [sid]: { rates: d.rates || [], loading: false, error: "" } })))
+          .catch((err) => setShipbubbleRates((prev) => ({ ...prev, [sid]: { rates: [], loading: false, error: err?.message || "Failed to load rates" } })));
+      });
+    }, 900);
+
+    return () => clearTimeout(shipbubbleDebounce.current);
+  }, [deliverySelections, delivery.city, delivery.state]); // eslint-disable-line
 
   const sub = items.reduce((s, i) => {
     const unitPrice = i.negotiatedPrice || i.product?.price || i.price || 0;
     return s + unitPrice * (i.quantity || i.qty || 1);
   }, 0);
+  const totalDeliveryFee = Object.values(deliverySelections).reduce((s, sel) => s + (Number(sel?.fee) || 0), 0);
   const creditToApply = applyCredit ? Math.min(creditBalance, sub) : 0;
   const couponDiscount = coupon?.discount || 0;
   const serviceCharge = fees.serviceChargeEnabled
@@ -120,7 +134,7 @@ export default function Cart() {
         return total + Math.min(fees.serviceChargeMax, Math.round(itemTotal * (fees.serviceFee / 100)));
       }, 0)
     : 0;
-  const orderTotal = Math.max(0, sub + serviceCharge - creditToApply - couponDiscount);
+  const orderTotal = Math.max(0, sub + serviceCharge + totalDeliveryFee - creditToApply - couponDiscount);
 
   async function applyPromoCode() {
     if (!promoCode.trim()) return;
@@ -173,10 +187,26 @@ export default function Cart() {
   function goToPayment() {
     const err = validateDelivery();
     if (err) { setStepError(err); return; }
-    if (deliveryMethod === "delivery" && bbxFee === 0) {
-      setStepError("Please select your delivery area above to see the dispatch rate before continuing.");
-      return;
+
+    // Ensure all seller groups have a delivery selection
+    const sellerIds = [...new Set(items.map((it) => {
+      const s = it.product?.seller;
+      return (typeof s === "object" ? s?._id : s)?.toString();
+    }).filter(Boolean))];
+
+    for (const sid of sellerIds) {
+      const sel = deliverySelections[sid];
+      if (!sel) { setStepError("Please select a delivery method for all stores."); return; }
+      if (sel.method === "shipbubble") {
+        const rateData = shipbubbleRates[sid];
+        if (!sel.serviceCode) {
+          if (rateData?.loading) { setStepError("Fetching courier rates — please wait a moment."); return; }
+          setStepError(`Please select a courier for ${sellerDeliveryConfigs[sid]?.storeName || "one of the stores"}.`);
+          return;
+        }
+      }
     }
+
     setStepError("");
     setShowDeliveryConfirm(true);
   }
@@ -215,9 +245,7 @@ export default function Cart() {
             landmark: delivery.landmark,
           },
           notes: delivery.notes,
-          deliveryMethod,
-          blackboxFee: deliveryMethod === "delivery" ? bbxFee : 0,
-          dropoffArea: bbxDropoffArea || "",
+          deliverySelections,
           creditToUse: creditToApply,
           couponId: coupon?.couponId || null,
           couponDiscount,
@@ -374,10 +402,10 @@ export default function Cart() {
                         <span style={{ fontSize: "1.3rem", color: "var(--ink-2)" }}>Subtotal</span>
                         <span style={{ fontSize: "1.3rem", fontWeight: 600 }}>{naira(sub)}</span>
                       </div>
-                      {deliveryMethod === "delivery" && bbxFee > 0 && (
+                      {totalDeliveryFee > 0 && (
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                          <span style={{ fontSize: "1.3rem", color: "var(--ink-2)" }}>Delivery (BlackBox)</span>
-                          <span style={{ fontSize: "1.3rem", fontWeight: 600, color: "#f59e0b" }}>{naira(bbxFee)}<span style={{ fontSize: "1rem", fontWeight: 400, color: "var(--ink-3)" }}> rider</span></span>
+                          <span style={{ fontSize: "1.3rem", color: "var(--ink-2)" }}>Delivery</span>
+                          <span style={{ fontSize: "1.3rem", fontWeight: 600, color: "#f59e0b" }}>{naira(totalDeliveryFee)}</span>
                         </div>
                       )}
                       <div style={{ height: 1, background: "var(--line)", margin: "8px 0" }} />
@@ -486,82 +514,120 @@ export default function Cart() {
                 <textarea className="textarea" value={delivery.notes} onChange={(e) => setDelivery({ ...delivery, notes: e.target.value })} placeholder="Leave at the gate, call on arrival, etc." />
               </div>
 
-              {/* Delivery method */}
-              <div className="card" style={{ padding: 16, marginBottom: 16 }}>
-                <div style={{ fontWeight: 700, fontSize: "1.4rem", marginBottom: 12 }}>How do you want to receive this?</div>
-                <div style={{ display: "flex", gap: 10 }}>
-                  {[
-                    { value: "pickup", icon: "fa-person-walking", label: "Self Pickup", sub: "Collect from the seller directly" },
-                    { value: "delivery", icon: "fa-motorcycle", label: "Doorstep Delivery", sub: "BlackBox dispatch rider" },
-                  ].map((opt) => (
-                    <button
-                      key={opt.value}
-                      type="button"
-                      onClick={() => { setDeliveryMethod(opt.value); if (opt.value === "pickup") setBbxFee(0); }}
-                      style={{
-                        flex: 1, padding: "12px 10px", border: `2px solid ${deliveryMethod === opt.value ? "var(--accent)" : "var(--line)"}`,
-                        borderRadius: "var(--r-md)", background: deliveryMethod === opt.value ? "rgba(249,115,22,.05)" : "var(--paper)",
-                        cursor: "pointer", textAlign: "center", transition: "border-color .15s",
-                      }}
-                    >
-                      <i className={`fas ${opt.icon}`} style={{ fontSize: "1.6rem", color: deliveryMethod === opt.value ? "var(--accent)" : "var(--ink-3)", marginBottom: 6, display: "block" }} />
-                      <div style={{ fontWeight: 700, fontSize: "1.25rem" }}>{opt.label}</div>
-                      <div style={{ fontSize: "1.1rem", color: "var(--ink-3)", marginTop: 2 }}>{opt.sub}</div>
-                    </button>
-                  ))}
-                </div>
+              {/* Per-seller delivery method selection */}
+              {Object.entries(sellerDeliveryConfigs).map(([sid, cfg]) => {
+                const sel = deliverySelections[sid] || { method: "pickup", fee: 0, serviceCode: "" };
+                const d   = cfg.delivery || {};
+                const opts = [
+                  d.pickup?.enabled !== false && { value: "pickup", icon: "fa-person-walking", label: "Pickup", fee: 0, sub: "Collect from seller" },
+                  d.selfDelivery?.enabled && { value: "self", icon: "fa-bicycle", label: "Self-delivery", fee: d.selfDelivery.fee || 0, sub: d.selfDelivery.coverage || d.selfDelivery.estimatedDays || "" },
+                  d.shipbubble?.enabled   && { value: "shipbubble", icon: "fa-truck", label: "Courier", fee: sel.method === "shipbubble" && sel.fee ? sel.fee : null, sub: "Calculated by courier" },
+                ].filter(Boolean);
 
-                {/* Pickup address cards */}
-                {deliveryMethod === "pickup" && Object.keys(pickupAddresses).length > 0 && (
-                  <div style={{ marginTop: 12 }}>
-                    {Object.entries(pickupAddresses).map(([uid, info]) => (
-                      <div key={uid} style={{ marginBottom: 8, padding: "10px 14px", background: "rgba(249,115,22,.06)", border: "1px solid rgba(249,115,22,.25)", borderRadius: "var(--r-md)", display: "flex", gap: 10, alignItems: "flex-start" }}>
-                        <i className="fas fa-location-dot" style={{ color: "var(--accent)", flexShrink: 0, marginTop: 2 }} />
-                        <div>
-                          <div style={{ fontWeight: 700, fontSize: "1.2rem" }}>{info.storeName}</div>
-                          {info.address
-                            ? <div style={{ fontSize: "1.2rem", color: "var(--ink-2)", marginTop: 2 }}>{info.address}</div>
-                            : <div style={{ fontSize: "1.2rem", color: "var(--ink-3)", fontStyle: "italic", marginTop: 2 }}>Address not set — contact seller to arrange pickup</div>}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                if (!opts.length) return null;
 
-                {/* Delivery notice */}
-                {deliveryMethod === "delivery" && (
-                  <div style={{ marginTop: 12, padding: "12px 14px", background: "rgba(245,158,11,.09)", border: "1px solid rgba(245,158,11,.35)", borderRadius: "var(--r-md)", display: "flex", gap: 10, alignItems: "flex-start" }}>
-                    <i className="fas fa-motorcycle" style={{ color: "#f59e0b", flexShrink: 0, marginTop: 2 }} />
-                    <div style={{ fontSize: "1.2rem", color: "var(--ink-2)", lineHeight: 1.55 }}>
-                      The delivery fee is <strong>paid directly to the dispatch rider via transfer</strong> — it is <strong>not</strong> included in your UMP payment.
+                return (
+                  <div key={sid} className="card" style={{ padding: 16, marginBottom: 14 }}>
+                    <div style={{ fontWeight: 700, fontSize: "1.3rem", marginBottom: 10 }}>
+                      <i className="fas fa-store" style={{ color: "var(--accent)", marginRight: 6 }} />{cfg.storeName}
                     </div>
-                  </div>
-                )}
 
-                {/* BlackBox rate widget */}
-                {deliveryMethod === "delivery" && (
-                  <div style={{ marginTop: 14 }}>
-                    <div
-                      ref={bbxRef}
-                      id="blackbox-delivery"
-                      data-pickup-area="Yaba"
-                      data-theme={isDark ? "dark" : "light"}
-                      data-show-express="true"
-                    />
-                    {bbxFee > 0 && (
-                      <div style={{ marginTop: 10, display: "flex", justifyContent: "space-between", padding: "10px 14px", background: "rgba(34,197,94,.07)", border: "1px solid rgba(34,197,94,.25)", borderRadius: "var(--r-md)", fontSize: "1.3rem" }}>
-                        <span style={{ color: "var(--ink-2)" }}><i className="fas fa-motorcycle" style={{ marginRight: 6 }} />Delivery fee</span>
-                        <strong style={{ color: "#16a34a" }}>{naira(bbxFee)}</strong>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                      {opts.map((opt) => (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => {
+                            const fee = opt.value === "self" ? (d.selfDelivery?.fee || 0) : 0;
+                            setDeliverySelections((prev) => ({ ...prev, [sid]: { method: opt.value, fee, serviceCode: "" } }));
+                            if (opt.value !== "shipbubble") {
+                              setShipbubbleRates((prev) => ({ ...prev, [sid]: { rates: [], loading: false, error: "" } }));
+                            }
+                          }}
+                          style={{
+                            flex: "1 1 120px", padding: "10px 10px", textAlign: "center", cursor: "pointer",
+                            border: `2px solid ${sel.method === opt.value ? "var(--accent)" : "var(--line)"}`,
+                            borderRadius: "var(--r-md)", background: sel.method === opt.value ? "rgba(249,115,22,.05)" : "var(--paper)",
+                            transition: "border-color .15s",
+                          }}
+                        >
+                          <i className={`fas ${opt.icon}`} style={{ fontSize: "1.4rem", color: sel.method === opt.value ? "var(--accent)" : "var(--ink-3)", marginBottom: 4, display: "block" }} />
+                          <div style={{ fontWeight: 700, fontSize: "1.2rem" }}>{opt.label}</div>
+                          <div style={{ fontSize: "1.1rem", color: "var(--ink-3)", marginTop: 2 }}>
+                            {opt.value === "shipbubble" && sel.method === "shipbubble" && sel.fee
+                              ? naira(sel.fee)
+                              : opt.fee != null ? (opt.fee === 0 ? "Free" : naira(opt.fee)) : opt.sub}
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Pickup instructions */}
+                    {sel.method === "pickup" && (
+                      <div style={{ marginTop: 10, padding: "10px 12px", background: "rgba(249,115,22,.06)", border: "1px solid rgba(249,115,22,.25)", borderRadius: "var(--r-md)", fontSize: "1.2rem" }}>
+                        <i className="fas fa-location-dot" style={{ color: "var(--accent)", marginRight: 6 }} />
+                        {d.pickup?.instructions
+                          ? d.pickup.instructions
+                          : cfg.delivery?.pickup?.enabled !== false
+                            ? "Contact seller to arrange pickup location."
+                            : ""}
                       </div>
                     )}
-                    {bbxFee === 0 && (
-                      <p style={{ margin: "10px 0 0", fontSize: "1.2rem", color: "var(--ink-3)", textAlign: "center" }}>
-                        <i className="fas fa-circle-info" style={{ marginRight: 5 }} />Select your area above to see the delivery rate
-                      </p>
+
+                    {/* Self-delivery info */}
+                    {sel.method === "self" && d.selfDelivery && (
+                      <div style={{ marginTop: 10, padding: "10px 12px", background: "rgba(59,130,246,.06)", border: "1px solid rgba(59,130,246,.2)", borderRadius: "var(--r-md)", fontSize: "1.2rem", color: "var(--ink-2)" }}>
+                        <i className="fas fa-circle-info" style={{ color: "#3b82f6", marginRight: 6 }} />
+                        Seller delivers · {d.selfDelivery.estimatedDays || "1–3 days"}
+                        {d.selfDelivery.coverage ? ` · ${d.selfDelivery.coverage}` : ""}
+                      </div>
                     )}
+
+                    {/* Shipbubble courier selection */}
+                    {sel.method === "shipbubble" && (() => {
+                      const rateData = shipbubbleRates[sid] || {};
+                      if (rateData.loading) return (
+                        <div style={{ marginTop: 10, textAlign: "center", color: "var(--ink-3)", fontSize: "1.2rem" }}>
+                          <i className="fas fa-spinner fa-spin" style={{ marginRight: 6 }} />Fetching courier rates…
+                        </div>
+                      );
+                      if (rateData.error) return (
+                        <div style={{ marginTop: 10, padding: "10px 12px", background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: "var(--r-md)", fontSize: "1.2rem", color: "#dc2626" }}>
+                          <i className="fas fa-circle-exclamation" style={{ marginRight: 6 }} />{rateData.error} — enter your city & state above to retry
+                        </div>
+                      );
+                      if (!rateData.rates?.length) return (
+                        <div style={{ marginTop: 10, padding: "10px 12px", background: "rgba(245,158,11,.08)", border: "1px solid rgba(245,158,11,.3)", borderRadius: "var(--r-md)", fontSize: "1.2rem", color: "var(--ink-2)" }}>
+                          <i className="fas fa-circle-info" style={{ color: "#f59e0b", marginRight: 6 }} />Enter your city &amp; state above to see courier rates
+                        </div>
+                      );
+                      return (
+                        <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 8 }}>
+                          {rateData.rates.map((r) => (
+                            <button
+                              key={r.serviceCode}
+                              type="button"
+                              onClick={() => setDeliverySelections((prev) => ({ ...prev, [sid]: { method: "shipbubble", fee: r.amount, serviceCode: r.serviceCode } }))}
+                              style={{
+                                display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", cursor: "pointer",
+                                border: `2px solid ${sel.serviceCode === r.serviceCode ? "var(--accent)" : "var(--line)"}`,
+                                borderRadius: "var(--r-md)", background: sel.serviceCode === r.serviceCode ? "rgba(249,115,22,.05)" : "var(--paper)",
+                              }}
+                            >
+                              {r.logoUrl && <img src={r.logoUrl} alt={r.courierName} style={{ width: 28, height: 28, objectFit: "contain", flexShrink: 0 }} />}
+                              <div style={{ flex: 1, textAlign: "left" }}>
+                                <div style={{ fontWeight: 700, fontSize: "1.2rem" }}>{r.courierName}</div>
+                                {r.estimatedDays && <div style={{ fontSize: "1.1rem", color: "var(--ink-3)" }}>{r.estimatedDays}</div>}
+                              </div>
+                              <div style={{ fontWeight: 800, fontSize: "1.3rem", color: "var(--accent)", flexShrink: 0 }}>{naira(r.amount)}</div>
+                            </button>
+                          ))}
+                        </div>
+                      );
+                    })()}
                   </div>
-                )}
-              </div>
+                );
+              })}
 
               {stepError && (
                 <div style={{ marginBottom: 14, padding: "10px 14px", background: "#fef2f2", color: "#dc2626", borderRadius: "var(--r-md)", fontSize: "1.3rem", display: "flex", alignItems: "center", gap: 8 }}>
@@ -714,10 +780,10 @@ export default function Cart() {
                   <span style={{ color: "var(--ink-2)", fontWeight: 600 }}>{naira(serviceCharge)}</span>
                 </div>
               )}
-              {deliveryMethod === "delivery" && bbxFee > 0 && (
+              {totalDeliveryFee > 0 && (
                 <div style={{ display: "flex", justifyContent: "space-between", fontSize: "1.3rem", marginBottom: 4 }}>
-                  <span style={{ color: "var(--ink-3)" }}>Delivery (pay to rider)</span>
-                  <span style={{ color: "#f59e0b" }}>{naira(bbxFee)}</span>
+                  <span style={{ color: "var(--ink-3)" }}>Delivery</span>
+                  <span style={{ color: "#f59e0b" }}>{naira(totalDeliveryFee)}</span>
                 </div>
               )}
               {creditToApply > 0 && (

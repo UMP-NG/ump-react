@@ -607,16 +607,35 @@ export const getRelatedProducts = async (req, res) => {
 
 export const getAdvertisedProducts = async (req, res) => {
   try {
-    // Adjust this to your schema — maybe you use "isAdvertised" or "featured"
-    const advertisedProducts = await Product.find({ isAdvertised: true }).limit(
-      10
-    );
+    // Lazily expire paid campaigns whose time has elapsed before returning results.
+    // Admin-promoted products have adEndsAt: null and are never expired this way.
+    const now = new Date();
+    const expired = await Product.find({
+      isAdvertised: true,
+      adEndsAt: { $ne: null, $lt: now },
+    }).select("_id").lean();
+
+    if (expired.length) {
+      const expiredIds = expired.map((p) => p._id);
+      await Promise.all([
+        Product.updateMany({ _id: { $in: expiredIds } }, { $set: { isAdvertised: false, adEndsAt: null } }),
+        // Dynamic import to avoid circular dependency
+        import("../models/AdCampaign.js").then(({ default: AdCampaign }) =>
+          AdCampaign.updateMany({ product: { $in: expiredIds }, status: "active" }, { $set: { status: "expired" } })
+        ),
+      ]);
+    }
+
+    const advertisedProducts = await Product.find({ isAdvertised: true })
+      .populate("seller", "name avatar")
+      .populate("category", "name")
+      .limit(10)
+      .lean();
+
     res.json(advertisedProducts);
   } catch (error) {
     logger.error("Error fetching advertised products:", error);
-    res
-      .status(500)
-      .json({ message: "Server error while fetching advertised products" });
+    res.status(500).json({ message: "Server error while fetching advertised products" });
   }
 };
 

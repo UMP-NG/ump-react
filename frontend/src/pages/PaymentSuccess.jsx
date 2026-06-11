@@ -21,11 +21,13 @@ export default function PaymentSuccess() {
   const reference        = searchParams.get("reference") || searchParams.get("trxref") || searchParams.get("tx_ref");
   const isFlutterwave    = !!flwTransactionId;
   const isSubscription   = searchParams.get("type") === "subscription";
+  const isAd             = searchParams.get("type") === "ad";
 
   const [status, setStatus]       = useState("verifying");
   const [orders, setOrders]       = useState([]);
   const [subPlan, setSubPlan]     = useState(null);   // "monthly" | "annual"
   const [subType, setSubType]     = useState(null);   // "seller" | "provider"
+  const [adCampaign, setAdCampaign] = useState(null);
   const [countdown, setCountdown] = useState(5);
 
   useEffect(() => {
@@ -41,6 +43,8 @@ export default function PaymentSuccess() {
     let url;
     if (isSubscription && reference) {
       url = `/api/payments/subscription/verify?reference=${encodeURIComponent(reference)}`;
+    } else if (isAd && reference) {
+      url = `/api/ads/verify?reference=${encodeURIComponent(reference)}`;
     } else if (isFlutterwave) {
       url = `/api/payments/flw/verify?transaction_id=${encodeURIComponent(flwTransactionId)}`;
     } else if (reference) {
@@ -59,6 +63,8 @@ export default function PaymentSuccess() {
           if (isSubscription) {
             setSubPlan(d.plan);
             setSubType(d.type);
+          } else if (isAd) {
+            setAdCampaign(d.campaign || null);
           } else if (d.orders?.length) {
             setOrders(d.orders);
           } else {
@@ -82,11 +88,12 @@ export default function PaymentSuccess() {
     if (status !== "success") return;
     const dest = isSubscription
       ? (subType === "provider" ? "/provider-analytics" : "/seller-dashboard")
+      : isAd ? "/seller-dashboard"
       : "/orders";
     if (countdown <= 0) { navigate(dest); return; }
     const t = setTimeout(() => setCountdown((c) => c - 1), 1000);
     return () => clearTimeout(t);
-  }, [status, countdown, navigate, isSubscription, subType]);
+  }, [status, countdown, navigate, isSubscription, subType, isAd]);
 
   if (status === "verifying") {
     return (
@@ -129,6 +136,38 @@ export default function PaymentSuccess() {
         <div style={{ maxWidth: 360, width: "100%" }}>
           <button className="btn btn-primary btn-block btn-lg" onClick={() => navigate("/orders")}>View my orders</button>
           <button className="btn btn-ghost btn-block" style={{ marginTop: 10 }} onClick={() => navigate("/cart")}>Back to cart</button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Ad campaign success ────────────────────────────────────────────────────
+  if (status === "success" && isAd) {
+    return (
+      <div style={{ minHeight: "100vh", background: "var(--paper)", display: "flex", flexDirection: "column", alignItems: "center", padding: "80px 24px 32px", textAlign: "center" }}>
+        <div style={{ width: 96, height: 96, borderRadius: "50%", background: "linear-gradient(135deg,#f97316,#ea580c)", color: "#fff", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: "4rem", marginBottom: 24, boxShadow: "0 20px 40px -12px rgba(249,115,22,.5)" }}>
+          <i className="fas fa-rocket" />
+        </div>
+        <h1 style={{ fontSize: "3rem", fontWeight: 800, letterSpacing: "-0.02em", margin: "0 0 8px" }}>
+          Your ad is live!
+        </h1>
+        {adCampaign?.product?.name && (
+          <p style={{ color: "var(--ink-2)", fontSize: "1.5rem", margin: "0 0 4px", fontWeight: 700 }}>
+            {adCampaign.product.name}
+          </p>
+        )}
+        {adCampaign?.endsAt && (
+          <p style={{ color: "var(--ink-3)", fontSize: "1.3rem", margin: "0 0 6px" }}>
+            Campaign runs until {new Date(adCampaign.endsAt).toLocaleDateString("en-NG", { weekday: "long", day: "numeric", month: "long" })}
+          </p>
+        )}
+        <p style={{ color: "var(--ink-3)", fontSize: "1.2rem", margin: "0 0 32px" }}>
+          Redirecting to your dashboard in {countdown}s…
+        </p>
+        <div style={{ maxWidth: 360, width: "100%" }}>
+          <button className="btn btn-primary btn-block btn-lg" onClick={() => navigate("/seller-dashboard")}>
+            <i className="fas fa-chart-line" /> Go to my dashboard
+          </button>
         </div>
       </div>
     );

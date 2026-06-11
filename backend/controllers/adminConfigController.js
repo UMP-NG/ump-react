@@ -38,8 +38,8 @@ export const getConfig = async (req, res) => {
   try {
     const config = await Config.findOne().lean();
     if (!config) return res.json({ fees: {}, flags: {}, slides: [], logo: {}, subscriptions: {} });
-    const { fees, flags, slides, logo, subscriptions } = config;
-    res.json({ fees, flags, slides, logo, subscriptions: subscriptions || {} });
+    const { fees, flags, slides, logo, subscriptions, adPlans } = config;
+    res.json({ fees, flags, slides, logo, subscriptions: subscriptions || {}, adPlans: adPlans || {} });
   } catch (err) {
     logger.error("getConfig:", err);
     res.status(500).json({ message: "Server error" });
@@ -98,7 +98,7 @@ export const deleteEvent = async (req, res) => {
 
 export const saveConfig = async (req, res) => {
   try {
-    const { fees, flags, slides, logo, subscriptions } = req.body;
+    const { fees, flags, slides, logo, subscriptions, adPlans } = req.body;
 
     if (fees?.serviceChargeMin != null && fees?.serviceChargeMax != null &&
         Number(fees.serviceChargeMin) > Number(fees.serviceChargeMax)) {
@@ -108,6 +108,7 @@ export const saveConfig = async (req, res) => {
     const update = { fees, flags, slides, updatedBy: req.user._id };
     if (logo          !== undefined) update.logo          = logo;
     if (subscriptions !== undefined) update.subscriptions = subscriptions;
+    if (adPlans       !== undefined) update.adPlans       = adPlans;
     await Config.findOneAndUpdate({}, { $set: update }, { upsert: true, new: true, runValidators: true });
     res.json({ success: true });
   } catch (err) {

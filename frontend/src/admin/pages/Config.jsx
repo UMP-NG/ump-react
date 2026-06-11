@@ -7,6 +7,16 @@ const DEFAULT_SUBS = {
   provider: { monthly: { price: 3000, label: 'Monthly' }, annual: { price: 25000, label: 'Annual', badge: 'Save 31%' } },
 };
 
+const AD_PLAN_DEFS = [
+  { key: '3days',  days: 3,  defaultLabel: 'Starter',  defaultPrice: 1500 },
+  { key: '7days',  days: 7,  defaultLabel: 'Standard', defaultPrice: 3000 },
+  { key: '14days', days: 14, defaultLabel: 'Premium',  defaultPrice: 5500 },
+];
+
+const DEFAULT_AD_PLANS = Object.fromEntries(
+  AD_PLAN_DEFS.map(p => [p.key, { price: p.defaultPrice, label: p.defaultLabel }])
+);
+
 const DEFAULT_FLAGS = [
   { key: 'hostelListings',        label: 'Hostel listings',         sub: 'Off-campus rental hub',         on: true },
   { key: 'serviceMarketplace',    label: 'Service marketplace',     sub: 'Peer-to-peer freelance gigs',   on: true },
@@ -34,6 +44,7 @@ export default function Config() {
   const [slides, setSlides] = useState([]);
   const [logo, setLogo] = useState({ url: '', publicId: '' });
   const [subs, setSubs] = useState(DEFAULT_SUBS);
+  const [adPlans, setAdPlans] = useState(DEFAULT_AD_PLANS);
   const [logoUploading, setLogoUploading] = useState(false);
   const logoInputRef = useRef();
   const slideInputRefs = useRef([]);
@@ -70,6 +81,13 @@ export default function Config() {
           seller:   deepMerge(s.seller,   d.subscriptions.seller),
           provider: deepMerge(s.provider, d.subscriptions.provider),
         };
+      });
+      if (d?.adPlans) setAdPlans(prev => {
+        const merged = { ...prev };
+        for (const key of Object.keys(DEFAULT_AD_PLANS)) {
+          if (d.adPlans[key]) merged[key] = { ...prev[key], ...d.adPlans[key] };
+        }
+        return merged;
       });
     }).catch(() => {});
     loadEvents();
@@ -113,7 +131,7 @@ export default function Config() {
             serviceFee, serviceChargeMin, serviceChargeMax,
             platformFee, minPayout,
           },
-          flags: flagsObj, slides, logo, subscriptions: subs,
+          flags: flagsObj, slides, logo, subscriptions: subs, adPlans,
         },
       });
       refreshConfig();
@@ -498,6 +516,41 @@ export default function Config() {
                 </div>
               </div>
             ))}
+          </div>
+        </div>
+
+        {/* ── Ad campaign plans ── */}
+        <div className="adm-card" style={{ gridColumn: '1 / -1' }}>
+          <div className="adm-card-head"><h3>Ad campaign plans</h3></div>
+          <div className="adm-card-body">
+            <div className="adm-form-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
+              {AD_PLAN_DEFS.map(({ key, days }) => (
+                <div key={key} style={{ border: '1px solid var(--adm-line)', borderRadius: 10, padding: 16 }}>
+                  <div style={{ fontWeight: 700, fontSize: '1.3rem', marginBottom: 12 }}>
+                    {adPlans[key]?.label || key}
+                    <span style={{ fontWeight: 400, color: 'var(--ink-3)', marginLeft: 6, fontSize: '1.1rem' }}>· {days} days</span>
+                  </div>
+                  <div className="adm-field" style={{ marginBottom: 10 }}>
+                    <label className="lbl">Label</label>
+                    <input
+                      value={adPlans[key]?.label ?? ''}
+                      onChange={e => setAdPlans(prev => ({ ...prev, [key]: { ...prev[key], label: e.target.value } }))}
+                    />
+                  </div>
+                  <div className="adm-field">
+                    <label className="lbl">Price (₦)</label>
+                    <input
+                      type="number" min="0"
+                      value={adPlans[key]?.price ?? 0}
+                      onChange={e => setAdPlans(prev => ({ ...prev, [key]: { ...prev[key], price: Number(e.target.value) } }))}
+                    />
+                  </div>
+                  <div style={{ marginTop: 8, fontSize: '1.2rem', color: 'var(--ink-3)' }}>
+                    ₦{Number(adPlans[key]?.price || 0).toLocaleString()} / {days} days
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
 
