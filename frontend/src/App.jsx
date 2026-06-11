@@ -130,6 +130,7 @@ function SellerDeliverySetupGate() {
             onClick={() => setDismissed(true)}
           >
             Not now
+          </button>
         </div>
       </div>
     </div>

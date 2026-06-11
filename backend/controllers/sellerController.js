@@ -4,6 +4,7 @@ import Product from "../models/Product.js";
 import Service from "../models/Service.js";
 import PushSub from "../models/PushSub.js";
 import logger from "../utils/logger.js";
+import { notify } from "../utils/notify.js";
 
 export const becomeSeller = async (req, res) => {
   try {
@@ -64,7 +65,23 @@ export const requestSellerVerification = async (req, res) => {
       { new: true }
     );
     if (!seller) return res.status(404).json({ message: "Seller profile not found" });
+
     res.json({ success: true, message: "Subscription request submitted", seller });
+
+    // Fire-and-forget: push notification to all admins
+    const storeName = seller.storeName || req.user.name || "A seller";
+    User.find({ roles: "admin" }, { _id: 1 }).lean()
+      .then((admins) =>
+        Promise.all(admins.map((a) =>
+          notify(a._id, {
+            type:    "system",
+            title:   "Verification request",
+            message: `${storeName} has requested store verification.`,
+            link:    "/admin/sellers",
+          })
+        ))
+      )
+      .catch((err) => logger.error("requestSellerVerification notify admins:", err.message));
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
