@@ -1556,37 +1556,6 @@ export default function SellerDashboard() {
 
       <Alerts orders={orders} products={products} kpis={kpis} setTab={setTab} />
 
-      {/* ── Delivery setup required banner ── */}
-      {!loading && !deliveryConfigured && tab !== "Settings" && (
-        <div style={{
-          marginBottom: 16, padding: "14px 16px", borderRadius: "var(--r-md)",
-          background: "linear-gradient(135deg, rgba(249,115,22,.12) 0%, rgba(234,88,12,.08) 100%)",
-          border: "1.5px solid rgba(249,115,22,.4)",
-          display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap",
-        }}>
-          <div style={{ width: 40, height: 40, borderRadius: "50%", background: "rgba(249,115,22,.15)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-            <i className="fas fa-truck" style={{ color: "var(--accent)", fontSize: "1.6rem" }} />
-          </div>
-          <div style={{ flex: 1, minWidth: 200 }}>
-            <div style={{ fontWeight: 800, fontSize: "1.4rem", color: "var(--ink-1)", marginBottom: 2 }}>
-              Set up your delivery options
-            </div>
-            <div style={{ fontSize: "1.2rem", color: "var(--ink-2)", lineHeight: 1.5 }}>
-              Buyers can't checkout from your store until you configure at least one delivery method — pickup, self-delivery, or courier.
-            </div>
-          </div>
-          <button
-            className="btn btn-primary btn-sm"
-            style={{ flexShrink: 0 }}
-            onClick={() => {
-              setTab("Settings");
-              setTimeout(() => deliveryCardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 120);
-            }}
-          >
-            <i className="fas fa-gear" style={{ marginRight: 6 }} />Set up delivery
-          </button>
-        </div>
-      )}
 
       {/* ── Dashboard Home ── */}
       {tab === "Home" && (

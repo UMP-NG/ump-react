@@ -78,22 +78,21 @@ function PageLoader() {
   );
 }
 
-// Shows once per session whenever a seller hasn't configured any delivery method yet
+// Persistent modal — shows on every page load until the seller configures delivery.
+// Dismissing only hides it for the current page visit; it returns on next load.
 function SellerDeliverySetupGate() {
   const { user } = useUser();
   const location = useLocation();
   const navigate = useNavigate();
   const [show, setShow] = useState(false);
-  const [dismissed, setDismissed] = useState(
-    () => sessionStorage.getItem("deliverySetupDismissed") === "1"
-  );
+  const [dismissed, setDismissed] = useState(false); // resets every mount
 
-  const isSeller  = user?.roles?.includes("seller");
+  const isSeller   = user?.roles?.includes("seller");
   const isAuthPage = ["/login", "/auth", "/forgot-password", "/reset-password"].some(p => location.pathname.startsWith(p));
   const isAdmin    = location.pathname.startsWith("/admin");
 
   useEffect(() => {
-    if (!isSeller || dismissed || isAuthPage || isAdmin) return;
+    if (!isSeller || isAuthPage || isAdmin) return;
     apiFetch("/api/sellers/me")
       .then((d) => {
         const dlv = d?.seller?.delivery;
@@ -103,13 +102,7 @@ function SellerDeliverySetupGate() {
       .catch(() => {});
   }, [isSeller]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  function dismiss() {
-    sessionStorage.setItem("deliverySetupDismissed", "1");
-    setDismissed(true);
-    setShow(false);
-  }
-
-  if (!show) return null;
+  if (!show || dismissed) return null;
 
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.65)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
@@ -125,7 +118,7 @@ function SellerDeliverySetupGate() {
           <button
             className="btn btn-primary"
             onClick={() => {
-              dismiss();
+              setDismissed(true);
               navigate("/seller-dashboard?setup=delivery");
             }}
           >
@@ -134,10 +127,9 @@ function SellerDeliverySetupGate() {
           <button
             className="btn btn-ghost"
             style={{ fontSize: "1.2rem", color: "var(--ink-3)" }}
-            onClick={dismiss}
+            onClick={() => setDismissed(true)}
           >
-            Remind me next time
-          </button>
+            Not now
         </div>
       </div>
     </div>
