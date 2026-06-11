@@ -1,5 +1,5 @@
-import { lazy, Suspense, Component, useEffect } from "react";
-import { Routes, Route, useLocation } from "react-router-dom";
+import { lazy, Suspense, Component, useEffect, useState } from "react";
+import { Routes, Route, useLocation, useNavigate } from "react-router-dom";
 import FloatingChat from "./components/FloatingChat";
 import PrivateRoute from "./components/PrivateRoute";
 import InstallPrompt from "./components/InstallPrompt";
@@ -8,6 +8,7 @@ import NotificationBanner from "./components/NotificationBanner";
 import AdminRoutes from "./admin/index";
 import { AppConfigProvider, useAppConfig } from "./context/AppConfigContext";
 import { useUser } from "./context/UserContext";
+import { apiFetch } from "./utils/api";
 
 // All page components are lazy-loaded so each route only downloads its own
 // JS chunk. This cuts the initial bundle by ~70% for users on slow networks.
@@ -77,6 +78,72 @@ function PageLoader() {
   );
 }
 
+// Shows once per session whenever a seller hasn't configured any delivery method yet
+function SellerDeliverySetupGate() {
+  const { user } = useUser();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const [show, setShow] = useState(false);
+  const [dismissed, setDismissed] = useState(
+    () => sessionStorage.getItem("deliverySetupDismissed") === "1"
+  );
+
+  const isSeller  = user?.roles?.includes("seller");
+  const isAuthPage = ["/login", "/auth", "/forgot-password", "/reset-password"].some(p => location.pathname.startsWith(p));
+  const isAdmin    = location.pathname.startsWith("/admin");
+
+  useEffect(() => {
+    if (!isSeller || dismissed || isAuthPage || isAdmin) return;
+    apiFetch("/api/sellers/me")
+      .then((d) => {
+        const dlv = d?.seller?.delivery;
+        const configured = dlv && (dlv.pickup?.enabled || dlv.selfDelivery?.enabled || dlv.shipbubble?.enabled);
+        if (!configured) setShow(true);
+      })
+      .catch(() => {});
+  }, [isSeller]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function dismiss() {
+    sessionStorage.setItem("deliverySetupDismissed", "1");
+    setDismissed(true);
+    setShow(false);
+  }
+
+  if (!show) return null;
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.65)", zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+      <div className="card" style={{ maxWidth: 420, width: "100%", padding: 28, textAlign: "center" }}>
+        <div style={{ width: 64, height: 64, borderRadius: "50%", background: "rgba(249,115,22,.12)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px" }}>
+          <i className="fas fa-truck" style={{ fontSize: "2.4rem", color: "var(--accent)" }} />
+        </div>
+        <h2 style={{ margin: "0 0 8px", fontSize: "1.9rem", fontWeight: 900 }}>Set up your delivery options</h2>
+        <p style={{ margin: "0 0 20px", fontSize: "1.3rem", color: "var(--ink-2)", lineHeight: 1.6 }}>
+          Buyers <strong>can't check out</strong> from your store until you configure at least one delivery method — pickup, self-delivery, or courier.
+        </p>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <button
+            className="btn btn-primary"
+            onClick={() => {
+              dismiss();
+              navigate("/seller-dashboard?setup=delivery");
+            }}
+          >
+            <i className="fas fa-gear" style={{ marginRight: 8 }} />Set up delivery now
+          </button>
+          <button
+            className="btn btn-ghost"
+            style={{ fontSize: "1.2rem", color: "var(--ink-3)" }}
+            onClick={dismiss}
+          >
+            Remind me next time
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function MaintenanceGate({ children }) {
   const { flags } = useAppConfig();
   const { user } = useUser();
@@ -117,6 +184,7 @@ export default function App() {
     <MaintenanceGate>
     <NotificationBanner />
     <LimitedAccountBanner />
+    <SellerDeliverySetupGate />
     <FloatingChat />
     <InstallPrompt />
     <ChunkErrorBoundary>

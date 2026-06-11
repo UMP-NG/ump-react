@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { naira } from "../components/ProductCard";
 import { apiFetch } from "../utils/api";
 import { useUser } from "../context/UserContext";
@@ -1052,6 +1052,7 @@ function StrengthMeter({ password }) {
 // ─── Main component ───────────────────────────────────────────────────────────
 export default function SellerDashboard() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useUser();
   const showToast = useToast();
   const [tab, setTab] = useState("Home");
@@ -1105,7 +1106,6 @@ export default function SellerDashboard() {
   const [deliveryConfig, setDeliveryConfig] = useState(DEFAULT_DELIVERY_CONFIG);
   const [deliveryConfigSaving, setDeliveryConfigSaving] = useState(false);
   const [deliveryConfigured, setDeliveryConfigured] = useState(true); // assume true until profile loads
-  const [deliveryModalDismissed, setDeliveryModalDismissed] = useState(false);
   const deliveryCardRef = useRef(null);
 
   // Promote
@@ -1207,6 +1207,15 @@ export default function SellerDashboard() {
     if (user && !user.roles?.includes("seller")) { navigate("/partner", { replace: true }); return; }
     if (user?._id) loadDashboard(false);
   }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Handle ?setup=delivery deep-link from the site-wide delivery setup modal ──
+  useEffect(() => {
+    if (searchParams.get("setup") === "delivery") {
+      setTab("Settings");
+      setSearchParams({}, { replace: true }); // clean the URL
+      setTimeout(() => deliveryCardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 200);
+    }
+  }, [searchParams]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Load banks when Payouts tab opens ───────────────────────────────────────
   useEffect(() => {
@@ -2751,39 +2760,6 @@ export default function SellerDashboard() {
         />
       )}
 
-      {/* Delivery setup modal — fires on load if not configured */}
-      {!loading && !deliveryConfigured && !deliveryModalDismissed && (
-        <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.65)", zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
-          <div className="card" style={{ maxWidth: 420, width: "100%", padding: 28, textAlign: "center", position: "relative" }}>
-            <div style={{ width: 64, height: 64, borderRadius: "50%", background: "rgba(249,115,22,.12)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px" }}>
-              <i className="fas fa-truck" style={{ fontSize: "2.4rem", color: "var(--accent)" }} />
-            </div>
-            <h2 style={{ margin: "0 0 8px", fontSize: "1.9rem", fontWeight: 900 }}>Set up delivery first</h2>
-            <p style={{ margin: "0 0 20px", fontSize: "1.3rem", color: "var(--ink-2)", lineHeight: 1.6 }}>
-              Buyers <strong>can't check out</strong> from your store until you configure at least one delivery option — pickup, self-delivery, or courier.
-            </p>
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              <button
-                className="btn btn-primary"
-                onClick={() => {
-                  setDeliveryModalDismissed(true);
-                  setTab("Settings");
-                  setTimeout(() => deliveryCardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 150);
-                }}
-              >
-                <i className="fas fa-gear" style={{ marginRight: 8 }} />Set up delivery now
-              </button>
-              <button
-                className="btn btn-ghost"
-                style={{ fontSize: "1.2rem", color: "var(--ink-3)" }}
-                onClick={() => setDeliveryModalDismissed(true)}
-              >
-                Remind me later
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
       <FloatingChat />
       <div className="seller-dash">
         <Sidebar tab={tab} setTab={setTab} navigate={navigate} profile={profile} user={user} unreadMessages={unreadMessages} />

@@ -60,6 +60,9 @@ export function AppConfigProvider({ children }) {
 
   useEffect(() => {
     refreshConfig();
+    // Poll every 60 s so maintenance mode and flag changes propagate to active sessions
+    const id = setInterval(refreshConfig, 60_000);
+    return () => clearInterval(id);
   }, [refreshConfig]);
 
   return (
