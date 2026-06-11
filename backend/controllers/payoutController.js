@@ -89,13 +89,31 @@ export const requestPayout = async (req, res) => {
     }
 
     const payout = await Payout.create(payoutData);
+
+    // Notify the seller
     notify(userId, {
       type: "payout",
       title: "Payout requested",
       message: `Your payout request of ₦${Number(amount).toLocaleString("en-NG")} has been submitted and is under review.`,
       link: "/seller-dashboard",
     }).catch(() => {});
+
     res.json({ success: true, message: "Payout request submitted — our team will review and process it within 1–2 business days.", payout });
+
+    // Fire-and-forget: push notification to all admins
+    const requesterName = req.user.name || req.user.email || "A seller";
+    User.find({ roles: "admin" }, { _id: 1 }).lean()
+      .then((admins) =>
+        Promise.all(admins.map((a) =>
+          notify(a._id, {
+            type:    "payout",
+            title:   "Payout request",
+            message: `${requesterName} requested a payout of ₦${Number(amount).toLocaleString("en-NG")}.`,
+            link:    "/admin/payouts",
+          })
+        ))
+      )
+      .catch((err) => logger.error("requestPayout notify admins:", err.message));
   } catch (err) {
     logger.error("requestPayout error:", err);
     res.status(500).json({ message: "Payout request failed. Please try again." });

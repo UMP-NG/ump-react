@@ -160,9 +160,8 @@ export default function Payouts() {
                     </td>
                     <td>
                       <div style={{ fontSize: '1.25rem' }}>{p.bankName || '—'}</div>
-                      <div className="mono muted" style={{ fontSize: '1.1rem' }}>
-                        {p.accountNumber ? p.accountNumber.replace(/\d(?=\d{4})/g, '•') : '—'}
-                      </div>
+                      <div className="mono muted" style={{ fontSize: '1.1rem' }}>{p.accountNumber || '—'}</div>
+                      {p.accountName && <div style={{ fontSize: '1.1rem', color: 'var(--ink-3)' }}>{p.accountName}</div>}
                     </td>
                     <td className="amount"><span className="naira"></span>{(p.availableBalance || 0).toLocaleString()}</td>
                     <td className="amount"><span className="naira"></span>{(p.requestedAmount || 0).toLocaleString()}</td>
@@ -245,8 +244,9 @@ function PayoutDrawer({ payout, onClose, onApprove, processing }) {
           <div className="adm-section-h">Bank details</div>
           <div className="adm-kv">
             <span className="k">Bank</span><span className="v">{payout.bankName || '—'}</span>
-            <span className="k">Account</span>
-            <span className="v mono">{payout.accountNumber || '—'}</span>
+            <span className="k">Account name</span><span className="v">{payout.accountName || '—'}</span>
+            <span className="k">Account no.</span>
+            <span className="v mono" style={{ userSelect: 'all', letterSpacing: '0.05em' }}>{payout.accountNumber || '—'}</span>
             <span className="k">Available bal.</span>
             <span className="v"><span className="naira"></span>{(payout.availableBalance || 0).toLocaleString()}</span>
           </div>
