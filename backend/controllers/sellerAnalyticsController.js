@@ -164,10 +164,13 @@ export const getSellerDashboard = async (req, res) => {
           : 100
         : ((thisWeekOrders - lastWeekOrders) / lastWeekOrders) * 100;
 
+    // Never send bankDetails via the dashboard — the encrypted accountNumber would be
+    // exposed as a raw cipher string to the frontend. /api/payouts/details handles masking.
+    const { bankDetails: _bd, ...profileSafe } = seller;
     res.json({
       notifications,
       walletBalance: seller.pendingPayout || 0,
-      profile: seller,
+      profile: profileSafe,
       kpis: {
         totalRevenue,
         inventoryValue,

@@ -1194,10 +1194,6 @@ export default function SellerDashboard() {
       if (bankDets?.accountDetails) {
         setBankForm((f) => ({ ...f, ...bankDets.accountDetails }));
       }
-      if (dash?.profile?.bankDetails) {
-        const bd = dash.profile.bankDetails;
-        setBankForm({ bankName: bd.bankName || "", bankCode: bd.bankCode || "", accountNumber: bd.accountNumber || "", accountName: bd.accountName || "" });
-      }
     }).finally(() => { setLoading(false); setRefreshing(false); });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 

@@ -15,7 +15,7 @@ const configSchema = new mongoose.Schema(
       platformFeeEnabled: { type: Boolean, default: false },
       platformFee:        { type: Number,  default: 5.0, min: 0, max: 100 },   // % of seller subtotal
 
-      minPayout:      { type: Number, default: 100, min: 0 },
+      minPayout:      { type: Number, default: 2000, min: 0 },
       payoutCadence:  { type: String, default: "Daily" },
     },
     flags: {

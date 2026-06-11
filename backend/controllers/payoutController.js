@@ -48,9 +48,8 @@ export const requestPayout = async (req, res) => {
     if (!amount || amount <= 0)
       return res.status(400).json({ message: "Invalid amount" });
 
-    // Fix #17: enforce the platform minimum payout from Config (default ₦2000)
     const config = await Config.findOne().select("fees").lean();
-    const minPayout = config?.fees?.minPayout ?? 100;
+    const minPayout = config?.fees?.minPayout ?? 2000;
     if (amount < minPayout)
       return res.status(400).json({ message: `Minimum payout is ₦${minPayout.toLocaleString("en-NG")}` });
 
