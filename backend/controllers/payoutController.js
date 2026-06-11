@@ -100,20 +100,24 @@ export const requestPayout = async (req, res) => {
 
     res.json({ success: true, message: "Payout request submitted — our team will review and process it within 1–2 business days.", payout });
 
-    // Fire-and-forget: push notification to all admins
+    // Fire-and-forget: push notification to all admins.
+    // Runs after res.json so a notify failure never affects the seller's response.
+    // Promise.allSettled ensures one failing notify doesn't cancel the rest.
     const requesterName = req.user.name || req.user.email || "A seller";
-    User.find({ roles: "admin" }, { _id: 1 }).lean()
-      .then((admins) =>
-        Promise.all(admins.map((a) =>
-          notify(a._id, {
-            type:    "payout",
-            title:   "Payout request",
-            message: `${requesterName} requested a payout of ₦${Number(amount).toLocaleString("en-NG")}.`,
-            link:    "/admin/payouts",
-          })
-        ))
-      )
-      .catch((err) => logger.error("requestPayout notify admins:", err.message));
+    setImmediate(() => {
+      User.find({ roles: "admin" }, { _id: 1 }).lean()
+        .then((admins) =>
+          Promise.allSettled(admins.map((a) =>
+            notify(a._id, {
+              type:    "payout",
+              title:   "Payout request",
+              message: `${requesterName} requested a payout of ₦${Number(amount).toLocaleString("en-NG")}.`,
+              link:    "/admin/payouts",
+            })
+          ))
+        )
+        .catch((err) => logger.error("requestPayout notify admins:", err.message));
+    });
   } catch (err) {
     logger.error("requestPayout error:", err);
     res.status(500).json({ message: "Payout request failed. Please try again." });

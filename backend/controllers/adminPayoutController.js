@@ -36,7 +36,10 @@ export const getAdminPayouts = async (req, res) => {
         seller: { storeName: sDoc?.storeName || p.seller?.name || p.provider?.name || "—", ownerName: p.seller?.name || p.provider?.name || "—" },
         bankName:      acct.bankName    || "—",
         accountName:   acct.accountName || "—",
-        accountNumber: decrypt(acct.accountNumber || ""),
+        accountNumber: (() => {
+          try { return decrypt(acct.accountNumber || "") || "—"; }
+          catch { return "—"; }
+        })(),
         availableBalance: sDoc?.pendingPayout || 0, requestedAmount: p.amount,
         netAmount: Math.floor(p.amount * (1 - PAYOUT_FEE_RATE)),
         status: p.status,
