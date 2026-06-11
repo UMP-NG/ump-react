@@ -1,12 +1,22 @@
 import mongoose from "mongoose";
+import axios from "axios";
 import AdCampaign, { AD_PLANS } from "../models/AdCampaign.js";
 import Config from "../models/Config.js";
 import Product from "../models/Product.js";
 import Payment from "../models/Payment.js";
-import paystack from "../utils/paystack.js";
 import { notify } from "../utils/notify.js";
 import { audit } from "../utils/auditLog.js";
 import logger from "../utils/logger.js";
+
+const FLW_BASE = "https://api.flutterwave.com/v3";
+function flwHeaders() {
+  return { Authorization: `Bearer ${process.env.FLW_SECRET_KEY}` };
+}
+function clientUrl() {
+  return process.env.NODE_ENV === "production"
+    ? process.env.CLIENT_URL || "https://myump.com.ng"
+    : "http://localhost:5173";
+}
 
 async function buildAdPlans() {
   const config = await Config.findOne().select("adPlans").lean();
@@ -64,7 +74,7 @@ export const getAdPlans = async (req, res) => {
   }
 };
 
-// POST /api/ads/initiate — seller picks product + plan, gets Paystack URL
+// POST /api/ads/initiate — seller picks product + plan, gets Flutterwave URL
 export const initiateAdPayment = async (req, res) => {
   try {
     const { productId, plan } = req.body;
@@ -83,30 +93,10 @@ export const initiateAdPayment = async (req, res) => {
 
     const planDef = AD_PLANS[plan];
     const planPrice = await getAdPrice(plan);
-    const reference = `UMP_AD_${Date.now()}_${req.user._id.toString().slice(-6)}`;
-    const clientUrl = process.env.NODE_ENV === "production"
-      ? (process.env.CLIENT_URL || "https://myump.com.ng")
-      : "http://localhost:5173";
+    const txRef = `UMP_AD_${Date.now()}_${req.user._id.toString().slice(-6)}`;
+    const base = clientUrl();
 
-    let paystackRes;
-    try {
-      paystackRes = await paystack.post("/transaction/initialize", {
-        email:        req.user.email,
-        amount:       planPrice * 100,
-        reference,
-        callback_url: `${clientUrl}/payment-success?type=ad`,
-        metadata: {
-          adPlan:    plan,
-          productId: productId.toString(),
-          userId:    req.user._id.toString(),
-        },
-      });
-    } catch (psErr) {
-      logger.error("initiateAdPayment Paystack init:", psErr.response?.data || psErr.message);
-      return res.status(502).json({ message: "Payment provider unavailable — please try again" });
-    }
-
-    // Create campaign only after Paystack succeeds to avoid orphaned records
+    // Create campaign first so we have its ID for metadata
     const campaign = await AdCampaign.create({
       product: productId,
       seller:  req.user._id,
@@ -114,23 +104,62 @@ export const initiateAdPayment = async (req, res) => {
       amount:  planPrice,
     });
 
-    // Patch the reference and campaignId into Paystack metadata now that we have the campaign ID
-    // (Paystack doesn't allow updating metadata post-init, so we store campaignId in Payment)
+    let flwRes;
+    try {
+      flwRes = await axios.post(
+        `${FLW_BASE}/payments`,
+        {
+          tx_ref:       txRef,
+          amount:       planPrice,
+          currency:     "NGN",
+          redirect_url: `${base}/payment-success?type=ad`,
+          customer: {
+            email:       req.user.email,
+            name:        req.user.name || req.user.email,
+            phonenumber: req.user.phone || "",
+          },
+          meta: {
+            adPlan:    plan,
+            productId: productId.toString(),
+            campaignId: campaign._id.toString(),
+            type:      "ad",
+          },
+          customizations: {
+            title:       "UMP — Advertise your product",
+            description: `${planDef.label} ad campaign`,
+            logo:        `${base}/images/ump-apple-touch-icon.png`,
+          },
+        },
+        { headers: flwHeaders() }
+      );
+    } catch (flwErr) {
+      // Roll back the campaign record if Flutterwave fails
+      await AdCampaign.findByIdAndDelete(campaign._id);
+      logger.error("initiateAdPayment Flutterwave init:", flwErr.response?.data || flwErr.message);
+      return res.status(502).json({ message: "Payment provider unavailable — please try again" });
+    }
+
+    const paymentLink = flwRes.data?.data?.link;
+    if (!paymentLink) {
+      await AdCampaign.findByIdAndDelete(campaign._id);
+      return res.status(502).json({ message: "No payment link returned from Flutterwave" });
+    }
+
     await Payment.create({
       user:      req.user._id,
       orders:    [],
-      provider:  "Paystack",
+      provider:  "Flutterwave",
       amount:    planPrice,
-      reference,
+      reference: txRef,
       status:    "pending",
       metadata:  { adPlan: plan, productId: productId.toString(), campaignId: campaign._id.toString(), type: "ad" },
     });
 
     return res.json({
-      success:           true,
-      authorization_url: paystackRes.data.data.authorization_url,
-      reference,
-      campaign:          { _id: campaign._id, plan, amount: planPrice, label: planDef.label, days: planDef.days },
+      success:      true,
+      payment_link: paymentLink,
+      reference:    txRef,
+      campaign:     { _id: campaign._id, plan, amount: planPrice, label: planDef.label, days: planDef.days },
     });
   } catch (err) {
     logger.error("initiateAdPayment:", err.response?.data || err.message);
@@ -138,34 +167,40 @@ export const initiateAdPayment = async (req, res) => {
   }
 };
 
-// GET /api/ads/verify?reference= — called by frontend after Paystack redirect
+// GET /api/ads/verify?transaction_id= — called by frontend after Flutterwave redirect
 export const verifyAdPayment = async (req, res) => {
   try {
-    const { reference } = req.query;
-    if (!reference) return res.status(400).json({ message: "Reference required" });
+    const { transaction_id } = req.query;
+    if (!transaction_id) return res.status(400).json({ message: "transaction_id required" });
 
-    const psRes = await paystack.get(`/transaction/verify/${reference}`);
-    const data  = psRes.data.data;
+    const flwRes = await axios.get(
+      `${FLW_BASE}/transactions/${transaction_id}/verify`,
+      { headers: flwHeaders() }
+    );
+    const data = flwRes.data?.data;
+    if (!data) return res.status(400).json({ message: "Invalid Flutterwave response" });
 
+    // Flutterwave returns the original tx_ref so we can look up the Payment record
     const payment = await Payment.findOneAndUpdate(
-      { reference, status: "pending" },
+      { reference: data.tx_ref, status: "pending" },
       { $set: { status: "processing" } },
       { new: false }
     );
 
     if (!payment) {
-      const existing = await Payment.findOne({ reference });
+      const existing = await Payment.findOne({ reference: data.tx_ref });
       if (!existing) return res.status(404).json({ message: "Payment not found" });
-      const camp = await AdCampaign.findOne({ paymentRef: reference }).populate("product", "name").lean();
+      const camp = await AdCampaign.findOne({ _id: existing.metadata?.campaignId }).populate("product", "name").lean();
       return res.json({ success: true, status: existing.status, plan: existing.metadata?.adPlan, campaign: camp });
     }
 
-    const amountMatch = data.amount === Math.round(payment.amount * 100);
-    const finalStatus = data.status === "success" && amountMatch ? "success" : "failed";
+    // FLW returns amount in naira; payment.amount is also in naira
+    const amountOk = Math.abs(data.amount - payment.amount) <= 1;
+    const finalStatus = data.status === "successful" && amountOk ? "success" : "failed";
 
     await Payment.findOneAndUpdate(
-      { reference },
-      { $set: { status: finalStatus, paidAt: finalStatus === "success" ? new Date() : null } }
+      { reference: data.tx_ref },
+      { $set: { status: finalStatus, paidAt: finalStatus === "success" ? new Date() : null, metadata: { ...payment.metadata, flw: data } } }
     );
 
     if (finalStatus === "success") {
@@ -175,11 +210,10 @@ export const verifyAdPayment = async (req, res) => {
         entity:   "Payment",
         entityId: payment._id,
         amount:   payment.amount,
-        meta:     { reference, plan: payment.metadata?.adPlan, productId: payment.metadata?.productId },
+        meta:     { reference: data.tx_ref, plan: payment.metadata?.adPlan, productId: payment.metadata?.productId, transaction_id },
         req,
       });
     } else {
-      // Revert the campaign to cancelled so seller can try again
       await AdCampaign.findByIdAndUpdate(payment.metadata?.campaignId, { status: "cancelled" });
     }
 

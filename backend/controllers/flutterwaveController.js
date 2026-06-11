@@ -6,10 +6,12 @@ import Order from "../models/Order.js";
 import Seller from "../models/Seller.js";
 import Cart from "../models/Cart.js";
 import Product from "../models/Product.js";
+import User from "../models/User.js";
 import CartPaymentRequest from "../models/CartPaymentRequest.js";
 import Config from "../models/Config.js";
 import { audit } from "../utils/auditLog.js";
 import { confirmAllOrders } from "../utils/confirmOrders.js";
+import { activateAdCampaign } from "./adController.js";
 import { notify } from "../utils/notify.js";
 import logger from "../utils/logger.js";
 
@@ -23,6 +25,34 @@ function clientUrl() {
   return process.env.NODE_ENV === "production"
     ? process.env.CLIENT_URL || "https://myump.com.ng"
     : "http://localhost:5173";
+}
+
+// Shared subscription activation (mirrors paymentController's copy — keeps flutterwaveController self-contained)
+async function activateSubscription(payment) {
+  const { subscriptionPlan: plan, subscriptionType: type } = payment.metadata || {};
+  if (!plan || !type) return;
+  const d = new Date();
+  if (plan === "annual") d.setFullYear(d.getFullYear() + 1);
+  else d.setDate(d.getDate() + 30);
+  const expiresAt = d;
+  if (type === "seller") {
+    await Seller.findOneAndUpdate(
+      { user: payment.user },
+      { isSubscribed: true, subscriptionPlan: plan, subscriptionExpiresAt: expiresAt }
+    );
+  } else if (type === "provider") {
+    await User.findByIdAndUpdate(payment.user, {
+      "serviceProviderInfo.isSubscribed":          true,
+      "serviceProviderInfo.subscriptionPlan":      plan,
+      "serviceProviderInfo.subscriptionExpiresAt": expiresAt,
+    });
+  }
+  notify(payment.user, {
+    type: "account",
+    title: "Subscription activated!",
+    message: `Your ${plan} ${type} subscription is now active.`,
+    link: type === "provider" ? "/provider-dashboard" : "/seller-dashboard",
+  }).catch(() => {});
 }
 
 // ----------------------------
@@ -288,9 +318,25 @@ export const flutterwaveWebhook = async (req, res) => {
           { reference: data.tx_ref },
           { $set: { status: "success", paidAt: new Date(), metadata: data } }
         );
-        // Cart link payment — create orders from the snapshot then notify
+        // Route to the correct post-payment handler based on payment type
         if (payment.metadata?.type === "cart_link" && payment.metadata?.cartPaymentToken) {
           await fulfillCartLinkPayment(payment.metadata.cartPaymentToken, payment.user);
+        } else if (payment.metadata?.subscriptionPlan) {
+          await activateSubscription(payment);
+          audit("WEBHOOK_SUBSCRIPTION_ACTIVATED", {
+            entity: "Payment", entityId: payment._id,
+            amount: data.amount,
+            meta: { reference: data.tx_ref, plan: payment.metadata.subscriptionPlan, type: payment.metadata.subscriptionType },
+            req,
+          });
+        } else if (payment.metadata?.type === "ad") {
+          await activateAdCampaign(payment);
+          audit("WEBHOOK_AD_ACTIVATED", {
+            entity: "Payment", entityId: payment._id,
+            amount: data.amount,
+            meta: { reference: data.tx_ref, plan: payment.metadata.adPlan, productId: payment.metadata.productId },
+            req,
+          });
         } else {
           await confirmAllOrders(payment);
         }

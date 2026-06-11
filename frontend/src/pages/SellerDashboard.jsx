@@ -1490,7 +1490,7 @@ export default function SellerDashboard() {
     setAdLoading(true);
     try {
       const res = await apiFetch("/api/ads/initiate", { method: "POST", body: { productId: adProductId, plan: adPlan } });
-      if (res.authorization_url) window.location.href = res.authorization_url;
+      if (res.payment_link) window.location.href = res.payment_link;
     } catch (err) {
       showToast(err?.message || "Failed to start ad payment", "error");
     } finally {

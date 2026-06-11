@@ -41,11 +41,12 @@ export default function PaymentSuccess() {
     const timer = setTimeout(() => controller.abort(), 15000);
 
     let url;
-    if (isSubscription && reference) {
-      url = `/api/payments/subscription/verify?reference=${encodeURIComponent(reference)}`;
-    } else if (isAd && reference) {
-      url = `/api/ads/verify?reference=${encodeURIComponent(reference)}`;
-    } else if (isFlutterwave) {
+    // Flutterwave always appends transaction_id to the redirect URL for all payment types
+    if (isSubscription && flwTransactionId) {
+      url = `/api/payments/subscription/verify?transaction_id=${encodeURIComponent(flwTransactionId)}`;
+    } else if (isAd && flwTransactionId) {
+      url = `/api/ads/verify?transaction_id=${encodeURIComponent(flwTransactionId)}`;
+    } else if (flwTransactionId) {
       url = `/api/payments/flw/verify?transaction_id=${encodeURIComponent(flwTransactionId)}`;
     } else if (reference) {
       url = `/api/payments/verify?reference=${encodeURIComponent(reference)}`;

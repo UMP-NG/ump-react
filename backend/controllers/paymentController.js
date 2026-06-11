@@ -1,4 +1,5 @@
 // backend/controllers/payments.js
+import axios from "axios";
 import paystack from "../utils/paystack.js";
 import Payment from "../models/Payment.js";
 import Order from "../models/Order.js";
@@ -12,6 +13,16 @@ import logger from "../utils/logger.js";
 import { encrypt, decrypt, mask } from "../utils/fieldEncryption.js";
 import { notify } from "../utils/notify.js";
 import { activateAdCampaign } from "./adController.js";
+
+const FLW_BASE = "https://api.flutterwave.com/v3";
+function flwHeaders() {
+  return { Authorization: `Bearer ${process.env.FLW_SECRET_KEY}` };
+}
+function flwClientUrl() {
+  return process.env.NODE_ENV === "production"
+    ? process.env.CLIENT_URL || "https://myump.com.ng"
+    : "http://localhost:5173";
+}
 
 // ─── Subscription helpers ─────────────────────────────────────────────────────
 // Prices come from the Config document so admins can edit them without a deploy
@@ -60,52 +71,62 @@ async function activateSubscription(payment) {
   }).catch(() => {});
 }
 
-// ─── Initialize subscription payment ─────────────────────────────────────────
+// ─── Initialize subscription payment (Flutterwave) ───────────────────────────
 export const initializeSubscriptionPayment = async (req, res) => {
   try {
     const { plan, type } = req.body;
-    // Validate both fields before hitting the DB to give accurate error messages
     if (!["seller", "provider"].includes(type))
       return res.status(400).json({ success: false, message: "Invalid subscription type. Choose seller or provider." });
     if (!["monthly", "annual"].includes(plan))
       return res.status(400).json({ success: false, message: "Invalid plan. Choose monthly or annual." });
+
     const amount = await getSubscriptionPrice(type, plan);
     if (!amount)
       return res.status(400).json({ success: false, message: "Subscription pricing not configured. Contact support." });
-    if (!["seller", "provider"].includes(type))
-      return res.status(400).json({ success: false, message: "Invalid subscription type." });
 
-    const reference = `UMP_SUB_${Date.now()}_${req.user._id.toString().slice(-6)}`;
-    const clientUrl = process.env.NODE_ENV === "production"
-      ? (process.env.CLIENT_URL || "https://myump.com.ng")
-      : "http://localhost:5173";
+    const txRef = `UMP_SUB_${Date.now()}_${req.user._id.toString().slice(-6)}`;
+    const base  = flwClientUrl();
 
-    const response = await paystack.post("/transaction/initialize", {
-      email:        req.user.email,
-      amount:       amount * 100,
-      reference,
-      callback_url: `${clientUrl}/payment-success?type=subscription`,
-      metadata: {
-        subscriptionPlan: plan,
-        subscriptionType: type,
-        userId: req.user._id.toString(),
+    const response = await axios.post(
+      `${FLW_BASE}/payments`,
+      {
+        tx_ref:       txRef,
+        amount,
+        currency:     "NGN",
+        redirect_url: `${base}/payment-success?type=subscription`,
+        customer: {
+          email:       req.user.email,
+          name:        req.user.name || req.user.email,
+          phonenumber: req.user.phone || "",
+        },
+        meta: { subscriptionPlan: plan, subscriptionType: type, userId: req.user._id.toString() },
+        customizations: {
+          title:       "UMP — Subscription",
+          description: `${type === "seller" ? "Seller" : "Provider"} ${plan} subscription`,
+          logo:        `${base}/images/ump-apple-touch-icon.png`,
+        },
       },
-    });
+      { headers: flwHeaders() }
+    );
+
+    const paymentLink = response.data?.data?.link;
+    if (!paymentLink)
+      return res.status(502).json({ success: false, message: "Payment provider unavailable — please try again" });
 
     await Payment.create({
       user:      req.user._id,
       orders:    [],
-      provider:  "Paystack",
+      provider:  "Flutterwave",
       amount,
-      reference,
+      reference: txRef,
       status:    "pending",
       metadata:  { subscriptionPlan: plan, subscriptionType: type },
     });
 
     return res.json({
-      success:           true,
-      authorization_url: response.data.data.authorization_url,
-      reference,
+      success:      true,
+      payment_link: paymentLink,
+      reference:    txRef,
     });
   } catch (err) {
     logger.error("Subscription init error:", err.response?.data || err.message);
@@ -113,24 +134,27 @@ export const initializeSubscriptionPayment = async (req, res) => {
   }
 };
 
-// ─── Verify subscription payment (called by frontend after Paystack redirect) ─
+// ─── Verify subscription payment (called by frontend after Flutterwave redirect) ─
 export const verifySubscriptionPayment = async (req, res) => {
   try {
-    const { reference } = req.query;
-    if (!reference) return res.status(400).json({ success: false, message: "Reference required" });
+    const { transaction_id } = req.query;
+    if (!transaction_id) return res.status(400).json({ success: false, message: "transaction_id required" });
 
-    const response = await paystack.get(`/transaction/verify/${reference}`);
-    const data = response.data.data;
+    const flwRes = await axios.get(
+      `${FLW_BASE}/transactions/${transaction_id}/verify`,
+      { headers: flwHeaders() }
+    );
+    const data = flwRes.data?.data;
+    if (!data) return res.status(400).json({ success: false, message: "Invalid Flutterwave response" });
 
-    // Atomically claim to prevent duplicate processing
     const payment = await Payment.findOneAndUpdate(
-      { reference, status: "pending" },
+      { reference: data.tx_ref, status: "pending" },
       { $set: { status: "processing" } },
       { new: false }
     );
 
     if (!payment) {
-      const existing = await Payment.findOne({ reference });
+      const existing = await Payment.findOne({ reference: data.tx_ref });
       if (!existing) return res.status(404).json({ success: false, message: "Payment not found" });
       return res.json({
         success: true,
@@ -140,11 +164,11 @@ export const verifySubscriptionPayment = async (req, res) => {
       });
     }
 
-    const amountMatch = data.amount === Math.round(payment.amount * 100);
-    const finalStatus = (data.status === "success" && amountMatch) ? "success" : "failed";
+    const amountOk  = Math.abs(data.amount - payment.amount) <= 1;
+    const finalStatus = data.status === "successful" && amountOk ? "success" : "failed";
 
     await Payment.findOneAndUpdate(
-      { reference },
+      { reference: data.tx_ref },
       { $set: { status: finalStatus, paidAt: finalStatus === "success" ? new Date() : null } }
     );
 
@@ -155,7 +179,7 @@ export const verifySubscriptionPayment = async (req, res) => {
         entity:   "Payment",
         entityId: payment._id,
         amount:   payment.amount,
-        meta:     { reference, plan: payment.metadata?.subscriptionPlan, type: payment.metadata?.subscriptionType },
+        meta:     { reference: data.tx_ref, plan: payment.metadata?.subscriptionPlan, type: payment.metadata?.subscriptionType, transaction_id },
         req,
       });
     }
