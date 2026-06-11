@@ -58,6 +58,10 @@ const sellerSchema = new mongoose.Schema(
     address: { type: String, trim: true },
 
     // ✅ Delivery configuration
+    // deliveryConfigured is set to true only when the seller explicitly saves their
+    // delivery settings. pickup.enabled defaults to true but that alone does NOT mean
+    // the seller has consciously chosen a delivery method — hence the separate flag.
+    deliveryConfigured: { type: Boolean, default: false },
     delivery: {
       pickup: {
         enabled:      { type: Boolean, default: true },

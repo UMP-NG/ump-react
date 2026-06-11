@@ -95,9 +95,7 @@ function SellerDeliverySetupGate() {
     if (!isSeller || isAuthPage || isAdmin) return;
     apiFetch("/api/sellers/me")
       .then((d) => {
-        const dlv = d?.seller?.delivery;
-        const configured = dlv && (dlv.pickup?.enabled || dlv.selfDelivery?.enabled || dlv.shipbubble?.enabled);
-        if (!configured) setShow(true);
+        if (!d?.seller?.deliveryConfigured) setShow(true);
       })
       .catch(() => {});
   }, [isSeller]); // eslint-disable-line react-hooks/exhaustive-deps

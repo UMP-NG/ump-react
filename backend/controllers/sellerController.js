@@ -288,6 +288,8 @@ export const saveDeliveryConfig = async (req, res) => {
       }
     }
 
+    update["deliveryConfigured"] = true;
+
     const seller = await Seller.findOneAndUpdate(
       { user: req.user._id },
       { $set: update },
@@ -295,7 +297,7 @@ export const saveDeliveryConfig = async (req, res) => {
     );
     if (!seller) return res.status(404).json({ message: "Seller profile not found" });
 
-    res.json({ success: true, delivery: seller.delivery });
+    res.json({ success: true, delivery: seller.delivery, deliveryConfigured: seller.deliveryConfigured });
   } catch (err) {
     logger.error("saveDeliveryConfig:", err);
     res.status(500).json({ message: "Server error" });

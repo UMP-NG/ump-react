@@ -1178,8 +1178,7 @@ export default function SellerDashboard() {
           setDashNotifs((n) => ({ ...n, ...dash.profile.notificationPreferences }));
         }
         const dlv = dash.profile.delivery;
-        const hasDelivery = dlv && (dlv.pickup?.enabled || dlv.selfDelivery?.enabled || dlv.shipbubble?.enabled);
-        setDeliveryConfigured(!!hasDelivery);
+        setDeliveryConfigured(!!dash.profile.deliveryConfigured);
         if (dlv) {
           setDeliveryConfig((prev) => ({
             pickup:       { ...prev.pickup,       ...(dlv.pickup       || {}) },
