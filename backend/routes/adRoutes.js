@@ -1,5 +1,5 @@
 import express from "express";
-import { protect, adminOnly } from "../middleware/authMiddleware.js";
+import { protect, requireRole } from "../middleware/authMiddleware.js";
 import { paymentLimiter } from "../middleware/rateLimits.js";
 import {
   initiateAdPayment,
@@ -20,6 +20,6 @@ router.get ("/my",        protect,                 getMyAdCampaigns);
 router.put ("/:id/cancel", protect,                cancelAdCampaign);
 
 // Admin routes
-router.get("/", protect, adminOnly, getAllAdCampaigns);
+router.get("/", protect, requireRole("admin"), getAllAdCampaigns);
 
 export default router;

@@ -207,7 +207,16 @@ export const checkoutCart = async (req, res) => {
 
       const sel = deliverySelections[sid] || {};
       const orderDeliveryMethod = VALID_METHODS.includes(sel.method) ? sel.method : "pickup";
-      const orderDeliveryFee    = Math.max(0, Number(sel.fee) || 0);
+
+      // Validate fee server-side: pickup is always free; cap self-delivery at ₦50,000
+      let orderDeliveryFee = 0;
+      if (orderDeliveryMethod === "self") {
+        const sellerDoc = await Seller.findOne({ user: sid }).select("delivery.selfDelivery.fee").lean();
+        orderDeliveryFee = Math.max(0, sellerDoc?.delivery?.selfDelivery?.fee || 0);
+      } else if (orderDeliveryMethod === "shipbubble") {
+        // Fee comes from buyer's rate selection — cap at ₦50,000 to prevent manipulation
+        orderDeliveryFee = Math.min(Math.max(0, Number(sel.fee) || 0), 50000);
+      }
 
       const order = new Order({
         buyer: userId,
@@ -215,12 +224,13 @@ export const checkoutCart = async (req, res) => {
         items: orderItems,
         subtotal,
         serviceCharge,
-        deliveryFee: orderDeliveryMethod === "pickup" ? 0 : orderDeliveryFee,
-        totalAmount: Math.max(0, subtotal + serviceCharge + (orderDeliveryMethod === "pickup" ? 0 : orderDeliveryFee) - orderCredit),
+        deliveryFee: orderDeliveryFee,
+        totalAmount: Math.max(0, subtotal + serviceCharge + orderDeliveryFee - orderCredit),
         creditUsed: orderCredit,
         shippingAddress: shippingAddress || {},
         paymentMethod,
         deliveryMethod: orderDeliveryMethod,
+        shipbubble: orderDeliveryMethod === "shipbubble" ? { serviceCode: sel.serviceCode || null } : undefined,
         status: "pending",
         deliveryCode: generateDeliveryCode(),
       });

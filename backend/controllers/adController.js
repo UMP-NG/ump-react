@@ -88,7 +88,25 @@ export const initiateAdPayment = async (req, res) => {
       ? (process.env.CLIENT_URL || "https://myump.com.ng")
       : "http://localhost:5173";
 
-    // Create the campaign record upfront so we have an ID to pass through
+    let paystackRes;
+    try {
+      paystackRes = await paystack.post("/transaction/initialize", {
+        email:        req.user.email,
+        amount:       planPrice * 100,
+        reference,
+        callback_url: `${clientUrl}/payment-success?type=ad`,
+        metadata: {
+          adPlan:    plan,
+          productId: productId.toString(),
+          userId:    req.user._id.toString(),
+        },
+      });
+    } catch (psErr) {
+      logger.error("initiateAdPayment Paystack init:", psErr.response?.data || psErr.message);
+      return res.status(502).json({ message: "Payment provider unavailable — please try again" });
+    }
+
+    // Create campaign only after Paystack succeeds to avoid orphaned records
     const campaign = await AdCampaign.create({
       product: productId,
       seller:  req.user._id,
@@ -96,19 +114,8 @@ export const initiateAdPayment = async (req, res) => {
       amount:  planPrice,
     });
 
-    const paystackRes = await paystack.post("/transaction/initialize", {
-      email:        req.user.email,
-      amount:       planPrice * 100,
-      reference,
-      callback_url: `${clientUrl}/payment-success?type=ad`,
-      metadata: {
-        adPlan:     plan,
-        productId:  productId.toString(),
-        campaignId: campaign._id.toString(),
-        userId:     req.user._id.toString(),
-      },
-    });
-
+    // Patch the reference and campaignId into Paystack metadata now that we have the campaign ID
+    // (Paystack doesn't allow updating metadata post-init, so we store campaignId in Payment)
     await Payment.create({
       user:      req.user._id,
       orders:    [],
@@ -226,17 +233,17 @@ export const cancelAdCampaign = async (req, res) => {
     const isAdmin = req.user.roles?.includes("admin");
     const filter  = isAdmin
       ? { _id: req.params.id }
-      : { _id: req.params.id, seller: req.user._id, status: "pending_payment" };
+      : { _id: req.params.id, seller: req.user._id, status: { $in: ["pending_payment", "active"] } };
 
     const campaign = await AdCampaign.findOneAndUpdate(
       filter,
       { $set: { status: "cancelled" } },
-      { new: true }
+      { new: false }  // get pre-update doc to check previous status
     );
     if (!campaign) return res.status(404).json({ message: "Campaign not found or cannot be cancelled" });
 
-    // If was active, turn off the product flag
-    if (campaign.status === "cancelled") {
+    // Only clear the product ad flag if the campaign was previously active
+    if (campaign.status === "active") {
       await Product.findByIdAndUpdate(campaign.product, { isAdvertised: false, adEndsAt: null });
     }
 

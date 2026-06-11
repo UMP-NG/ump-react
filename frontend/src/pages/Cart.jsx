@@ -118,7 +118,7 @@ export default function Cart() {
     }, 900);
 
     return () => clearTimeout(shipbubbleDebounce.current);
-  }, [deliverySelections, delivery.city, delivery.state]); // eslint-disable-line
+  }, [deliverySelections, delivery.city, delivery.state, delivery.name, delivery.phone, delivery.street]); // eslint-disable-line
 
   const sub = items.reduce((s, i) => {
     const unitPrice = i.negotiatedPrice || i.product?.price || i.price || 0;

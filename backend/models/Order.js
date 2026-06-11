@@ -91,11 +91,12 @@ const orderSchema = new mongoose.Schema(
       default: "pickup",
     },
     shipbubble: {
-      shipmentId:   { type: String, default: null },
+      serviceCode:    { type: String, default: null },
+      shipmentId:     { type: String, default: null },
       trackingNumber: { type: String, default: null },
-      trackingUrl:  { type: String, default: null },
-      courierName:  { type: String, default: null },
-      status:       { type: String, default: null },
+      trackingUrl:    { type: String, default: null },
+      courierName:    { type: String, default: null },
+      status:         { type: String, default: null },
     },
 
     paymentProof: { type: String },

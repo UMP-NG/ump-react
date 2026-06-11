@@ -67,6 +67,12 @@ export const bookShipbubbleDelivery = async (req, res) => {
     const order = await Order.findById(req.params.orderId);
     if (!order) return res.status(404).json({ message: "Order not found" });
 
+    // Auth check before any sensitive data is revealed
+    const isAdmin = req.user.roles?.includes("admin");
+    const uid     = req.user._id.toString();
+    if (!isAdmin && order.seller?.toString() !== uid)
+      return res.status(403).json({ message: "Not authorised" });
+
     if (order.deliveryMethod !== "shipbubble")
       return res.status(400).json({ message: "This order is not a Shipbubble delivery" });
 
@@ -76,17 +82,14 @@ export const bookShipbubbleDelivery = async (req, res) => {
     if (order.shipbubble?.shipmentId)
       return res.status(400).json({ message: "Shipment already booked", trackingNumber: order.shipbubble.trackingNumber });
 
-    const isAdmin  = req.user.roles?.includes("admin");
-    const uid      = req.user._id.toString();
-    if (!isAdmin && order.seller?.toString() !== uid)
-      return res.status(403).json({ message: "Not authorised" });
-
     const seller = await Seller.findOne({ user: order.seller }).select("delivery storeName").lean();
-    if (!seller?.delivery?.shipbubble?.pickupAddress)
-      return res.status(400).json({ message: "Seller has not set up a Shipbubble pickup address" });
+    if (!seller)
+      return res.status(404).json({ message: "Seller profile not found" });
+    if (!seller.delivery?.shipbubble?.pickupAddress?.city)
+      return res.status(400).json({ message: "Seller has not configured a Shipbubble pickup address" });
 
-    const { serviceCode } = req.body;
-    if (!serviceCode) return res.status(400).json({ message: "serviceCode is required" });
+    const serviceCode = req.body.serviceCode || order.shipbubble?.serviceCode;
+    if (!serviceCode) return res.status(400).json({ message: "serviceCode is required — buyer must select a courier" });
 
     const pickup = seller.delivery.shipbubble.pickupAddress;
     const ship   = order.shippingAddress || {};

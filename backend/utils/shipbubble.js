@@ -4,6 +4,9 @@ import logger from "./logger.js";
 const BASE = "https://api.shipbubble.com/v1";
 
 function client() {
+  if (!process.env.SHIPBUBBLE_API_KEY) {
+    throw new Error("SHIPBUBBLE_API_KEY is not configured");
+  }
   return axios.create({
     baseURL: BASE,
     headers: {

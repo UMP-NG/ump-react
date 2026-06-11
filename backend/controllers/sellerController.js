@@ -231,14 +231,45 @@ export const saveDeliveryConfig = async (req, res) => {
   try {
     const { pickup, selfDelivery, shipbubble } = req.body;
 
+    // Structural validation
+    if (pickup !== undefined && typeof pickup.enabled !== "boolean")
+      return res.status(400).json({ message: "pickup.enabled must be a boolean" });
+    if (selfDelivery !== undefined) {
+      if (typeof selfDelivery.enabled !== "boolean")
+        return res.status(400).json({ message: "selfDelivery.enabled must be a boolean" });
+      if (selfDelivery.enabled && (isNaN(Number(selfDelivery.fee)) || Number(selfDelivery.fee) < 0))
+        return res.status(400).json({ message: "selfDelivery.fee must be a non-negative number" });
+    }
+    if (shipbubble !== undefined && typeof shipbubble.enabled !== "boolean")
+      return res.status(400).json({ message: "shipbubble.enabled must be a boolean" });
+
     const anyEnabled = pickup?.enabled || selfDelivery?.enabled || shipbubble?.enabled;
     if (!anyEnabled)
       return res.status(400).json({ message: "At least one delivery method must be enabled" });
 
     const update = {};
-    if (pickup       !== undefined) update["delivery.pickup"]       = pickup;
-    if (selfDelivery !== undefined) update["delivery.selfDelivery"] = selfDelivery;
-    if (shipbubble   !== undefined) update["delivery.shipbubble"]   = shipbubble;
+    if (pickup !== undefined) {
+      update["delivery.pickup.enabled"]      = Boolean(pickup.enabled);
+      update["delivery.pickup.instructions"] = (pickup.instructions || "").toString().slice(0, 500);
+    }
+    if (selfDelivery !== undefined) {
+      update["delivery.selfDelivery.enabled"]       = Boolean(selfDelivery.enabled);
+      update["delivery.selfDelivery.fee"]           = Math.max(0, Number(selfDelivery.fee) || 0);
+      update["delivery.selfDelivery.coverage"]      = (selfDelivery.coverage || "").toString().slice(0, 200);
+      update["delivery.selfDelivery.estimatedDays"] = (selfDelivery.estimatedDays || "").toString().slice(0, 50);
+    }
+    if (shipbubble !== undefined) {
+      update["delivery.shipbubble.enabled"] = Boolean(shipbubble.enabled);
+      if (shipbubble.pickupAddress && typeof shipbubble.pickupAddress === "object") {
+        const p = shipbubble.pickupAddress;
+        update["delivery.shipbubble.pickupAddress.name"]   = (p.name   || "").toString().slice(0, 100);
+        update["delivery.shipbubble.pickupAddress.phone"]  = (p.phone  || "").toString().slice(0, 20);
+        update["delivery.shipbubble.pickupAddress.email"]  = (p.email  || "").toString().slice(0, 200);
+        update["delivery.shipbubble.pickupAddress.street"] = (p.street || "").toString().slice(0, 300);
+        update["delivery.shipbubble.pickupAddress.city"]   = (p.city   || "").toString().slice(0, 100);
+        update["delivery.shipbubble.pickupAddress.state"]  = (p.state  || "").toString().slice(0, 100);
+      }
+    }
 
     const seller = await Seller.findOneAndUpdate(
       { user: req.user._id },
