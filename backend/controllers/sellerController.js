@@ -164,8 +164,10 @@ export const getSellerById = async (req, res) => {
     const currentUserId = req.user?._id?.toString();
     const followersArr = seller.followers || [];
 
+    // Strip financial/sensitive fields before sending to any client
+    const { bankDetails: _bd, paystackRecipientCode: _rc, ...sellerData } = seller.toObject();
     res.json({
-      ...seller.toObject(),
+      ...sellerData,
       followersCount: followersArr.length,
       isFollowing: currentUserId ? followersArr.some((f) => f.toString() === currentUserId) : false,
     });
@@ -246,21 +248,15 @@ export const incrementSellerView = async (req, res) => {
 // PUT /api/sellers/delivery — seller saves their delivery configuration
 export const saveDeliveryConfig = async (req, res) => {
   try {
-    const { pickup, selfDelivery, shipbubble } = req.body;
+    const { pickup, shipbubble } = req.body;
 
     // Structural validation
     if (pickup !== undefined && typeof pickup.enabled !== "boolean")
       return res.status(400).json({ message: "pickup.enabled must be a boolean" });
-    if (selfDelivery !== undefined) {
-      if (typeof selfDelivery.enabled !== "boolean")
-        return res.status(400).json({ message: "selfDelivery.enabled must be a boolean" });
-      if (selfDelivery.enabled && (isNaN(Number(selfDelivery.fee)) || Number(selfDelivery.fee) < 0))
-        return res.status(400).json({ message: "selfDelivery.fee must be a non-negative number" });
-    }
     if (shipbubble !== undefined && typeof shipbubble.enabled !== "boolean")
       return res.status(400).json({ message: "shipbubble.enabled must be a boolean" });
 
-    const anyEnabled = pickup?.enabled || selfDelivery?.enabled || shipbubble?.enabled;
+    const anyEnabled = pickup?.enabled || shipbubble?.enabled;
     if (!anyEnabled)
       return res.status(400).json({ message: "At least one delivery method must be enabled" });
 
@@ -268,12 +264,6 @@ export const saveDeliveryConfig = async (req, res) => {
     if (pickup !== undefined) {
       update["delivery.pickup.enabled"]      = Boolean(pickup.enabled);
       update["delivery.pickup.instructions"] = (pickup.instructions || "").toString().slice(0, 500);
-    }
-    if (selfDelivery !== undefined) {
-      update["delivery.selfDelivery.enabled"]       = Boolean(selfDelivery.enabled);
-      update["delivery.selfDelivery.fee"]           = Math.max(0, Number(selfDelivery.fee) || 0);
-      update["delivery.selfDelivery.coverage"]      = (selfDelivery.coverage || "").toString().slice(0, 200);
-      update["delivery.selfDelivery.estimatedDays"] = (selfDelivery.estimatedDays || "").toString().slice(0, 50);
     }
     if (shipbubble !== undefined) {
       update["delivery.shipbubble.enabled"] = Boolean(shipbubble.enabled);

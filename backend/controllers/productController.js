@@ -388,6 +388,12 @@ export const updateProduct = async (req, res) => {
         .status(404)
         .json({ success: false, message: "Product not found" });
 
+    // Ownership gate — admins can edit any product, sellers only their own
+    const isAdmin = req.user.roles?.includes("admin");
+    if (!isAdmin && product.seller.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ success: false, message: "Not authorized to edit this product" });
+    }
+
     // --- Update text fields (numeric fields coerced to avoid NaN in DB)
     const textFields = ["name", "status", "desc", "category", "condition"];
     for (const key of textFields) {

@@ -1,9 +1,15 @@
 import express from "express";
 import { protect } from "../middleware/authMiddleware.js";
-import { getDeliveryQuote, bookShipbubbleDelivery, getTrackingInfo } from "../controllers/deliveryController.js";
+import {
+  getDeliveryQuote,
+  bookShipbubbleDelivery,
+  getTrackingInfo,
+  getDeliveryLocations,
+} from "../controllers/deliveryController.js";
 
 const router = express.Router();
 
+router.get("/locations",      protect, getDeliveryLocations);
 router.get("/quote",          protect, getDeliveryQuote);
 router.post("/book/:orderId", protect, bookShipbubbleDelivery);
 router.get("/track/:orderId", protect, getTrackingInfo);

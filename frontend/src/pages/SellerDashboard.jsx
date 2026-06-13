@@ -1099,13 +1099,15 @@ export default function SellerDashboard() {
   const [dashPolicy, setDashPolicy] = useState({ returnPolicy: "", fulfillmentTime: "" });
   const [policySaving, setPolicySaving] = useState(false);
   const DEFAULT_DELIVERY_CONFIG = {
-    pickup:       { enabled: true,  instructions: "" },
-    selfDelivery: { enabled: false, fee: 0, coverage: "", estimatedDays: "1–3 days" },
-    shipbubble:   { enabled: false, pickupAddress: { name: "", phone: "", email: "", street: "", city: "", state: "" } },
+    pickup:     { enabled: true,  instructions: "" },
+    shipbubble: { enabled: false, pickupAddress: { name: "", phone: "", email: "", street: "", city: "", state: "" } },
   };
   const [deliveryConfig, setDeliveryConfig] = useState(DEFAULT_DELIVERY_CONFIG);
   const [deliveryConfigSaving, setDeliveryConfigSaving] = useState(false);
   const [deliveryConfigured, setDeliveryConfigured] = useState(true); // assume true until profile loads
+  const [sbStates, setSbStates] = useState([]);
+  const [sbCities, setSbCities] = useState([]);
+  const [sbLocLoading, setSbLocLoading] = useState(false);
   const deliveryCardRef = useRef(null);
 
   // Promote
@@ -1181,9 +1183,8 @@ export default function SellerDashboard() {
         setDeliveryConfigured(!!dash.profile.deliveryConfigured);
         if (dlv) {
           setDeliveryConfig((prev) => ({
-            pickup:       { ...prev.pickup,       ...(dlv.pickup       || {}) },
-            selfDelivery: { ...prev.selfDelivery, ...(dlv.selfDelivery || {}) },
-            shipbubble:   {
+            pickup: { ...prev.pickup, ...(dlv.pickup || {}) },
+            shipbubble: {
               ...prev.shipbubble,
               ...(dlv.shipbubble || {}),
               pickupAddress: { ...prev.shipbubble.pickupAddress, ...(dlv.shipbubble?.pickupAddress || {}) },
@@ -1401,8 +1402,29 @@ export default function SellerDashboard() {
     } finally { setNotifSaving(false); }
   }
 
+  // Fetch Shipbubble states when the Shipbubble section is opened
+  useEffect(() => {
+    if (!deliveryConfig.shipbubble.enabled || sbStates.length) return;
+    setSbLocLoading(true);
+    apiFetch("/api/delivery/locations")
+      .then((d) => setSbStates(d.data || []))
+      .catch(() => {})
+      .finally(() => setSbLocLoading(false));
+  }, [deliveryConfig.shipbubble.enabled]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Fetch cities whenever the selected state changes
+  useEffect(() => {
+    const selectedState = sbStates.find(
+      (s) => s.name === deliveryConfig.shipbubble.pickupAddress.state
+    );
+    if (!selectedState) { setSbCities([]); return; }
+    apiFetch(`/api/delivery/locations?state_code=${encodeURIComponent(selectedState.code || selectedState.state_code || "")}`)
+      .then((d) => setSbCities(d.data || []))
+      .catch(() => setSbCities([]));
+  }, [deliveryConfig.shipbubble.pickupAddress.state, sbStates]); // eslint-disable-line react-hooks/exhaustive-deps
+
   async function saveDeliverySettings() {
-    const anyEnabled = deliveryConfig.pickup.enabled || deliveryConfig.selfDelivery.enabled || deliveryConfig.shipbubble.enabled;
+    const anyEnabled = deliveryConfig.pickup.enabled || deliveryConfig.shipbubble.enabled;
     if (!anyEnabled) { showToast("Enable at least one delivery method", "error"); return; }
     setDeliveryConfigSaving(true);
     try {
@@ -2571,36 +2593,6 @@ export default function SellerDashboard() {
               )}
             </div>
 
-            {/* Self-delivery */}
-            <div style={{ padding: "14px 0", borderBottom: "1px solid var(--line)" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                <div>
-                  <div style={{ fontWeight: 700, fontSize: "1.3rem" }}><i className="fas fa-bicycle" style={{ color: "#3b82f6", marginRight: 6 }} />I Deliver Myself</div>
-                  <div style={{ fontSize: "1.15rem", color: "var(--ink-3)" }}>You personally deliver to buyers — set your fee and coverage area</div>
-                </div>
-                <label className="partner-toggle" style={{ flexShrink: 0, marginLeft: 16 }}>
-                  <input type="checkbox" checked={deliveryConfig.selfDelivery.enabled} onChange={(e) => setDeliveryConfig((c) => ({ ...c, selfDelivery: { ...c.selfDelivery, enabled: e.target.checked } }))} />
-                  <span className="partner-toggle-track" />
-                </label>
-              </div>
-              {deliveryConfig.selfDelivery.enabled && (
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                  <div>
-                    <label style={lSty}>Delivery Fee (₦)</label>
-                    <input style={iSty} type="number" min="0" placeholder="e.g. 500" value={deliveryConfig.selfDelivery.fee} onChange={(e) => setDeliveryConfig((c) => ({ ...c, selfDelivery: { ...c.selfDelivery, fee: Number(e.target.value) } }))} />
-                  </div>
-                  <div>
-                    <label style={lSty}>Estimated Time</label>
-                    <input style={iSty} placeholder="e.g. 1–3 days" value={deliveryConfig.selfDelivery.estimatedDays} onChange={(e) => setDeliveryConfig((c) => ({ ...c, selfDelivery: { ...c.selfDelivery, estimatedDays: e.target.value } }))} />
-                  </div>
-                  <div style={{ gridColumn: "1/-1" }}>
-                    <label style={lSty}>Coverage Area</label>
-                    <input style={iSty} placeholder="e.g. Yaba, Akoka, Bariga" value={deliveryConfig.selfDelivery.coverage} onChange={(e) => setDeliveryConfig((c) => ({ ...c, selfDelivery: { ...c.selfDelivery, coverage: e.target.value } }))} />
-                  </div>
-                </div>
-              )}
-            </div>
-
             {/* Shipbubble courier */}
             <div style={{ padding: "14px 0 0" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
@@ -2632,12 +2624,20 @@ export default function SellerDashboard() {
                       <input style={iSty} placeholder="e.g. 14 University Road, UNILAG" value={deliveryConfig.shipbubble.pickupAddress.street} onChange={(e) => setDeliveryConfig((c) => ({ ...c, shipbubble: { ...c.shipbubble, pickupAddress: { ...c.shipbubble.pickupAddress, street: e.target.value } } }))} />
                     </div>
                     <div>
-                      <label style={lSty}>City</label>
-                      <input style={iSty} placeholder="Lagos" value={deliveryConfig.shipbubble.pickupAddress.city} onChange={(e) => setDeliveryConfig((c) => ({ ...c, shipbubble: { ...c.shipbubble, pickupAddress: { ...c.shipbubble.pickupAddress, city: e.target.value } } }))} />
+                      <label style={lSty}>State {sbLocLoading && <i className="fas fa-circle-notch fa-spin" style={{ fontSize: "1rem", marginLeft: 4 }} />}</label>
+                      <select style={iSty} value={deliveryConfig.shipbubble.pickupAddress.state}
+                        onChange={(e) => setDeliveryConfig((c) => ({ ...c, shipbubble: { ...c.shipbubble, pickupAddress: { ...c.shipbubble.pickupAddress, state: e.target.value, city: "" } } }))}>
+                        <option value="">Select state</option>
+                        {sbStates.map((s) => <option key={s.code || s.state_code} value={s.name}>{s.name}</option>)}
+                      </select>
                     </div>
                     <div>
-                      <label style={lSty}>State</label>
-                      <input style={iSty} placeholder="Lagos" value={deliveryConfig.shipbubble.pickupAddress.state} onChange={(e) => setDeliveryConfig((c) => ({ ...c, shipbubble: { ...c.shipbubble, pickupAddress: { ...c.shipbubble.pickupAddress, state: e.target.value } } }))} />
+                      <label style={lSty}>City</label>
+                      <select style={iSty} value={deliveryConfig.shipbubble.pickupAddress.city}
+                        onChange={(e) => setDeliveryConfig((c) => ({ ...c, shipbubble: { ...c.shipbubble, pickupAddress: { ...c.shipbubble.pickupAddress, city: e.target.value } } }))}>
+                        <option value="">{deliveryConfig.shipbubble.pickupAddress.state ? (sbCities.length ? "Select city" : "Loading…") : "Select state first"}</option>
+                        {sbCities.map((c) => <option key={c.code || c.city_code} value={c.name}>{c.name}</option>)}
+                      </select>
                     </div>
                   </div>
                 </div>

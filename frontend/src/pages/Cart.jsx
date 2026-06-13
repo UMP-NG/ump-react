@@ -29,13 +29,16 @@ export default function Cart() {
   const [couponLoading, setCouponLoading] = useState(false);
   const [provider, setProvider] = useState("flutterwave");
   const [showDeliveryConfirm, setShowDeliveryConfirm] = useState(false);
-  // { [sellerId]: { method:"pickup"|"self"|"shipbubble", fee:number, serviceCode:string } }
+  // { [sellerId]: { method:"pickup"|"shipbubble", fee:number, serviceCode:string } }
   const [deliverySelections, setDeliverySelections] = useState({});
-  // { [sellerId]: { storeName, delivery: { pickup, selfDelivery, shipbubble } } }
+  // { [sellerId]: { storeName, delivery: { pickup, shipbubble } } }
   const [sellerDeliveryConfigs, setSellerDeliveryConfigs] = useState({});
   // { [sellerId]: { rates:[], loading:bool, error:string } }
   const [shipbubbleRates, setShipbubbleRates] = useState({});
   const shipbubbleDebounce = useRef(null);
+  const [cartSbStates, setCartSbStates] = useState([]);
+  const [cartSbCities, setCartSbCities] = useState([]);
+  const [cartSbLocLoading, setCartSbLocLoading] = useState(false);
   const [linkLoading, setLinkLoading] = useState(false);
   const [payLink, setPayLink] = useState("");
   const [showLinkSheet, setShowLinkSheet] = useState(false);
@@ -86,16 +89,34 @@ export default function Cart() {
         configs[sid] = { storeName, delivery };
         // Default to first enabled method
         const method = delivery?.pickup?.enabled !== false ? "pickup"
-          : delivery?.selfDelivery?.enabled ? "self"
-          : delivery?.shipbubble?.enabled   ? "shipbubble"
+          : delivery?.shipbubble?.enabled ? "shipbubble"
           : "pickup";
-        const fee = method === "self" ? (delivery?.selfDelivery?.fee || 0) : 0;
-        defaults[sid] = { method, fee, serviceCode: "" };
+        defaults[sid] = { method, fee: 0, serviceCode: "" };
       });
       setSellerDeliveryConfigs(configs);
       setDeliverySelections((prev) => ({ ...defaults, ...prev }));
     });
   }, [step, items]);
+
+  // Fetch Shipbubble state list once when a Shipbubble-capable seller is in the cart
+  useEffect(() => {
+    const hasShipbubble = Object.values(sellerDeliveryConfigs).some((c) => c.delivery?.shipbubble?.enabled);
+    if (!hasShipbubble || cartSbStates.length) return;
+    setCartSbLocLoading(true);
+    apiFetch("/api/delivery/locations")
+      .then((d) => setCartSbStates(d.data || []))
+      .catch(() => {})
+      .finally(() => setCartSbLocLoading(false));
+  }, [sellerDeliveryConfigs]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Fetch cities when the buyer picks a state
+  useEffect(() => {
+    const selectedState = cartSbStates.find((s) => s.name === delivery.state);
+    if (!selectedState) { setCartSbCities([]); return; }
+    apiFetch(`/api/delivery/locations?state_code=${encodeURIComponent(selectedState.code || selectedState.state_code || "")}`)
+      .then((d) => setCartSbCities(d.data || []))
+      .catch(() => setCartSbCities([]));
+  }, [delivery.state, cartSbStates]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Debounced Shipbubble rate fetch when buyer has city+state and a seller has shipbubble selected
   useEffect(() => {
@@ -498,12 +519,28 @@ export default function Cart() {
                 <div style={{ height: 12 }} />
                 <div style={{ display: "flex", gap: 10 }}>
                   <div style={{ flex: 1 }}>
-                    <div className="label">City *</div>
-                    <input className="input" value={delivery.city} onChange={(e) => setDelivery({ ...delivery, city: e.target.value })} placeholder="Lagos" />
+                    <div className="label">State {cartSbLocLoading && <i className="fas fa-circle-notch fa-spin" style={{ fontSize: "0.9rem", marginLeft: 4 }} />}</div>
+                    {cartSbStates.length > 0 ? (
+                      <select className="input" value={delivery.state}
+                        onChange={(e) => setDelivery({ ...delivery, state: e.target.value, city: "" })}>
+                        <option value="">Select state</option>
+                        {cartSbStates.map((s) => <option key={s.code || s.state_code} value={s.name}>{s.name}</option>)}
+                      </select>
+                    ) : (
+                      <input className="input" value={delivery.state} onChange={(e) => setDelivery({ ...delivery, state: e.target.value })} placeholder="Lagos" />
+                    )}
                   </div>
                   <div style={{ flex: 1 }}>
-                    <div className="label">State</div>
-                    <input className="input" value={delivery.state} onChange={(e) => setDelivery({ ...delivery, state: e.target.value })} placeholder="Lagos" />
+                    <div className="label">City *</div>
+                    {cartSbStates.length > 0 ? (
+                      <select className="input" value={delivery.city}
+                        onChange={(e) => setDelivery({ ...delivery, city: e.target.value })}>
+                        <option value="">{delivery.state ? (cartSbCities.length ? "Select city" : "Loading…") : "Select state first"}</option>
+                        {cartSbCities.map((c) => <option key={c.code || c.city_code} value={c.name}>{c.name}</option>)}
+                      </select>
+                    ) : (
+                      <input className="input" value={delivery.city} onChange={(e) => setDelivery({ ...delivery, city: e.target.value })} placeholder="Lagos" />
+                    )}
                   </div>
                 </div>
                 <div style={{ height: 12 }} />
@@ -520,8 +557,7 @@ export default function Cart() {
                 const d   = cfg.delivery || {};
                 const opts = [
                   d.pickup?.enabled !== false && { value: "pickup", icon: "fa-person-walking", label: "Pickup", fee: 0, sub: "Collect from seller" },
-                  d.selfDelivery?.enabled && { value: "self", icon: "fa-bicycle", label: "Self-delivery", fee: d.selfDelivery.fee || 0, sub: d.selfDelivery.coverage || d.selfDelivery.estimatedDays || "" },
-                  d.shipbubble?.enabled   && { value: "shipbubble", icon: "fa-truck", label: "Courier", fee: sel.method === "shipbubble" && sel.fee ? sel.fee : null, sub: "Calculated by courier" },
+                  d.shipbubble?.enabled && { value: "shipbubble", icon: "fa-truck", label: "Courier", fee: sel.method === "shipbubble" && sel.fee ? sel.fee : null, sub: "Calculated by courier" },
                 ].filter(Boolean);
 
                 if (!opts.length) return null;
@@ -538,8 +574,7 @@ export default function Cart() {
                           key={opt.value}
                           type="button"
                           onClick={() => {
-                            const fee = opt.value === "self" ? (d.selfDelivery?.fee || 0) : 0;
-                            setDeliverySelections((prev) => ({ ...prev, [sid]: { method: opt.value, fee, serviceCode: "" } }));
+                            setDeliverySelections((prev) => ({ ...prev, [sid]: { method: opt.value, fee: 0, serviceCode: "" } }));
                             if (opt.value !== "shipbubble") {
                               setShipbubbleRates((prev) => ({ ...prev, [sid]: { rates: [], loading: false, error: "" } }));
                             }
@@ -571,15 +606,6 @@ export default function Cart() {
                           : cfg.delivery?.pickup?.enabled !== false
                             ? "Contact seller to arrange pickup location."
                             : ""}
-                      </div>
-                    )}
-
-                    {/* Self-delivery info */}
-                    {sel.method === "self" && d.selfDelivery && (
-                      <div style={{ marginTop: 10, padding: "10px 12px", background: "rgba(59,130,246,.06)", border: "1px solid rgba(59,130,246,.2)", borderRadius: "var(--r-md)", fontSize: "1.2rem", color: "var(--ink-2)" }}>
-                        <i className="fas fa-circle-info" style={{ color: "#3b82f6", marginRight: 6 }} />
-                        Seller delivers · {d.selfDelivery.estimatedDays || "1–3 days"}
-                        {d.selfDelivery.coverage ? ` · ${d.selfDelivery.coverage}` : ""}
                       </div>
                     )}
 

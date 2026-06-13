@@ -87,7 +87,7 @@ const orderSchema = new mongoose.Schema(
     },
     deliveryMethod: {
       type: String,
-      enum: ["pickup", "self", "shipbubble"],
+      enum: ["pickup", "shipbubble"],
       default: "pickup",
     },
     shipbubble: {
@@ -102,7 +102,9 @@ const orderSchema = new mongoose.Schema(
     paymentProof: { type: String },
     deliveryCode: { type: String },
     deliveryCodeUsed: { type: Boolean, default: false },
-    creditUsed: { type: Number, default: 0, min: 0 }, // referral credit applied at checkout
+    creditUsed:     { type: Number, default: 0, min: 0 }, // referral credit applied at checkout
+    couponDiscount: { type: Number, default: 0, min: 0 }, // coupon discount applied at checkout
+    couponId:       { type: mongoose.Schema.Types.ObjectId, ref: "Coupon" },
     escrowReleasedAt: Date,
     isReviewed: { type: Boolean, default: false },
 

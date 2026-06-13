@@ -118,7 +118,7 @@ export const getAllUsers = async (req, res) => {
     }
 
     const users = await User.find(query)
-      .select("-password -wishlist -cart -orders -services -following")
+      .select("-password -otp -otpExpire -resetPasswordToken -resetPasswordExpire -wishlist -cart -orders -services -following")
       .limit(100)
       .lean();
       
@@ -134,7 +134,9 @@ export const getAllUsers = async (req, res) => {
 // ===============================
 export const getUserById = async (req, res) => {
   try {
-    const user = await User.findById(req.params.id).select("-password");
+    // Exclude auth secrets — admins have no legitimate need for OTP/reset tokens
+    const user = await User.findById(req.params.id)
+      .select("-password -otp -otpExpire -resetPasswordToken -resetPasswordExpire");
     if (!user) return res.status(404).json({ message: "User not found" });
     res.json(user);
   } catch (error) {

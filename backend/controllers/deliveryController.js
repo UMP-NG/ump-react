@@ -1,6 +1,6 @@
 import Order  from "../models/Order.js";
 import Seller from "../models/Seller.js";
-import { getRates, createShipment, trackShipment } from "../utils/shipbubble.js";
+import { getRates, createShipment, trackShipment, getLocations } from "../utils/shipbubble.js";
 import { notify } from "../utils/notify.js";
 import logger from "../utils/logger.js";
 
@@ -142,6 +142,19 @@ export const bookShipbubbleDelivery = async (req, res) => {
   } catch (err) {
     logger.error("bookShipbubbleDelivery:", err.message);
     return res.status(500).json({ message: err.message || "Failed to book shipment" });
+  }
+};
+
+// GET /api/delivery/locations — returns Shipbubble states (+ city list once a state is selected)
+// Used by seller setup form to guarantee city/state names match Shipbubble's database exactly.
+export const getDeliveryLocations = async (req, res) => {
+  try {
+    const { state_code } = req.query;
+    const data = await getLocations(state_code || null);
+    return res.json({ success: true, data });
+  } catch (err) {
+    logger.error("getDeliveryLocations:", err.message);
+    return res.status(502).json({ message: "Failed to fetch location list" });
   }
 };
 

@@ -7,6 +7,7 @@ import Cart from "../models/Cart.js";
 import User from "../models/User.js";
 import Negotiation from "../models/Negotiation.js";
 import Config from "../models/Config.js";
+import Coupon from "../models/Coupon.js";
 import PDFDocument from "pdfkit";
 import cloudinary from "../config/cloudinary.js";
 import { audit } from "../utils/auditLog.js";
@@ -124,10 +125,10 @@ export const checkoutCart = async (req, res) => {
       return res.status(400).json({ message: "Cart is empty" });
     }
 
-    let { paymentMethod, shippingAddress, deliverySelections, creditToUse } = req.body;
-    // deliverySelections: { [sellerId]: { method: "pickup"|"self"|"shipbubble", fee: number } }
+    let { paymentMethod, shippingAddress, deliverySelections, creditToUse, couponId } = req.body;
+    // deliverySelections: { [sellerId]: { method: "pickup"|"shipbubble", fee: number } }
     deliverySelections = deliverySelections || {};
-    const VALID_METHODS = ["pickup", "self", "shipbubble"];
+    const VALID_METHODS = ["pickup", "shipbubble"];
     paymentMethod = paymentMethod?.toLowerCase().trim();
 
     const PAYMENT_MAP = {
@@ -183,8 +184,48 @@ export const checkoutCart = async (req, res) => {
       }
     }
 
+    // ── Server-side coupon validation ─────────────────────────────────────────
+    // Never trust the client-sent discount amount — re-validate and re-compute here.
+    let couponDoc = null;
+    let couponDiscount = 0;
+    if (couponId) {
+      couponDoc = await Coupon.findById(couponId);
+      if (!couponDoc || !couponDoc.active) {
+        return res.status(400).json({ message: "Invalid or inactive coupon" });
+      }
+      if (couponDoc.expiresAt && couponDoc.expiresAt < new Date()) {
+        return res.status(400).json({ message: "This coupon has expired" });
+      }
+      // Atomic check: claim one usage slot before any orders are created
+      const claimed = await Coupon.findOneAndUpdate(
+        {
+          _id: couponDoc._id,
+          active: true,
+          $or: [{ maxUses: null }, { $expr: { $lt: ["$usedCount", "$maxUses"] } }],
+        },
+        { $inc: { usedCount: 1 } },
+        { new: false }
+      );
+      if (!claimed) {
+        return res.status(400).json({ message: "This coupon has reached its usage limit" });
+      }
+      couponDoc = claimed; // pre-increment snapshot still holds the valid doc
+      // Re-compute discount on the cart total (never trust the client-sent value)
+      const amount = cartTotal;
+      if (amount < (couponDoc.minOrderAmount || 0)) {
+        // Roll back the slot we just claimed
+        await Coupon.findByIdAndUpdate(couponDoc._id, { $inc: { usedCount: -1 } });
+        return res.status(400).json({ message: `Minimum order amount for this coupon is ₦${couponDoc.minOrderAmount.toLocaleString("en-NG")}` });
+      }
+      couponDiscount = couponDoc.discountType === "percent"
+        ? Math.min((Math.min(couponDoc.discountValue, 100) / 100) * amount, amount)
+        : Math.min(couponDoc.discountValue, amount);
+      couponDiscount = Math.round(couponDiscount);
+    }
+
     const createdOrders = [];
     let isFirstOrder = true;
+    let couponDiscountRemaining = couponDiscount;
     for (const [sid, sellerItems] of sellerGroups) {
       const orderItems = sellerItems.map((i) => ({
         product:         i.product._id,
@@ -198,12 +239,16 @@ export const checkoutCart = async (req, res) => {
 
       const subtotal = orderItems.reduce((s, i) => s + i.price * i.quantity, 0);
       const serviceCharge = calcServiceCharge(orderItems, feeConfig);
-      // Distribute credit proportionally; last order gets the remainder
+      // Distribute credit and coupon discount proportionally; last order absorbs rounding
       const isLastOrder = createdOrders.length === sellerGroups.size - 1;
       const orderCredit = isLastOrder
         ? creditRemaining
         : Math.min(Math.round((subtotal / cartTotal) * creditApplied), creditRemaining);
       creditRemaining -= orderCredit;
+      const orderCouponDiscount = isLastOrder
+        ? couponDiscountRemaining
+        : Math.min(Math.round((subtotal / cartTotal) * couponDiscount), couponDiscountRemaining);
+      couponDiscountRemaining -= orderCouponDiscount;
 
       const sel = deliverySelections[sid] || {};
       const requestedMethod = VALID_METHODS.includes(sel.method) ? sel.method : "pickup";
@@ -215,17 +260,14 @@ export const checkoutCart = async (req, res) => {
       // Ensure the requested delivery method is actually enabled by the seller
       const methodEnabled =
         requestedMethod === "pickup"     ? (dlv.pickup?.enabled !== false) :
-        requestedMethod === "self"       ? !!dlv.selfDelivery?.enabled :
         requestedMethod === "shipbubble" ? !!dlv.shipbubble?.enabled : false;
 
       const orderDeliveryMethod = methodEnabled ? requestedMethod : "pickup";
 
-      // Validate fee server-side
+      // Validate fee server-side — Shipbubble fee comes from the buyer's rate selection;
+      // cap at ₦50,000 to prevent client-side manipulation
       let orderDeliveryFee = 0;
-      if (orderDeliveryMethod === "self") {
-        orderDeliveryFee = Math.max(0, dlv.selfDelivery?.fee || 0);
-      } else if (orderDeliveryMethod === "shipbubble") {
-        // Fee comes from buyer's rate selection — cap at ₦50,000 to prevent manipulation
+      if (orderDeliveryMethod === "shipbubble") {
         orderDeliveryFee = Math.min(Math.max(0, Number(sel.fee) || 0), 50000);
       }
 
@@ -236,8 +278,10 @@ export const checkoutCart = async (req, res) => {
         subtotal,
         serviceCharge,
         deliveryFee: orderDeliveryFee,
-        totalAmount: Math.max(0, subtotal + serviceCharge + orderDeliveryFee - orderCredit),
+        totalAmount: Math.max(0, subtotal + serviceCharge + orderDeliveryFee - orderCredit - orderCouponDiscount),
         creditUsed: orderCredit,
+        couponDiscount: orderCouponDiscount,
+        couponId: couponDoc?._id || undefined,
         shippingAddress: shippingAddress || {},
         paymentMethod,
         deliveryMethod: orderDeliveryMethod,

@@ -117,6 +117,9 @@ export default function Home() {
     }
   }
 
+  // Public data — fetched once on mount, no dependency on user auth state.
+  // Keeping user out of this effect prevents a double-fetch (undefined → null/user)
+  // which would reset productsLoading and replace cards with skeletons mid-session.
   useEffect(() => {
     apiFetch("/api/products?limit=8&sort=random")
       .then((d) => setProducts(d.products || d || []))
@@ -153,13 +156,14 @@ export default function Home() {
       })
       .catch(() => {})
       .finally(() => setSellersLoading(false));
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-    // Following feed — only fetch if user is logged in and following someone
-    if (user?.following?.length) {
-      apiFetch("/api/products/following")
-        .then((d) => setFollowingFeed(d.products || []))
-        .catch(() => {});
-    }
+  // Following feed — only meaningful once we know the user is logged in and has follows
+  useEffect(() => {
+    if (!user?.following?.length) return;
+    apiFetch("/api/products/following")
+      .then((d) => setFollowingFeed(d.products || []))
+      .catch(() => {});
   }, [user]);
 
   return (

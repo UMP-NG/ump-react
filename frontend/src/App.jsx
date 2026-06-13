@@ -1,5 +1,11 @@
 import { lazy, Suspense, Component, useEffect, useState } from "react";
 import { Routes, Route, useLocation, useNavigate } from "react-router-dom";
+
+function ScrollToTop() {
+  const { pathname } = useLocation();
+  useEffect(() => { window.scrollTo(0, 0); }, [pathname]);
+  return null;
+}
 import FloatingChat from "./components/FloatingChat";
 import PrivateRoute from "./components/PrivateRoute";
 import InstallPrompt from "./components/InstallPrompt";
@@ -110,7 +116,7 @@ function SellerDeliverySetupGate() {
         </div>
         <h2 style={{ margin: "0 0 8px", fontSize: "1.9rem", fontWeight: 900 }}>Set up your delivery options</h2>
         <p style={{ margin: "0 0 20px", fontSize: "1.3rem", color: "var(--ink-2)", lineHeight: 1.6 }}>
-          Buyers <strong>can't check out</strong> from your store until you configure at least one delivery method — pickup, self-delivery, or courier.
+          Buyers <strong>can't check out</strong> from your store until you configure at least one delivery method — pickup or courier.
         </p>
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           <button
@@ -180,6 +186,7 @@ export default function App() {
     <InstallPrompt />
     <ChunkErrorBoundary>
     <Suspense fallback={<PageLoader />}>
+    <ScrollToTop />
     <Routes>
       {/* Core */}
       <Route path="/"           element={<Home />} />
