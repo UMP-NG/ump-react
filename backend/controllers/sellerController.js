@@ -195,10 +195,21 @@ export const followSeller = async (req, res) => {
       ? { $pull: { followers: userId } }
       : { $addToSet: { followers: userId } };
 
-    const updatedSeller = await Seller.findByIdAndUpdate(sellerId, update, {
+    // Always use seller._id (not sellerId from params which may be a User ID)
+    const updatedSeller = await Seller.findByIdAndUpdate(seller._id, update, {
       new: true,
       select: "followers",
     });
+
+    if (!alreadyFollowing && updatedSeller) {
+      // Notify the seller they have a new follower
+      notify(seller.user, {
+        type:    "account",
+        title:   "New store follower",
+        message: `${req.user.name || "Someone"} is now following your store.`,
+        link:    `/seller/${seller._id}`,
+      }).catch(() => {});
+    }
 
     res.json({
       following: !alreadyFollowing,

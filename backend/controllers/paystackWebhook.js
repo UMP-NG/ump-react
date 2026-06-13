@@ -3,6 +3,8 @@ import Payment from "../models/Payment.js";
 import Order from "../models/Order.js";
 import Seller from "../models/Seller.js";
 import logger from "../utils/logger.js";
+import { confirmAllOrders } from "../utils/confirmOrders.js";
+import { notify } from "../utils/notify.js";
 
 export const paystackWebhook = async (req, res) => {
   try {
@@ -39,10 +41,8 @@ export const paystackWebhook = async (req, res) => {
         payment.metadata = data;
         await payment.save();
 
-        await Order.findByIdAndUpdate(payment.order, {
-          paymentStatus: "paid",
-          status: "confirmed",
-        });
+        // confirmAllOrders handles order status update + buyer/seller notifications
+        await confirmAllOrders({ orders: [payment.order] });
       }
     }
 
@@ -71,6 +71,16 @@ export const paystackWebhook = async (req, res) => {
               arrayFilters: [{ "el.referenceId": ref }],
             });
           }
+
+          // Notify seller their payout landed
+          if (order.seller) {
+            notify(order.seller, {
+              type: "payout",
+              title: "Payout sent!",
+              message: `Your escrow payout for order #${orderId.toString().slice(-6).toUpperCase()} has been transferred to your bank account.`,
+              link: "/seller-dashboard",
+            }).catch(() => {});
+          }
         }
       }
     }
@@ -85,11 +95,11 @@ export const paystackWebhook = async (req, res) => {
         const orderId = parts[1];
 
         // Revert order back to paid so seller can retry
-        await Order.findByIdAndUpdate(orderId, {
+        const failedOrder = await Order.findByIdAndUpdate(orderId, {
           paymentStatus: "paid",
           status: "shipped",
           deliveryCodeUsed: false,
-        });
+        }, { new: false });
 
         logger.error(`⚠️ Transfer failed for order ${orderId}, ref ${ref}. Reverted to paid/shipped for retry.`);
 
@@ -98,6 +108,16 @@ export const paystackWebhook = async (req, res) => {
           { "payoutHistory.referenceId": ref },
           { $set: { "payoutHistory.$.status": "failed" } }
         );
+
+        // Notify seller their payout failed
+        if (failedOrder?.seller) {
+          notify(failedOrder.seller, {
+            type: "payout",
+            title: "Payout transfer failed",
+            message: `Your payout transfer for order #${orderId.toString().slice(-6).toUpperCase()} failed. Please contact support — we'll retry or resolve it.`,
+            link: "/seller-dashboard",
+          }).catch(() => {});
+        }
       }
     }
 

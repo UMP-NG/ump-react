@@ -647,12 +647,33 @@ export const updateOrder = async (req, res) => {
       }
     }
 
+    const prevStatus = order.status;
     if (status) order.status = status;
     // Fix #1: only admins may change paymentStatus — sellers cannot
     if (paymentStatus && isAdmin) order.paymentStatus = paymentStatus;
     if (trackingNumber) order.trackingNumber = trackingNumber;
 
     await order.save();
+
+    // Notify buyer when order status changes
+    if (status && status !== prevStatus && order.buyer) {
+      const STATUS_MESSAGES = {
+        confirmed: "Your order has been confirmed and is being prepared.",
+        shipped:   "Your order is on its way!",
+        completed: "Your order has been marked as completed.",
+        cancelled: "Your order has been cancelled.",
+      };
+      const msg = STATUS_MESSAGES[status];
+      if (msg) {
+        notify(order.buyer, {
+          type:    "order",
+          title:   `Order ${status.charAt(0).toUpperCase() + status.slice(1)}`,
+          message: msg,
+          link:    "/orders",
+        }).catch(() => {});
+      }
+    }
+
     res.json({ success: true, order });
   } catch (error) {
     logger.error("Error updating order:", error);
@@ -701,16 +722,25 @@ export const raiseDispute = async (req, res) => {
     order.disputeDescription = (description || "").trim();
     await order.save({ validateModifiedOnly: true });
 
+    const shortId = order._id.toString().slice(-6).toUpperCase();
+
     // Notify seller of dispute
-    const sellerUserId = order.seller;
-    if (sellerUserId) {
-      notify(sellerUserId, {
+    if (order.seller) {
+      notify(order.seller, {
         type: "dispute",
         title: "Dispute raised",
-        message: `A buyer has raised a dispute on order #${order._id.toString().slice(-6).toUpperCase()}. Check your orders for details.`,
+        message: `A buyer has raised a dispute on order #${shortId}. Check your orders for details.`,
         link: "/seller-dashboard",
-      });
+      }).catch(() => {});
     }
+
+    // Confirm to buyer that their dispute was received
+    notify(order.buyer, {
+      type: "dispute",
+      title: "Dispute submitted",
+      message: `Your dispute for order #${shortId} has been received. Our team will review it and get back to you.`,
+      link: "/orders",
+    }).catch(() => {});
 
     res.json({ success: true, orderId: order._id });
   } catch (err) {
@@ -744,6 +774,17 @@ export const cancelOrder = async (req, res) => {
 
     order.status = "cancelled";
     await order.save();
+
+    // Notify the seller their order was cancelled
+    if (order.seller) {
+      const cancelledBy = isAdmin ? "an admin" : "the buyer";
+      notify(order.seller, {
+        type:    "order",
+        title:   "Order cancelled",
+        message: `Order #${order._id.toString().slice(-6).toUpperCase()} was cancelled by ${cancelledBy}.`,
+        link:    "/seller-dashboard",
+      }).catch(() => {});
+    }
 
     res.json({
       success: true,
@@ -1138,6 +1179,18 @@ export const confirmTransfer = async (req, res) => {
       createdOrders.push(order._id);
     }
 
+
+    // Fire-and-forget: alert every admin so they know a transfer proof needs reviewing
+    User.find({ roles: "admin" }, { _id: 1 }).lean()
+      .then((admins) => Promise.all(admins.map((a) =>
+        notify(a._id, {
+          type:    "order",
+          title:   "Transfer proof submitted",
+          message: `A buyer has submitted bank transfer proof for ${createdOrders.length} order(s). Please verify.`,
+          link:    "/admin/orders",
+        })
+      )))
+      .catch(() => {});
 
     return res.status(201).json({
       success: true,

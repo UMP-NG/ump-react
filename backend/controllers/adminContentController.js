@@ -7,6 +7,7 @@ import Category from "../models/Category.js";
 import Seller from "../models/Seller.js";
 import User from "../models/User.js";
 import logger from "../utils/logger.js";
+import { notify } from "../utils/notify.js";
 
 export const getAdminProducts = async (req, res) => {
   try {
@@ -49,7 +50,27 @@ export const bulkProductAction = async (req, res) => {
       action === "feature" ? { isAdvertised: true } :
       action === "remove"  ? { isRemoved: true, isAvailable: false } : null;
     if (!update) return res.status(400).json({ message: "Invalid action" });
+
+    // Fetch affected products before updating so we have seller IDs and names
+    const shouldNotify = action === "flag" || action === "remove";
+    const affectedProducts = shouldNotify
+      ? await Product.find({ _id: { $in: validIds } }).select("seller name").lean()
+      : [];
+
     await Product.updateMany({ _id: { $in: validIds } }, update);
+
+    // Notify each distinct seller
+    if (shouldNotify && affectedProducts.length) {
+      const notifTitle   = action === "flag"   ? "Product flagged" : "Product removed";
+      const notifMessage = action === "flag"
+        ? "One of your products has been flagged by an admin for review. Please check your listings."
+        : "One of your products has been removed by an admin. Contact support for details.";
+      const sellerIds = [...new Set(affectedProducts.map((p) => p.seller?.toString()).filter(Boolean))];
+      sellerIds.forEach((sid) =>
+        notify(sid, { type: "account", title: notifTitle, message: notifMessage, link: "/seller-dashboard" }).catch(() => {})
+      );
+    }
+
     res.json({ success: true });
   } catch (err) {
     logger.error("bulkProductAction:", err);

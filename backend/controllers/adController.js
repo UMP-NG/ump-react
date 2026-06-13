@@ -215,6 +215,15 @@ export const verifyAdPayment = async (req, res) => {
       });
     } else {
       await AdCampaign.findByIdAndUpdate(payment.metadata?.campaignId, { status: "cancelled" });
+      // Notify seller their ad payment failed
+      if (payment.user) {
+        notify(payment.user, {
+          type:    "account",
+          title:   "Ad payment failed",
+          message: "Your ad campaign payment could not be verified. Please try again or contact support.",
+          link:    "/seller-dashboard",
+        }).catch(() => {});
+      }
     }
 
     const camp = await AdCampaign.findOne({ _id: payment.metadata?.campaignId }).populate("product", "name").lean();
@@ -279,6 +288,16 @@ export const cancelAdCampaign = async (req, res) => {
     // Only clear the product ad flag if the campaign was previously active
     if (campaign.status === "active") {
       await Product.findByIdAndUpdate(campaign.product, { isAdvertised: false, adEndsAt: null });
+    }
+
+    // Notify the seller only when an admin cancels their campaign (not when seller self-cancels)
+    if (isAdmin && campaign.seller && campaign.seller.toString() !== req.user._id.toString()) {
+      notify(campaign.seller, {
+        type:    "account",
+        title:   "Ad campaign cancelled",
+        message: `Your ad campaign has been cancelled by an admin. Contact support if you have questions.`,
+        link:    "/seller-dashboard",
+      }).catch(() => {});
     }
 
     res.json({ success: true, campaign });

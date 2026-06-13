@@ -30,8 +30,8 @@ function UMPContactPicker({ onSelect, onClose }) {
         setStep("error");
         return;
       }
-      // Pick first available admin for this role
-      const admin = list[0];
+      // Pick randomly so load is spread across all admins assigned to this role
+      const admin = list[Math.floor(Math.random() * list.length)];
       onSelect({ _id: admin._id, name: admin.name || "UMP Support", avatar: admin.avatar, issueType: issueType.label });
     } catch {
       setError("Couldn't reach support. Please try again.");

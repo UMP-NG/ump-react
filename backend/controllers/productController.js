@@ -83,6 +83,21 @@ export const createProduct = async (req, res) => {
             seller.products.push(product._id);
             await seller.save();
           }
+
+          // Notify every follower of this store about the new listing
+          if (seller.followers?.length > 0) {
+            const storeName = seller.storeName || req.user.name || "A seller you follow";
+            Promise.allSettled(
+              seller.followers.map((uid) =>
+                notify(uid.toString(), {
+                  type:    "account",
+                  title:   `New listing from ${storeName}`,
+                  message: `"${product.name}" is now available in their store.`,
+                  link:    `/products/${product._id}`,
+                })
+              )
+            );
+          }
         } else {
           logger.warn("⚠️ Seller profile not found for user:", req.user._id);
         }
@@ -403,6 +418,7 @@ export const updateProduct = async (req, res) => {
       const p = Number(req.body.price);
       if (!isNaN(p) && p >= 0) product.price = p;
     }
+    const oldStock = product.stock || 0;
     if (req.body.stock !== undefined && req.body.stock !== "") {
       const s = Math.floor(Number(req.body.stock));
       if (!isNaN(s) && s >= 0) product.stock = s;
@@ -509,6 +525,23 @@ export const updateProduct = async (req, res) => {
         updatedProduct.priceWatchers
           .filter((w) => w.priceAtSubscription > newEffective)
           .map((w) => notify(w.user.toString(), notifyPayload))
+      );
+    }
+
+    // Fire restock notifications when stock transitions from 0 to positive
+    if (oldStock === 0 && updatedProduct.stock > 0 && updatedProduct.restockSubscribers?.length > 0) {
+      const subscribers = [...updatedProduct.restockSubscribers];
+      // Clear subscriber list first — they signed up for a one-time alert
+      Product.findByIdAndUpdate(updatedProduct._id, { $set: { restockSubscribers: [] } }).catch(() => {});
+      Promise.allSettled(
+        subscribers.map((uid) =>
+          notify(uid.toString(), {
+            type:    "account",
+            title:   "Back in stock!",
+            message: `${updatedProduct.name} is back in stock. Grab it before it sells out!`,
+            link:    `/products/${updatedProduct._id}`,
+          })
+        )
       );
     }
 

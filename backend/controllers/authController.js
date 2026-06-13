@@ -984,7 +984,7 @@ async function _notifyAdmins(title, message, link) {
     }
     // Browser push for each admin
     for (const a of adminIds) {
-      sendPushToUser(a._id, { title, body: message, data: { url: link } }).catch(() => {});
+      sendPushToUser(a._id, { title, body: message, url: link }).catch(() => {});
     }
   } catch (err) {
     logger.error("[notifyAdmins]", err.message);
@@ -1103,6 +1103,14 @@ export const disputeVerifyIdentity = async (req, res) => {
     res.json({ message: "Your dispute has been submitted. An admin will review both accounts." });
 
     setImmediate(() => {
+      // Confirm to the applicant their dispute was logged
+      notify(req.user._id, {
+        type:    "account",
+        title:   "Dispute submitted",
+        message: "Your identity dispute has been received. An admin will review both accounts and get back to you.",
+        link:    "/settings?tab=verify",
+      }).catch(() => {});
+
       _notifyAdmins(
         "Identity dispute raised",
         `${req.user.name || req.user.email} raised a dispute for matric ${verReq.matricNumber}.`,

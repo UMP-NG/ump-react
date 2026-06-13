@@ -126,6 +126,14 @@ export const approveProvider = async (req, res) => {
     const service = await Service.findOne({ provider: user._id });
     if (service) { service.verified = true; service.verificationRequested = false; await service.save(); }
     if (!user.roles.includes("service_provider")) { user.roles.push("service_provider"); await user.save(); }
+
+    notify(user._id, {
+      type:    "account",
+      title:   "Service provider approved!",
+      message: "Your service provider application has been approved. You can now offer services on UMP.",
+      link:    "/provider-analytics",
+    }).catch(() => {});
+
     res.json({ success: true });
   } catch (err) {
     logger.error("approveProvider:", err);

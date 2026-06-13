@@ -257,6 +257,14 @@ export const applyNegotiatedPrice = async (req, res) => {
       });
     }
 
+    // Push notification so buyer sees this even when the tab is closed
+    notify(buyerId, {
+      type: "message",
+      title: "Negotiated price added to cart",
+      message: `"${negotiation.itemName}" is now in your cart at ₦${Number(negotiation.proposedPrice).toLocaleString("en-NG")} — your negotiated price!`,
+      link: "/cart",
+    }).catch(() => {});
+
     res.json({ success: true, message: "Negotiated price applied to buyer's cart" });
   } catch (err) {
     logger.error("❌ Error applying negotiated price:", err);

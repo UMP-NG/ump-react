@@ -1,6 +1,7 @@
 import Follow from "../models/Follow.js";
 import User from "../models/User.js";
 import logger from "../utils/logger.js";
+import { notify } from "../utils/notify.js";
 
 // ✅ Follow a user
 export const followUser = async (req, res) => {
@@ -28,6 +29,13 @@ export const followUser = async (req, res) => {
       follower: followerId,
       following: userId,
     });
+
+    notify(userId, {
+      type:    "account",
+      title:   "New follower",
+      message: `${req.user.name || "Someone"} started following you.`,
+      link:    `/profile/${followerId}`,
+    }).catch(() => {});
 
     res.status(201).json({ success: true, follow });
   } catch (error) {

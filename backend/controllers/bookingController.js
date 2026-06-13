@@ -365,6 +365,13 @@ export const completeBooking = async (req, res) => {
       link: "/provider-analytics",
     }).catch(() => {});
 
+    notify(booking.user, {
+      type: "order",
+      title: "Booking completed",
+      message: `Your booking session has been marked as completed.`,
+      link: "/my-bookings",
+    }).catch(() => {});
+
     res.json({ success: true, booking: updated });
   } catch (err) {
     logger.error("completeBooking:", err);
