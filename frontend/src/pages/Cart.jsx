@@ -118,6 +118,22 @@ export default function Cart() {
       .catch(() => setCartSbCities([]));
   }, [delivery.state, cartSbStates]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Wipe stale service selections when the buyer changes their delivery city/state
+  useEffect(() => {
+    setDeliverySelections((prev) => {
+      const next = { ...prev };
+      let changed = false;
+      for (const sid of Object.keys(next)) {
+        if (next[sid]?.method === "shipbubble" && (next[sid].fee || next[sid].serviceCode)) {
+          next[sid] = { ...next[sid], fee: 0, serviceCode: "" };
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+    setShipbubbleRates({});
+  }, [delivery.city, delivery.state]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Debounced Shipbubble rate fetch when buyer has city+state and a seller has shipbubble selected
   useEffect(() => {
     clearTimeout(shipbubbleDebounce.current);

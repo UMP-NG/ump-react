@@ -142,6 +142,13 @@ export async function createShipment({ serviceCode, sender, recipient, parcel, o
       buildAddress(api, recipient),
     ]);
 
+    if (!senderDetails.address_code) {
+      throw new Error(`Could not resolve Shipbubble location code for sender city "${sender.city}", state "${sender.state}". Check the seller's pickup address spelling.`);
+    }
+    if (!recipientDetails.address_code) {
+      throw new Error(`Could not resolve Shipbubble location code for buyer city "${recipient.city}". Please check your city spelling.`);
+    }
+
     const res = await api.post("/shipping/labels", {
       service_code:      serviceCode,
       sender_details:    senderDetails,

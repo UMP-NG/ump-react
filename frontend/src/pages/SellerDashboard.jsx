@@ -2625,19 +2625,31 @@ export default function SellerDashboard() {
                     </div>
                     <div>
                       <label style={lSty}>State {sbLocLoading && <i className="fas fa-circle-notch fa-spin" style={{ fontSize: "1rem", marginLeft: 4 }} />}</label>
-                      <select style={iSty} value={deliveryConfig.shipbubble.pickupAddress.state}
-                        onChange={(e) => setDeliveryConfig((c) => ({ ...c, shipbubble: { ...c.shipbubble, pickupAddress: { ...c.shipbubble.pickupAddress, state: e.target.value, city: "" } } }))}>
-                        <option value="">Select state</option>
-                        {sbStates.map((s) => <option key={s.code || s.state_code} value={s.name}>{s.name}</option>)}
-                      </select>
+                      {sbStates.length > 0 ? (
+                        <select style={iSty} value={deliveryConfig.shipbubble.pickupAddress.state}
+                          onChange={(e) => setDeliveryConfig((c) => ({ ...c, shipbubble: { ...c.shipbubble, pickupAddress: { ...c.shipbubble.pickupAddress, state: e.target.value, city: "" } } }))}>
+                          <option value="">Select state</option>
+                          {sbStates.map((s) => <option key={s.code || s.state_code} value={s.name}>{s.name}</option>)}
+                        </select>
+                      ) : (
+                        <input style={iSty} value={deliveryConfig.shipbubble.pickupAddress.state}
+                          onChange={(e) => setDeliveryConfig((c) => ({ ...c, shipbubble: { ...c.shipbubble, pickupAddress: { ...c.shipbubble.pickupAddress, state: e.target.value, city: "" } } }))}
+                          placeholder="e.g. Lagos" />
+                      )}
                     </div>
                     <div>
                       <label style={lSty}>City</label>
-                      <select style={iSty} value={deliveryConfig.shipbubble.pickupAddress.city}
-                        onChange={(e) => setDeliveryConfig((c) => ({ ...c, shipbubble: { ...c.shipbubble, pickupAddress: { ...c.shipbubble.pickupAddress, city: e.target.value } } }))}>
-                        <option value="">{deliveryConfig.shipbubble.pickupAddress.state ? (sbCities.length ? "Select city" : "Loading…") : "Select state first"}</option>
-                        {sbCities.map((c) => <option key={c.code || c.city_code} value={c.name}>{c.name}</option>)}
-                      </select>
+                      {sbStates.length > 0 ? (
+                        <select style={iSty} value={deliveryConfig.shipbubble.pickupAddress.city}
+                          onChange={(e) => setDeliveryConfig((c) => ({ ...c, shipbubble: { ...c.shipbubble, pickupAddress: { ...c.shipbubble.pickupAddress, city: e.target.value } } }))}>
+                          <option value="">{deliveryConfig.shipbubble.pickupAddress.state ? (sbCities.length ? "Select city" : "Loading…") : "Select state first"}</option>
+                          {sbCities.map((c) => <option key={c.code || c.city_code} value={c.name}>{c.name}</option>)}
+                        </select>
+                      ) : (
+                        <input style={iSty} value={deliveryConfig.shipbubble.pickupAddress.city}
+                          onChange={(e) => setDeliveryConfig((c) => ({ ...c, shipbubble: { ...c.shipbubble, pickupAddress: { ...c.shipbubble.pickupAddress, city: e.target.value } } }))}
+                          placeholder="e.g. Lagos" />
+                      )}
                     </div>
                   </div>
                 </div>

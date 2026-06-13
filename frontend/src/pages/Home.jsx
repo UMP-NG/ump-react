@@ -158,9 +158,13 @@ export default function Home() {
       .finally(() => setSellersLoading(false));
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Following feed — only meaningful once we know the user is logged in and has follows
+  // Following feed — only meaningful once we know the user is logged in and has follows.
+  // Clear the feed on logout so a guest never sees the previous user's data.
   useEffect(() => {
-    if (!user?.following?.length) return;
+    if (!user?.following?.length) {
+      setFollowingFeed([]);
+      return;
+    }
     apiFetch("/api/products/following")
       .then((d) => setFollowingFeed(d.products || []))
       .catch(() => {});

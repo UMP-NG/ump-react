@@ -13,6 +13,7 @@ import cloudinary from "../config/cloudinary.js";
 import { audit } from "../utils/auditLog.js";
 import { notify } from "../utils/notify.js";
 import logger from "../utils/logger.js";
+import { getRates } from "../utils/shipbubble.js";
 
 // Read platform fee settings from Config once per request (cached in local var)
 async function getFeeConfig() {
@@ -189,6 +190,9 @@ export const checkoutCart = async (req, res) => {
     let couponDoc = null;
     let couponDiscount = 0;
     if (couponId) {
+      if (!mongoose.Types.ObjectId.isValid(couponId)) {
+        return res.status(400).json({ message: "Invalid coupon" });
+      }
       couponDoc = await Coupon.findById(couponId);
       if (!couponDoc || !couponDoc.active) {
         return res.status(400).json({ message: "Invalid or inactive coupon" });
@@ -264,11 +268,47 @@ export const checkoutCart = async (req, res) => {
 
       const orderDeliveryMethod = methodEnabled ? requestedMethod : "pickup";
 
-      // Validate fee server-side — Shipbubble fee comes from the buyer's rate selection;
-      // cap at ₦50,000 to prevent client-side manipulation
+      // Shipbubble fee: never trust the client-sent amount.
+      // Re-fetch live rates from Shipbubble and match by serviceCode so the
+      // price is always what Shipbubble charged at the time of checkout.
       let orderDeliveryFee = 0;
       if (orderDeliveryMethod === "shipbubble") {
-        orderDeliveryFee = Math.min(Math.max(0, Number(sel.fee) || 0), 50000);
+        if (!sel.serviceCode) {
+          return res.status(400).json({ message: "A courier service must be selected for Shipbubble delivery" });
+        }
+        const pickup = sellerDoc?.delivery?.shipbubble?.pickupAddress;
+        if (!pickup?.city || !pickup?.state) {
+          return res.status(400).json({ message: "Seller has not configured a Shipbubble pickup address" });
+        }
+        let liveRates;
+        try {
+          liveRates = await getRates({
+            sender: {
+              name:   pickup.name   || sellerDoc.storeName || "Seller",
+              email:  pickup.email  || "",
+              phone:  pickup.phone  || "",
+              street: pickup.street || "",
+              city:   pickup.city,
+              state:  pickup.state,
+            },
+            recipient: {
+              name:   shippingAddress?.name  || "Buyer",
+              phone:  shippingAddress?.phone || "",
+              street: shippingAddress?.address || shippingAddress?.street || "",
+              city:   shippingAddress?.city   || "",
+              state:  shippingAddress?.state  || "",
+            },
+            parcel: { weight: 0.5 },
+          });
+        } catch (rateErr) {
+          logger.error("checkoutCart getRates:", rateErr.message);
+          return res.status(502).json({ message: "Could not verify shipping rate — please try again." });
+        }
+        const matched = liveRates.find((r) => (r.service_code || r.code) === sel.serviceCode);
+        if (!matched) {
+          return res.status(400).json({ message: "The selected courier rate is no longer available. Please go back and choose a courier again." });
+        }
+        orderDeliveryFee = Math.round(matched.amount || matched.fee || 0);
       }
 
       const order = new Order({
