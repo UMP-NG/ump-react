@@ -52,12 +52,19 @@ async function fetchCities(api, stateCode) {
 
 const norm = (s) => (s || "").toLowerCase().trim();
 
+// Strip suffixes users commonly append: "Lagos State" → "Lagos", "Ikeja City" → "Ikeja"
+const clean = (s) => norm(s).replace(/\s+(state|city|island|lga|local govt?\.?|municipality)$/i, "").trim();
+
 // Returns the Shipbubble address_code for a given city + state, or null on failure.
+// Resolution order: exact → suffix-stripped → starts-with prefix match.
 async function resolveCode(api, cityName, stateName) {
   try {
-    const states = await fetchStates(api);
-    const state  = states.find(
-      (s) => norm(s.name) === norm(stateName) || norm(s.code) === norm(stateName)
+    const states     = await fetchStates(api);
+    const normSt     = norm(stateName);
+    const cleanSt    = clean(stateName);
+    const state      = states.find(
+      (s) => norm(s.name) === normSt || norm(s.code) === normSt
+          || norm(s.name) === cleanSt || norm(s.code) === cleanSt
     );
     if (!state) {
       logger.warn(`Shipbubble: state not found — "${stateName}"`);
@@ -66,7 +73,25 @@ async function resolveCode(api, cityName, stateName) {
 
     const stateCode = state.code || state.state_code;
     const cities    = await fetchCities(api, stateCode);
-    const city      = cities.find((c) => norm(c.name) === norm(cityName));
+    const normCt    = norm(cityName);
+    const cleanCt   = clean(cityName);
+
+    // 1. Exact match
+    let city = cities.find((c) => norm(c.name) === normCt);
+
+    // 2. Suffix-stripped match  e.g. "Lagos State" → "Lagos"
+    if (!city && cleanCt !== normCt) {
+      city = cities.find((c) => norm(c.name) === cleanCt);
+    }
+
+    // 3. Prefix match  e.g. "Victoria" → "Victoria Island", or "Ijeododo" → first city that starts with it
+    if (!city) {
+      city = cities.find((c) => {
+        const cn = norm(c.name);
+        return cn.startsWith(normCt) || normCt.startsWith(cn);
+      });
+    }
+
     if (!city) {
       logger.warn(`Shipbubble: city not found — "${cityName}" in "${stateName}"`);
       return null;

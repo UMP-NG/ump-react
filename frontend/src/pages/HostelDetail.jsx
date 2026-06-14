@@ -202,7 +202,7 @@ export default function HostelDetail() {
             <div style={{ width: 48, height: 48, borderRadius: "50%", overflow: "hidden" }}><Ph kind="portrait-3" label={(listing.owner.name || "O")[0]} /></div>
             <div style={{ flex: 1 }}>
               <strong style={{ fontSize: "1.4rem" }}>{listing.owner.name}</strong>
-              <div style={{ fontSize: "1.2rem", color: "var(--ink-3)" }}>Landlord · UNILAG area</div>
+              <div style={{ fontSize: "1.2rem", color: "var(--ink-3)" }}>Agent · UNILAG area</div>
             </div>
             <button className="btn btn-sm btn-ghost" onClick={() => navigate("/messages")}><i className="fas fa-comment" /> Chat</button>
           </div>

@@ -1,5 +1,6 @@
 import express from "express";
 import { protect } from "../middleware/authMiddleware.js";
+import { quoteLimiter } from "../middleware/rateLimits.js";
 import {
   getDeliveryQuote,
   bookShipbubbleDelivery,
@@ -9,8 +10,9 @@ import {
 
 const router = express.Router();
 
-router.get("/locations",      protect, getDeliveryLocations);
-router.get("/quote",          protect, getDeliveryQuote);
+// /locations and /quote are open (no req.user needed) — rate-limited to guard the Shipbubble API
+router.get("/locations",      getDeliveryLocations);
+router.get("/quote",          quoteLimiter, getDeliveryQuote);
 router.post("/book/:orderId", protect, bookShipbubbleDelivery);
 router.get("/track/:orderId", protect, getTrackingInfo);
 

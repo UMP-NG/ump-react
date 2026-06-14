@@ -42,7 +42,9 @@ export const paystackWebhook = async (req, res) => {
         await payment.save();
 
         // confirmAllOrders handles order status update + buyer/seller notifications
-        await confirmAllOrders({ orders: [payment.order] });
+        if (payment.order) {
+          await confirmAllOrders({ orders: [payment.order] });
+        }
       }
     }
 

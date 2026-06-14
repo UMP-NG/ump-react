@@ -46,3 +46,6 @@ export const referralLimiter = make(15 * 60 * 1000, 20, "Too many referral looku
 
 // 30 req / 60 sec — message sending (prevents spam flood)
 export const messageLimiter = make(60 * 1000, 30, "Too many messages. Please slow down.");
+
+// 40 req / 5 min — delivery quote (calls external Shipbubble API; open to guests)
+export const quoteLimiter = make(5 * 60 * 1000, 40, "Too many delivery quote requests. Please slow down.");

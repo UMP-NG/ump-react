@@ -85,8 +85,8 @@ export const deleteReview = async (req, res) => {
     const deleted = await Review.findByIdAndDelete(req.params.reviewId);
     if (!deleted) return res.status(404).json({ message: "Review not found" });
 
-    if (deleted.user) {
-      notify(deleted.user, {
+    if (deleted.author) {
+      notify(deleted.author, {
         type:    "account",
         title:   "Review removed",
         message: "One of your reviews has been removed by an admin for violating our community guidelines.",

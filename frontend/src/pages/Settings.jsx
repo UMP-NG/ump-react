@@ -859,6 +859,7 @@ function VerifyTab({ user, setUser, showToast }) {
   const [docPreview, setDocPreview] = useState(null);
   const [uploading, setUploading]   = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [docError, setDocError]     = useState(null);
   const [docRequest, setDocRequest] = useState(null);   // existing request from server
   const [docLoaded, setDocLoaded]   = useState(false);
 
@@ -938,6 +939,7 @@ function VerifyTab({ user, setUser, showToast }) {
     if (!docFile) return showToast("Please upload a school document", "error");
 
     setSubmitting(true);
+    setDocError(null);
     try {
       // 1. Upload the document image
       setUploading(true);
@@ -945,7 +947,7 @@ function VerifyTab({ user, setUser, showToast }) {
       fd.append("file", docFile);
       const uploadRes = await apiFetch("/api/upload", { method: "POST", body: fd });
       setUploading(false);
-      if (!uploadRes.url) throw new Error("Document upload failed");
+      if (!uploadRes.url) throw new Error("Document upload failed — please try again.");
 
       // 2. Submit the form
       const res = await apiFetch("/api/auth/verify-identity", {
@@ -966,7 +968,9 @@ function VerifyTab({ user, setUser, showToast }) {
       setDocRequest({ status: res.status, matricNumber: docForm.matricNumber.toUpperCase(), institution: docForm.institution });
       showToast(res.message, "success");
     } catch (err) {
-      showToast(err?.message || "Submission failed, please try again", "error");
+      const msg = err?.message || "Submission failed. Please check your connection and try again.";
+      setDocError(msg);
+      showToast(msg, "error");
     } finally {
       setSubmitting(false);
       setUploading(false);
@@ -1192,7 +1196,19 @@ function VerifyTab({ user, setUser, showToast }) {
             </div>
           )}
 
-          {/* Main form — only shown when no request yet */}
+          {/* Re-submit button for rejected requests */}
+          {docRequest?.status === "rejected" && (
+            <button
+              type="button"
+              className="btn btn-outline btn-block"
+              style={{ marginBottom: 4 }}
+              onClick={() => { setDocRequest(null); setDocFile(null); setDocPreview(null); setDocError(null); setDocForm({ institution: "", firstName: "", middleName: "", lastName: "", matricNumber: "", department: "", faculty: "" }); }}
+            >
+              <i className="fas fa-rotate-right" /> Re-submit documents
+            </button>
+          )}
+
+          {/* Main form — only shown when no existing request (cleared on re-submit) */}
           {!docRequest && (
             <form onSubmit={submitDocForm}>
               <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -1279,20 +1295,36 @@ function VerifyTab({ user, setUser, showToast }) {
                   </p>
                   {docPreview ? (
                     <div style={{ position: "relative", marginBottom: 10 }}>
-                      <img src={docPreview} alt="Document preview" style={{ width: "100%", maxHeight: 200, objectFit: "contain", borderRadius: "var(--r-md)", border: "1px solid var(--line)", background: "var(--surface)" }} />
-                      <button type="button" className="icon-btn" style={{ position: "absolute", top: 6, right: 6, background: "rgba(15,23,42,.7)", color: "#fff" }} onClick={() => { setDocFile(null); setDocPreview(null); }}>
-                        <i className="fas fa-xmark" />
-                      </button>
+                      <img src={docPreview} alt="Document preview" style={{ width: "100%", maxHeight: 200, objectFit: "contain", borderRadius: "var(--r-md)", border: "1px solid var(--line)", background: "var(--surface)", opacity: uploading ? 0.5 : 1 }} />
+                      {uploading && (
+                        <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8, borderRadius: "var(--r-md)", background: "rgba(15,23,42,.35)" }}>
+                          <i className="fas fa-spinner fa-spin" style={{ color: "#fff", fontSize: "2rem" }} />
+                          <span style={{ color: "#fff", fontSize: "1.2rem", fontWeight: 600 }}>Uploading…</span>
+                        </div>
+                      )}
+                      {!uploading && !submitting && (
+                        <button type="button" className="icon-btn" style={{ position: "absolute", top: 6, right: 6, background: "rgba(15,23,42,.7)", color: "#fff" }} onClick={() => { setDocFile(null); setDocPreview(null); }}>
+                          <i className="fas fa-xmark" />
+                        </button>
+                      )}
                     </div>
                   ) : (
-                    <label style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8, padding: "20px 14px", border: "2px dashed var(--line)", borderRadius: "var(--r-lg)", cursor: "pointer", background: "var(--surface)", color: "var(--ink-3)" }}>
-                      <i className="fas fa-cloud-arrow-up" style={{ fontSize: "2rem" }} />
-                      <span style={{ fontSize: "1.25rem", fontWeight: 600 }}>Click to upload document</span>
-                      <span style={{ fontSize: "1.1rem" }}>JPG, PNG or WebP · Max 5 MB</span>
-                      <input type="file" accept="image/*" style={{ display: "none" }} onChange={handleDocFileChange} />
+                    <label style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8, padding: "20px 14px", border: `2px dashed ${submitting ? "var(--accent)" : "var(--line)"}`, borderRadius: "var(--r-lg)", cursor: submitting ? "default" : "pointer", background: "var(--surface)", color: "var(--ink-3)", opacity: submitting ? 0.6 : 1 }}>
+                      {submitting
+                        ? <><i className="fas fa-spinner fa-spin" style={{ fontSize: "2rem", color: "var(--accent)" }} /><span style={{ fontSize: "1.25rem", fontWeight: 600, color: "var(--accent)" }}>Uploading…</span></>
+                        : <><i className="fas fa-cloud-arrow-up" style={{ fontSize: "2rem" }} /><span style={{ fontSize: "1.25rem", fontWeight: 600 }}>Click to upload document</span><span style={{ fontSize: "1.1rem" }}>JPG, PNG or WebP · Max 5 MB</span></>
+                      }
+                      <input type="file" accept="image/*" style={{ display: "none" }} onChange={handleDocFileChange} disabled={submitting} />
                     </label>
                   )}
                 </div>
+
+                {docError && (
+                  <div style={{ padding: "12px 14px", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "var(--r-md)", fontSize: "1.25rem", color: "#dc2626", display: "flex", gap: 8, alignItems: "flex-start" }}>
+                    <i className="fas fa-circle-xmark" style={{ flexShrink: 0, marginTop: 1 }} />
+                    <span>{docError}</span>
+                  </div>
+                )}
 
                 <button className="btn btn-primary btn-block btn-lg" type="submit" disabled={submitting || uploading}>
                   {uploading ? <><i className="fas fa-spinner fa-spin" /> Uploading document…</>
