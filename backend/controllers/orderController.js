@@ -304,11 +304,11 @@ export const checkoutCart = async (req, res) => {
           logger.error("checkoutCart getRates:", rateErr.message);
           return res.status(502).json({ message: "Could not verify shipping rate — please try again." });
         }
-        const matched = liveRates.find((r) => (r.service_code || r.code) === sel.serviceCode);
+        const matched = liveRates.find((r) => r.service_code === sel.serviceCode);
         if (!matched) {
           return res.status(400).json({ message: "The selected courier rate is no longer available. Please go back and choose a courier again." });
         }
-        orderDeliveryFee = Math.round(matched.amount || matched.fee || 0);
+        orderDeliveryFee = Math.round(matched.total || 0);
       }
 
       const order = new Order({

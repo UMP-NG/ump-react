@@ -20,6 +20,7 @@ import {
   getAdminPayouts,
   getPayoutsSummary,
   approvePayout,
+  markPayoutPaid,
   getAnalytics,
   getAdminTeam,
   getAdminActivity,
@@ -114,9 +115,10 @@ router.delete("/orders/:orderId",   ...adm, deleteOrder);
 router.get("/bookings", ...adm, getAdminBookings);
 
 // ── Payouts ────────────────────────────────────────────────────────────────
-router.get ("/payouts/summary",            ...adm, getPayoutsSummary);
-router.get ("/payouts",                    ...adm, getAdminPayouts);
-router.post("/payouts/:payoutId/approve",  ...adm, approvePayout);
+router.get ("/payouts/summary",               ...adm, getPayoutsSummary);
+router.get ("/payouts",                       ...adm, getAdminPayouts);
+router.post("/payouts/:payoutId/approve",     ...adm, approvePayout);
+router.post("/payouts/:payoutId/mark-paid",   ...adm, markPayoutPaid);
 
 // ── Providers ─────────────────────────────────────────────────────────────
 router.get ("/providers",                      ...adm, getAdminProviders);

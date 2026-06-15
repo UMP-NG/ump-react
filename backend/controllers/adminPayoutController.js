@@ -63,13 +63,39 @@ export const getPayoutsSummary = async (req, res) => {
       Payout.aggregate([{ $match: { status: { $in: ["processing","completed"] }, updatedAt: { $gte: today } } },                 { $group: { _id: null, total: { $sum: "$amount" } } }]),
       Payout.aggregate([{ $match: { status: "completed", updatedAt: { $gte: monthStart } } },                                   { $group: { _id: null, total: { $sum: "$amount" } } }]),
     ]);
+    const [processing] = await Promise.all([
+      Payout.aggregate([{ $match: { status: "processing" } }, { $group: { _id: null, total: { $sum: "$amount" } } }]),
+    ]);
     res.json({
       pendingValue:  fmt(pending[0]?.total      || 0),
       approvedToday: fmt(approvedToday[0]?.total || 0),
       paidThisMonth: fmt(paidMonth[0]?.total     || 0),
-      walletFloat:   fmt(pending[0]?.total       || 0),
+      walletFloat:   fmt((pending[0]?.total || 0) + (processing[0]?.total || 0)),
     });
   } catch (err) {
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+export const markPayoutPaid = async (req, res) => {
+  try {
+    const payout = await Payout.findOneAndUpdate(
+      { _id: req.params.payoutId, status: "processing" },
+      { $set: { status: "completed" } },
+      { new: true }
+    );
+    if (!payout) return res.status(400).json({ message: "Payout not found or not in processing state" });
+    if (payout.seller) {
+      notify(payout.seller, {
+        type: "payout",
+        title: "Payout sent",
+        message: `Your payout of ${fmt(payout.amount)} has been sent to your bank account.`,
+        link: "/seller-dashboard",
+      });
+    }
+    res.json({ success: true, payout });
+  } catch (err) {
+    logger.error("markPayoutPaid:", err);
     res.status(500).json({ message: "Server error" });
   }
 };

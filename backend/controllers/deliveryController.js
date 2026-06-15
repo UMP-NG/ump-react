@@ -47,11 +47,11 @@ export const getDeliveryQuote = async (req, res) => {
     return res.json({
       success: true,
       rates: rates.map((r) => ({
-        serviceCode:    r.service_code || r.code,
-        courierName:    r.courier_name || r.courier || r.name,
-        amount:         r.amount || r.fee || 0,
-        estimatedDays:  r.estimated_days || r.delivery_duration || "",
-        logoUrl:        r.logo_url || r.logo || null,
+        serviceCode:   r.service_code,
+        courierName:   r.courier_name,
+        amount:        r.total || 0,
+        estimatedDays: r.delivery_eta || "",
+        logoUrl:       r.courier_image || null,
       })),
     });
   } catch (err) {

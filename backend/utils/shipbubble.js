@@ -17,116 +17,66 @@ function client() {
   });
 }
 
-// ── Location code resolution ──────────────────────────────────────────────────
-// Shipbubble requires an `address_code` in sender/recipient details.
-// We fetch state → city codes from their locations API and cache for 6 h
-// so we don't make extra round-trips on every quote request.
-
-const _cache = { states: null, cities: {}, ts: 0 };
+// ── Category cache ────────────────────────────────────────────────────────────
+const _catCache = { data: null, ts: 0 };
 const CACHE_TTL = 6 * 60 * 60 * 1000; // 6 hours
 
-async function fetchStates(api) {
-  if (_cache.states && Date.now() - _cache.ts < CACHE_TTL) return _cache.states;
+async function fetchCategories(api) {
+  if (_catCache.data && Date.now() - _catCache.ts < CACHE_TTL) return _catCache.data;
   try {
-    const res = await api.get("/shipping/country/states");
-    _cache.states = res.data?.data || [];
-    _cache.ts = Date.now();
+    const res = await api.get("/shipping/labels/categories");
+    _catCache.data = res.data?.data || [];
+    _catCache.ts = Date.now();
   } catch (err) {
-    logger.warn("Shipbubble fetchStates:", err.response?.data || err.message);
-    _cache.states = _cache.states || []; // keep stale data on failure
+    logger.warn("Shipbubble fetchCategories:", err.response?.data || err.message);
+    _catCache.data = _catCache.data || [];
   }
-  return _cache.states;
+  return _catCache.data;
 }
 
-async function fetchCities(api, stateCode) {
-  if (_cache.cities[stateCode]) return _cache.cities[stateCode];
-  try {
-    const res = await api.get(`/shipping/country/state/cities?state_code=${encodeURIComponent(stateCode)}`);
-    _cache.cities[stateCode] = res.data?.data || [];
-  } catch (err) {
-    logger.warn(`Shipbubble fetchCities(${stateCode}):`, err.response?.data || err.message);
-    _cache.cities[stateCode] = [];
-  }
-  return _cache.cities[stateCode];
+async function defaultCategoryId(api) {
+  const cats = await fetchCategories(api);
+  // "Light weight items" is the safest default for general marketplace items
+  const match = cats.find((c) => /light/i.test(c.category));
+  return (match || cats[0])?.category_id || null;
 }
 
-const norm = (s) => (s || "").toLowerCase().trim();
+// ── Address validation ────────────────────────────────────────────────────────
+async function validateAddress(api, addr) {
+  const streetPart = addr.street || addr.address || "";
+  const fullAddress = [streetPart, addr.city, addr.state, "Nigeria"]
+    .filter(Boolean)
+    .join(", ");
 
-// Strip suffixes users commonly append: "Lagos State" → "Lagos", "Ikeja City" → "Ikeja"
-const clean = (s) => norm(s).replace(/\s+(state|city|island|lga|local govt?\.?|municipality)$/i, "").trim();
-
-// Returns the Shipbubble address_code for a given city + state, or null on failure.
-// Resolution order: exact → suffix-stripped → starts-with prefix match.
-async function resolveCode(api, cityName, stateName) {
-  try {
-    const states     = await fetchStates(api);
-    const normSt     = norm(stateName);
-    const cleanSt    = clean(stateName);
-    const state      = states.find(
-      (s) => norm(s.name) === normSt || norm(s.code) === normSt
-          || norm(s.name) === cleanSt || norm(s.code) === cleanSt
-    );
-    if (!state) {
-      logger.warn(`Shipbubble: state not found — "${stateName}"`);
-      return null;
-    }
-
-    const stateCode = state.code || state.state_code;
-    const cities    = await fetchCities(api, stateCode);
-    const normCt    = norm(cityName);
-    const cleanCt   = clean(cityName);
-
-    // 1. Exact match
-    let city = cities.find((c) => norm(c.name) === normCt);
-
-    // 2. Suffix-stripped match  e.g. "Lagos State" → "Lagos"
-    if (!city && cleanCt !== normCt) {
-      city = cities.find((c) => norm(c.name) === cleanCt);
-    }
-
-    // 3. Prefix match  e.g. "Victoria" → "Victoria Island", or "Ijeododo" → first city that starts with it
-    if (!city) {
-      city = cities.find((c) => {
-        const cn = norm(c.name);
-        return cn.startsWith(normCt) || normCt.startsWith(cn);
-      });
-    }
-
-    if (!city) {
-      logger.warn(`Shipbubble: city not found — "${cityName}" in "${stateName}"`);
-      return null;
-    }
-
-    return city.code || city.city_code || null;
-  } catch (err) {
-    logger.warn("Shipbubble resolveCode:", err.message);
-    return null;
-  }
-}
-
-// Builds the address object Shipbubble expects, including address_code.
-async function buildAddress(api, addr) {
-  const code = await resolveCode(api, addr.city, addr.state);
-  return {
-    name:         addr.name   || "UMP Seller",
-    email:        addr.email  || "noreply@myump.com.ng",
-    phone:        addr.phone  || "",
-    address:      addr.street || "",
-    city:         addr.city   || "",
-    state:        addr.state  || "",
-    address_code: code || "",
-  };
+  const res = await api.post("/shipping/address/validate", {
+    name:    addr.name  || "UMP User",
+    phone:   addr.phone || "08000000000",
+    email:   addr.email || "noreply@myump.com.ng",
+    address: fullAddress,
+    city:    addr.city  || "",
+    state:   addr.state || "",
+    country: "Nigeria",
+  });
+  const data = res.data?.data;
+  if (!data?.address_code) throw new Error("Address validation returned no code");
+  return data;
 }
 
 function buildParcel(parcel = {}) {
   return {
-    packaging:    "box",
-    package_type: "parcel",
-    weight:       parcel.weight      || 0.5,
-    length:       parcel.length      || 15,
-    breadth:      parcel.breadth     || 15,
-    height:       parcel.height      || 10,
-    description:  parcel.description || "Marketplace items",
+    package_dimension: {
+      length: parcel.length  || 15,
+      width:  parcel.breadth || parcel.width || 15,
+      height: parcel.height  || 10,
+      weight: parcel.weight  || 0.5,
+    },
+    package_items: [{
+      name:        parcel.name        || "Marketplace item",
+      description: parcel.description || "Student marketplace item",
+      quantity:    parcel.quantity    || 1,
+      unit_amount: parcel.value       || 5000,
+      unit_weight: parcel.weight      || 0.5,
+    }],
   };
 }
 
@@ -135,24 +85,25 @@ function buildParcel(parcel = {}) {
 export async function getRates({ sender, recipient, parcel }) {
   try {
     const api = client();
-    const [senderDetails, recipientDetails] = await Promise.all([
-      buildAddress(api, sender),
-      buildAddress(api, recipient),
+    const [senderData, recipientData, catId] = await Promise.all([
+      validateAddress(api, sender),
+      validateAddress(api, recipient),
+      defaultCategoryId(api),
     ]);
 
-    if (!senderDetails.address_code) {
-      throw new Error(`Could not resolve Shipbubble location code for sender city "${sender.city}", state "${sender.state}". Check the seller's pickup address spelling.`);
-    }
-    if (!recipientDetails.address_code) {
-      throw new Error(`Could not resolve Shipbubble location code for buyer city "${recipient.city}". Please check your city spelling.`);
-    }
+    const today = new Date().toISOString().split("T")[0];
+    const { package_dimension, package_items } = buildParcel(parcel);
 
     const res = await api.post("/shipping/fetch_rates", {
-      sender_details:    senderDetails,
-      recipient_details: recipientDetails,
-      package_details:   buildParcel(parcel),
+      sender_address_code:   senderData.address_code,
+      reciever_address_code: recipientData.address_code,
+      pickup_date:           today,
+      category_id:           catId,
+      package_dimension,
+      package_items,
     });
-    return res.data?.data?.rates || [];
+
+    return res.data?.data?.couriers || [];
   } catch (err) {
     logger.error("Shipbubble getRates:", err.response?.data || err.message);
     throw new Error(err.response?.data?.message || err.message || "Failed to fetch shipping rates");
@@ -162,23 +113,23 @@ export async function getRates({ sender, recipient, parcel }) {
 export async function createShipment({ serviceCode, sender, recipient, parcel, orderId }) {
   try {
     const api = client();
-    const [senderDetails, recipientDetails] = await Promise.all([
-      buildAddress(api, sender),
-      buildAddress(api, recipient),
+    const [senderData, recipientData, catId] = await Promise.all([
+      validateAddress(api, sender),
+      validateAddress(api, recipient),
+      defaultCategoryId(api),
     ]);
 
-    if (!senderDetails.address_code) {
-      throw new Error(`Could not resolve Shipbubble location code for sender city "${sender.city}", state "${sender.state}". Check the seller's pickup address spelling.`);
-    }
-    if (!recipientDetails.address_code) {
-      throw new Error(`Could not resolve Shipbubble location code for buyer city "${recipient.city}". Please check your city spelling.`);
-    }
+    const today = new Date().toISOString().split("T")[0];
+    const { package_dimension, package_items } = buildParcel(parcel);
 
     const res = await api.post("/shipping/labels", {
-      service_code:      serviceCode,
-      sender_details:    senderDetails,
-      recipient_details: recipientDetails,
-      package_details:   buildParcel(parcel),
+      service_code:          serviceCode,
+      sender_address_code:   senderData.address_code,
+      reciever_address_code: recipientData.address_code,
+      pickup_date:           today,
+      category_id:           catId,
+      package_dimension,
+      package_items,
       metadata: { order_id: String(orderId) },
     });
     return res.data?.data || {};
@@ -198,13 +149,49 @@ export async function trackShipment(shipmentId) {
   }
 }
 
-// GET /api/delivery/locations[?state_code=XX]
-// Without state_code returns the list of Nigerian states (with codes).
-// With state_code returns the cities for that state.
-// Exposed so the seller settings form can offer city/state pickers backed by
-// real Shipbubble location data — guarantees names will resolve correctly.
-export async function getLocations(stateCode = null) {
-  const api = client();
-  if (stateCode) return fetchCities(api, stateCode);
-  return fetchStates(api);
+// GET /api/delivery/locations
+// Shipbubble has no states/cities API — return hardcoded Nigerian states so the
+// frontend can offer a state dropdown while city stays as a free-text input.
+export async function getLocations() {
+  return NIGERIAN_STATES;
 }
+
+const NIGERIAN_STATES = [
+  { name: "Abia",         code: "AB" },
+  { name: "Adamawa",      code: "AD" },
+  { name: "Akwa Ibom",    code: "AK" },
+  { name: "Anambra",      code: "AN" },
+  { name: "Bauchi",       code: "BA" },
+  { name: "Bayelsa",      code: "BY" },
+  { name: "Benue",        code: "BE" },
+  { name: "Borno",        code: "BO" },
+  { name: "Cross River",  code: "CR" },
+  { name: "Delta",        code: "DE" },
+  { name: "Ebonyi",       code: "EB" },
+  { name: "Edo",          code: "ED" },
+  { name: "Ekiti",        code: "EK" },
+  { name: "Enugu",        code: "EN" },
+  { name: "FCT (Abuja)",  code: "FC" },
+  { name: "Gombe",        code: "GO" },
+  { name: "Imo",          code: "IM" },
+  { name: "Jigawa",       code: "JI" },
+  { name: "Kaduna",       code: "KD" },
+  { name: "Kano",         code: "KN" },
+  { name: "Katsina",      code: "KT" },
+  { name: "Kebbi",        code: "KE" },
+  { name: "Kogi",         code: "KO" },
+  { name: "Kwara",        code: "KW" },
+  { name: "Lagos",        code: "LA" },
+  { name: "Nasarawa",     code: "NA" },
+  { name: "Niger",        code: "NI" },
+  { name: "Ogun",         code: "OG" },
+  { name: "Ondo",         code: "ON" },
+  { name: "Osun",         code: "OS" },
+  { name: "Oyo",          code: "OY" },
+  { name: "Plateau",      code: "PL" },
+  { name: "Rivers",       code: "RI" },
+  { name: "Sokoto",       code: "SO" },
+  { name: "Taraba",       code: "TA" },
+  { name: "Yobe",         code: "YO" },
+  { name: "Zamfara",      code: "ZA" },
+];
