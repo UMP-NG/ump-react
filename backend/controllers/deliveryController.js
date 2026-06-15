@@ -145,12 +145,11 @@ export const bookShipbubbleDelivery = async (req, res) => {
   }
 };
 
-// GET /api/delivery/locations — returns Shipbubble states (+ city list once a state is selected)
-// Used by seller setup form to guarantee city/state names match Shipbubble's database exactly.
+// GET /api/delivery/locations — returns hardcoded Nigerian states list.
+// Shipbubble has no states/cities API; city is collected as free-text on the frontend.
 export const getDeliveryLocations = async (req, res) => {
   try {
-    const { state_code } = req.query;
-    const data = await getLocations(state_code || null);
+    const data = await getLocations();
     return res.json({ success: true, data });
   } catch (err) {
     logger.error("getDeliveryLocations:", err.message);

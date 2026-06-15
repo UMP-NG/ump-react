@@ -22,16 +22,18 @@ const _catCache = { data: null, ts: 0 };
 const CACHE_TTL = 6 * 60 * 60 * 1000; // 6 hours
 
 async function fetchCategories(api) {
-  if (_catCache.data && Date.now() - _catCache.ts < CACHE_TTL) return _catCache.data;
+  if (_catCache.data?.length && Date.now() - _catCache.ts < CACHE_TTL) return _catCache.data;
   try {
     const res = await api.get("/shipping/labels/categories");
-    _catCache.data = res.data?.data || [];
-    _catCache.ts = Date.now();
+    const cats = res.data?.data;
+    if (cats?.length) {
+      _catCache.data = cats;
+      _catCache.ts = Date.now();
+    }
   } catch (err) {
     logger.warn("Shipbubble fetchCategories:", err.response?.data || err.message);
-    _catCache.data = _catCache.data || [];
   }
-  return _catCache.data;
+  return _catCache.data || [];
 }
 
 async function defaultCategoryId(api) {

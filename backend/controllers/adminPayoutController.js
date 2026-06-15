@@ -58,13 +58,11 @@ export const getPayoutsSummary = async (req, res) => {
   try {
     const today      = startOf(0);
     const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
-    const [pending, approvedToday, paidMonth] = await Promise.all([
+    const [pending, approvedToday, paidMonth, processing] = await Promise.all([
       Payout.aggregate([{ $match: { status: "pending" } },                                                                      { $group: { _id: null, total: { $sum: "$amount" } } }]),
       Payout.aggregate([{ $match: { status: { $in: ["processing","completed"] }, updatedAt: { $gte: today } } },                 { $group: { _id: null, total: { $sum: "$amount" } } }]),
       Payout.aggregate([{ $match: { status: "completed", updatedAt: { $gte: monthStart } } },                                   { $group: { _id: null, total: { $sum: "$amount" } } }]),
-    ]);
-    const [processing] = await Promise.all([
-      Payout.aggregate([{ $match: { status: "processing" } }, { $group: { _id: null, total: { $sum: "$amount" } } }]),
+      Payout.aggregate([{ $match: { status: "processing" } },                                                                   { $group: { _id: null, total: { $sum: "$amount" } } }]),
     ]);
     res.json({
       pendingValue:  fmt(pending[0]?.total      || 0),
