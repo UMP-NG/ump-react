@@ -57,7 +57,7 @@ async function validateAddress(api, addr) {
     .filter(Boolean)
     .join(", ");
 
-  const cacheKey = fullAddress.toLowerCase().trim();
+  const cacheKey = fullAddress.toLowerCase().trim().replace(/\s+/g, " ");
   const hit = _addrCache.get(cacheKey);
   if (hit && Date.now() - hit.ts < ADDR_TTL) {
     return { address_code: hit.code };
@@ -82,7 +82,7 @@ async function validateAddress(api, addr) {
 }
 
 function buildParcel(parcel = {}) {
-  const qty        = parcel.quantity || 1;
+  const qty        = Math.max(1, Number(parcel.quantity) || 1);
   const unitWeight = parcel.weight   ? parcel.weight / qty : 1.5; // kg per item
   return {
     package_dimension: {

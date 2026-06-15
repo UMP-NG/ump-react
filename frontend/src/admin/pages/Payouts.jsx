@@ -30,6 +30,7 @@ export default function Payouts() {
 
   const fetchPayouts = useCallback(() => {
     setLoading(true);
+    setActionError('');
     const params = new URLSearchParams({ status: TABS[tab].filter });
     Promise.all([
       apiFetch(`/api/admins/payouts?${params}`).catch(() => ({})),

@@ -4,6 +4,7 @@ import { uploadSellerMedia, uploadAvatar } from "../middleware/upload.js";
 import User from "../models/User.js";
 import Seller from "../models/Seller.js";
 import Service from "../models/Service.js";
+import Booking from "../models/Booking.js";
 
 
 const router = express.Router();
@@ -178,12 +179,23 @@ router.delete("/provider", protect, async (req, res) => {
     if (!user.roles.includes("service_provider"))
       return res.status(400).json({ message: "Not a service provider" });
 
-    const now = new Date();
-    await Service.updateMany({ provider: user._id }, { $set: { deletedAt: now } });
+    // Block if the provider has bookings that are still active
+    const activeBooking = await Booking.findOne({
+      provider: user._id,
+      status: { $in: ["pending", "confirmed"] },
+    }).lean();
+    if (activeBooking) {
+      return res.status(409).json({
+        message: "You have active bookings. Complete or cancel them before closing your profile.",
+      });
+    }
 
+    // Update user first (critical state change), then soft-delete services
     user.roles = user.roles.filter((r) => r !== "service_provider");
     user.serviceProviderInfo = undefined;
     await user.save();
+
+    await Service.updateMany({ provider: user._id }, { $set: { deletedAt: new Date() } });
 
     res.json({ message: "Provider profile closed. Your account remains active." });
   } catch (err) {

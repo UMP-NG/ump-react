@@ -2695,12 +2695,12 @@ export default function SellerDashboard() {
           <div className="card" style={{ padding: 20, marginBottom: 16, border: "1px solid rgba(220,38,38,.3)" }}>
             <h3 style={{ margin: "0 0 8px", fontSize: "1.6rem", fontWeight: 700, color: "#dc2626" }}><i className="fas fa-triangle-exclamation" style={{ marginRight: 8 }} />Danger Zone</h3>
             <p style={{ margin: "0 0 16px", fontSize: "1.3rem", color: "var(--ink-2)" }}>
-              Closing your store permanently removes your seller profile and hides all your listings. Your buyer account stays active. This cannot be undone.
+              Closing your store removes your seller profile and hides all your listings from buyers. Your buyer account stays active. This cannot be undone.
             </p>
             {closeStoreConfirm ? (
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                 <div style={{ padding: "10px 14px", background: "rgba(220,38,38,.07)", border: "1px solid rgba(220,38,38,.3)", borderRadius: "var(--r-md)", fontSize: "1.2rem", color: "#dc2626", fontWeight: 600 }}>
-                  <i className="fas fa-circle-exclamation" style={{ marginRight: 6 }} />Are you sure? All products and store data will be permanently deleted.
+                  <i className="fas fa-circle-exclamation" style={{ marginRight: 6 }} />Are you sure? Your store profile will be removed and all listings hidden from buyers.
                 </div>
                 <div style={{ display: "flex", gap: 10 }}>
                   <button className="btn btn-sm btn-ghost" style={{ flex: 1 }} onClick={() => setCloseStoreConfirm(false)} disabled={closeStoreBusy}>Cancel</button>

@@ -1160,12 +1160,12 @@ export default function ProviderAnalytics() {
               <i className="fas fa-triangle-exclamation" style={{ marginRight: 8 }} />Danger Zone
             </h3>
             <p style={{ margin: "0 0 16px", fontSize: "1.3rem", color: "var(--ink-2)" }}>
-              Closing your provider profile removes all your services and bookings from UMP. Your buyer account stays active. This cannot be undone.
+              Closing your provider profile removes your listing and hides all your services from buyers. You must have no active bookings to proceed. Your buyer account stays active. This cannot be undone.
             </p>
             {closeProviderConfirm ? (
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                 <div style={{ padding: "10px 14px", background: "rgba(220,38,38,.07)", border: "1px solid rgba(220,38,38,.3)", borderRadius: "var(--r-md)", fontSize: "1.2rem", color: "#dc2626", fontWeight: 600 }}>
-                  <i className="fas fa-circle-exclamation" style={{ marginRight: 6 }} />Are you sure? All your services will be permanently removed.
+                  <i className="fas fa-circle-exclamation" style={{ marginRight: 6 }} />Are you sure? Your provider profile will be removed and all services hidden from buyers.
                 </div>
                 <div style={{ display: "flex", gap: 10 }}>
                   <button className="btn btn-sm btn-ghost" style={{ flex: 1 }} onClick={() => setCloseProviderConfirm(false)} disabled={closeProviderBusy}>Cancel</button>
