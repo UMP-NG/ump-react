@@ -167,7 +167,7 @@ function ReportDrawer({ report, onClose, onResolved }) {
             </div>
 
             {error && (
-              <div style={{ padding: "8px 12px", background: "#fef2f2", border: "1px solid rgba(239,68,68,.2)", borderRadius: 8, fontSize: "1.2rem", color: "#dc2626", marginBottom: 14 }}>
+              <div style={{ padding: "8px 12px", background: "rgba(239,68,68,.1)", border: "1px solid rgba(239,68,68,.3)", borderRadius: 8, fontSize: "1.2rem", color: "#ef4444", marginBottom: 14 }}>
                 <i className="fas fa-circle-exclamation" style={{ marginRight: 6 }} />{error}
               </div>
             )}
@@ -284,11 +284,11 @@ export default function Reports() {
           <button
             key={filter}
             onClick={() => { setTab(filter); setPage(1); }}
-            style={{ padding: "6px 16px", borderRadius: 8, border: "none", fontWeight: 600, fontSize: "1.25rem", cursor: "pointer", background: tab === filter ? "var(--paper)" : "transparent", color: tab === filter ? "var(--ink)" : "var(--ink-3)", boxShadow: tab === filter ? "var(--shadow-sm)" : "none", transition: "all .15s" }}
+            style={{ padding: "6px 16px", borderRadius: 8, border: "none", fontWeight: 600, fontSize: "1.25rem", cursor: "pointer", background: tab === filter ? "var(--paper)" : "transparent", color: tab === filter ? "var(--ink-1)" : "var(--ink-3)", boxShadow: tab === filter ? "var(--shadow-sm)" : "none", transition: "all .15s" }}
           >
             {label}
             {counts[filter] > 0 && (
-              <span style={{ marginLeft: 6, background: filter === "open" ? "#ef4444" : "var(--surface-2)", color: filter === "open" ? "#fff" : "var(--ink-2)", borderRadius: 10, padding: "1px 7px", fontSize: "1.1rem" }}>
+              <span style={{ marginLeft: 6, background: filter === "open" ? "#ef4444" : "var(--surface)", color: filter === "open" ? "#fff" : "var(--ink-2)", borderRadius: 10, padding: "1px 7px", fontSize: "1.1rem" }}>
                 {counts[filter]}
               </span>
             )}

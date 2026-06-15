@@ -107,8 +107,13 @@ export async function getRates({ sender, recipient, parcel }) {
 
     return res.data?.data?.couriers || [];
   } catch (err) {
+    const sbMsg = err.response?.data?.message || err.message || "";
     logger.error("Shipbubble getRates:", err.response?.data || err.message);
-    throw new Error(err.response?.data?.message || err.message || "Failed to fetch shipping rates");
+    // Shipbubble wallet errors are platform-level — don't expose them to buyers
+    if (/wallet|balance|fund/i.test(sbMsg)) {
+      throw new Error("Courier rates are temporarily unavailable. Please try another delivery method or contact the seller.");
+    }
+    throw new Error(sbMsg || "Failed to fetch shipping rates");
   }
 }
 

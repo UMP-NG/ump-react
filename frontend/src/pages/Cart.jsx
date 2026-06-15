@@ -37,7 +37,6 @@ export default function Cart() {
   const [shipbubbleRates, setShipbubbleRates] = useState({});
   const shipbubbleDebounce = useRef(null);
   const [cartSbStates, setCartSbStates] = useState([]);
-  const [cartSbCities, setCartSbCities] = useState([]);
   const [cartSbLocLoading, setCartSbLocLoading] = useState(false);
   const [linkLoading, setLinkLoading] = useState(false);
   const [payLink, setPayLink] = useState("");
@@ -80,13 +79,13 @@ export default function Cart() {
     Promise.all(sellerIds.map((sid) =>
       apiFetch(`/api/sellers/${sid}`).then((d) => {
         const s = d.seller || d;
-        return { sid, storeName: s.storeName || s.name || "Seller", delivery: s.delivery || {} };
-      }).catch(() => ({ sid, storeName: "Seller", delivery: {} }))
+        return { sid, storeName: s.storeName || s.name || "Seller", delivery: s.delivery || {}, address: s.address || "", location: s.location || "" };
+      }).catch(() => ({ sid, storeName: "Seller", delivery: {}, address: "", location: "" }))
     )).then((results) => {
       const configs = {};
       const defaults = {};
-      results.forEach(({ sid, storeName, delivery }) => {
-        configs[sid] = { storeName, delivery };
+      results.forEach(({ sid, storeName, delivery, address, location }) => {
+        configs[sid] = { storeName, delivery, address, location };
         // Default to first enabled method
         const method = delivery?.pickup?.enabled !== false ? "pickup"
           : delivery?.shipbubble?.enabled ? "shipbubble"
@@ -98,25 +97,16 @@ export default function Cart() {
     });
   }, [step, items]);
 
-  // Fetch Shipbubble state list once when a Shipbubble-capable seller is in the cart
+  // Fetch Shipbubble state list as soon as step 2 is entered — always, so the
+  // state/city fields always show dropdowns regardless of the sellers' delivery methods.
   useEffect(() => {
-    const hasShipbubble = Object.values(sellerDeliveryConfigs).some((c) => c.delivery?.shipbubble?.enabled);
-    if (!hasShipbubble || cartSbStates.length) return;
+    if (step !== 2 || cartSbStates.length) return;
     setCartSbLocLoading(true);
     apiFetch("/api/delivery/locations")
       .then((d) => setCartSbStates(d.data || []))
       .catch(() => {})
       .finally(() => setCartSbLocLoading(false));
-  }, [sellerDeliveryConfigs]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Fetch cities when the buyer picks a state
-  useEffect(() => {
-    const selectedState = cartSbStates.find((s) => s.name === delivery.state);
-    if (!selectedState) { setCartSbCities([]); return; }
-    apiFetch(`/api/delivery/locations?state_code=${encodeURIComponent(selectedState.code || selectedState.state_code || "")}`)
-      .then((d) => setCartSbCities(d.data || []))
-      .catch(() => setCartSbCities([]));
-  }, [delivery.state, cartSbStates]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [step]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Wipe stale service selections when the buyer changes their delivery city/state
   useEffect(() => {
@@ -134,17 +124,23 @@ export default function Cart() {
     setShipbubbleRates({});
   }, [delivery.city, delivery.state]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Debounced Shipbubble rate fetch when buyer has city+state and a seller has shipbubble selected
+  // Debounced Shipbubble rate fetch — only fetches sellers that need rates
+  // (newly switched to Shipbubble, or address changed wiping existing rates)
   useEffect(() => {
     clearTimeout(shipbubbleDebounce.current);
     if (!delivery.city || !delivery.state) return;
-    const shipbubbleSellers = Object.entries(deliverySelections)
-      .filter(([, sel]) => sel.method === "shipbubble")
+    // Only fetch for sellers on shipbubble that don't already have rates loaded
+    const needsFetch = Object.entries(deliverySelections)
+      .filter(([sid, sel]) => {
+        if (sel.method !== "shipbubble") return false;
+        const existing = shipbubbleRates[sid];
+        return !existing || existing.loading || (!existing.rates?.length && !existing.error);
+      })
       .map(([sid]) => sid);
-    if (!shipbubbleSellers.length) return;
+    if (!needsFetch.length) return;
 
     shipbubbleDebounce.current = setTimeout(() => {
-      shipbubbleSellers.forEach((sid) => {
+      needsFetch.forEach((sid) => {
         setShipbubbleRates((prev) => ({ ...prev, [sid]: { ...prev[sid], loading: true, error: "" } }));
         apiFetch(
           `/api/delivery/quote?sellerId=${sid}&buyerName=${encodeURIComponent(delivery.name)}&buyerPhone=${encodeURIComponent(delivery.phone)}&buyerStreet=${encodeURIComponent(delivery.street)}&buyerCity=${encodeURIComponent(delivery.city)}&buyerState=${encodeURIComponent(delivery.state)}`
@@ -536,27 +532,18 @@ export default function Cart() {
                 <div style={{ display: "flex", gap: 10 }}>
                   <div style={{ flex: 1 }}>
                     <div className="label">State {cartSbLocLoading && <i className="fas fa-circle-notch fa-spin" style={{ fontSize: "0.9rem", marginLeft: 4 }} />}</div>
-                    {cartSbStates.length > 0 ? (
-                      <select className="input" value={delivery.state}
-                        onChange={(e) => setDelivery({ ...delivery, state: e.target.value, city: "" })}>
-                        <option value="">Select state</option>
-                        {cartSbStates.map((s) => <option key={s.code || s.state_code} value={s.name}>{s.name}</option>)}
-                      </select>
-                    ) : (
-                      <input className="input" value={delivery.state} onChange={(e) => setDelivery({ ...delivery, state: e.target.value })} placeholder="Lagos" />
-                    )}
+                    <select className="input" value={delivery.state}
+                      onChange={(e) => setDelivery({ ...delivery, state: e.target.value, city: "" })}
+                      disabled={cartSbLocLoading}>
+                      <option value="">{cartSbLocLoading ? "Loading states…" : "Select state"}</option>
+                      {cartSbStates.map((s) => <option key={s.code || s.state_code} value={s.name}>{s.name}</option>)}
+                    </select>
                   </div>
                   <div style={{ flex: 1 }}>
                     <div className="label">City *</div>
-                    {cartSbStates.length > 0 ? (
-                      <select className="input" value={delivery.city}
-                        onChange={(e) => setDelivery({ ...delivery, city: e.target.value })}>
-                        <option value="">{delivery.state ? (cartSbCities.length ? "Select city" : "Loading…") : "Select state first"}</option>
-                        {cartSbCities.map((c) => <option key={c.code || c.city_code} value={c.name}>{c.name}</option>)}
-                      </select>
-                    ) : (
-                      <input className="input" value={delivery.city} onChange={(e) => setDelivery({ ...delivery, city: e.target.value })} placeholder="Lagos" />
-                    )}
+                    <input className="input" value={delivery.city}
+                      onChange={(e) => setDelivery({ ...delivery, city: e.target.value })}
+                      placeholder="e.g. Yaba, Ikeja, Surulere" />
                   </div>
                 </div>
                 <div style={{ height: 12 }} />
@@ -598,8 +585,8 @@ export default function Cart() {
                           style={{
                             flex: "1 1 120px", padding: "10px 10px", textAlign: "center", cursor: "pointer",
                             border: `2px solid ${sel.method === opt.value ? "var(--accent)" : "var(--line)"}`,
-                            borderRadius: "var(--r-md)", background: sel.method === opt.value ? "rgba(249,115,22,.05)" : "var(--paper)",
-                            transition: "border-color .15s",
+                            borderRadius: "var(--r-md)", background: sel.method === opt.value ? "rgba(249,115,22,.12)" : "transparent",
+                            color: "var(--ink-1)", transition: "border-color .15s",
                           }}
                         >
                           <i className={`fas ${opt.icon}`} style={{ fontSize: "1.4rem", color: sel.method === opt.value ? "var(--accent)" : "var(--ink-3)", marginBottom: 4, display: "block" }} />
@@ -619,9 +606,15 @@ export default function Cart() {
                         <i className="fas fa-location-dot" style={{ color: "var(--accent)", marginRight: 6 }} />
                         {d.pickup?.instructions
                           ? d.pickup.instructions
-                          : cfg.delivery?.pickup?.enabled !== false
-                            ? "Contact seller to arrange pickup location."
-                            : ""}
+                          : (() => {
+                              const sb = cfg.delivery?.shipbubble?.pickupAddress;
+                              const sbAddr = sb ? [sb.street, sb.city, sb.state].filter(Boolean).join(", ") : "";
+                              const storeAddr = cfg.address || cfg.location;
+                              const addr = sbAddr || storeAddr;
+                              return addr
+                                ? `Pickup location: ${addr}`
+                                : "Contact seller to arrange pickup location.";
+                            })()}
                       </div>
                     )}
 
@@ -633,11 +626,16 @@ export default function Cart() {
                           <i className="fas fa-spinner fa-spin" style={{ marginRight: 6 }} />Fetching courier rates…
                         </div>
                       );
-                      if (rateData.error) return (
-                        <div style={{ marginTop: 10, padding: "10px 12px", background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: "var(--r-md)", fontSize: "1.2rem", color: "#dc2626" }}>
-                          <i className="fas fa-circle-exclamation" style={{ marginRight: 6 }} />{rateData.error} — enter your city & state above to retry
-                        </div>
-                      );
+                      if (rateData.error) {
+                        const isAddressError = /city|state|address|location/i.test(rateData.error);
+                        return (
+                          <div style={{ marginTop: 10, padding: "10px 12px", background: "rgba(220,38,38,.1)", border: "1px solid rgba(220,38,38,.3)", borderRadius: "var(--r-md)", fontSize: "1.2rem", color: "#ef4444" }}>
+                            <i className="fas fa-circle-exclamation" style={{ marginRight: 6 }} />
+                            {rateData.error}
+                            {isAddressError && " — check your city & state above and retry"}
+                          </div>
+                        );
+                      }
                       if (!rateData.rates?.length) return (
                         <div style={{ marginTop: 10, padding: "10px 12px", background: "rgba(245,158,11,.08)", border: "1px solid rgba(245,158,11,.3)", borderRadius: "var(--r-md)", fontSize: "1.2rem", color: "var(--ink-2)" }}>
                           <i className="fas fa-circle-info" style={{ color: "#f59e0b", marginRight: 6 }} />Enter your city &amp; state above to see courier rates
@@ -653,12 +651,17 @@ export default function Cart() {
                               style={{
                                 display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", cursor: "pointer",
                                 border: `2px solid ${sel.serviceCode === r.serviceCode ? "var(--accent)" : "var(--line)"}`,
-                                borderRadius: "var(--r-md)", background: sel.serviceCode === r.serviceCode ? "rgba(249,115,22,.05)" : "var(--paper)",
+                                borderRadius: "var(--r-md)", background: sel.serviceCode === r.serviceCode ? "rgba(249,115,22,.12)" : "transparent",
+                                color: "var(--ink-1)",
                               }}
                             >
-                              {r.logoUrl && <img src={r.logoUrl} alt={r.courierName} style={{ width: 28, height: 28, objectFit: "contain", flexShrink: 0 }} />}
+                              {r.logoUrl && (
+                                <div style={{ width: 32, height: 32, flexShrink: 0, borderRadius: 6, background: "white", display: "flex", alignItems: "center", justifyContent: "center", padding: 2 }}>
+                                  <img src={r.logoUrl} alt={r.courierName} style={{ width: 28, height: 28, objectFit: "contain" }} />
+                                </div>
+                              )}
                               <div style={{ flex: 1, textAlign: "left" }}>
-                                <div style={{ fontWeight: 700, fontSize: "1.2rem" }}>{r.courierName}</div>
+                                <div style={{ fontWeight: 700, fontSize: "1.2rem", color: "var(--ink-1)" }}>{r.courierName}</div>
                                 {r.estimatedDays && <div style={{ fontSize: "1.1rem", color: "var(--ink-3)" }}>{r.estimatedDays}</div>}
                               </div>
                               <div style={{ fontWeight: 800, fontSize: "1.3rem", color: "var(--accent)", flexShrink: 0 }}>{naira(r.amount)}</div>
@@ -672,7 +675,7 @@ export default function Cart() {
               })}
 
               {stepError && (
-                <div style={{ marginBottom: 14, padding: "10px 14px", background: "#fef2f2", color: "#dc2626", borderRadius: "var(--r-md)", fontSize: "1.3rem", display: "flex", alignItems: "center", gap: 8 }}>
+                <div style={{ marginBottom: 14, padding: "10px 14px", background: "rgba(220,38,38,.1)", border: "1px solid rgba(220,38,38,.3)", color: "#ef4444", borderRadius: "var(--r-md)", fontSize: "1.3rem", display: "flex", alignItems: "center", gap: 8 }}>
                   <i className="fas fa-circle-exclamation" /> {stepError}
                 </div>
               )}
@@ -690,7 +693,7 @@ export default function Cart() {
           {step === 3 && (
             <div style={{ paddingBottom: 24 }}>
               {/* Order summary — hidden on desktop (sidebar shows it) */}
-              <MobileOrderSummary items={items} sub={sub} deliveryFeeTotal={0} serviceCharge={serviceCharge} orderTotal={orderTotal} />
+              <MobileOrderSummary items={items} sub={sub} deliveryFeeTotal={totalDeliveryFee} serviceCharge={serviceCharge} orderTotal={orderTotal} />
 
               {/* Delivery recap */}
               <div className="card" style={{ padding: "12px 16px", marginBottom: 12, fontSize: "1.2rem", color: "var(--ink-2)" }}>
@@ -713,16 +716,17 @@ export default function Cart() {
                       padding: 12,
                       border: `2px solid ${provider === "flutterwave" ? "var(--accent)" : "var(--line)"}`,
                       borderRadius: "var(--r-md)",
-                      background: provider === "flutterwave" ? "rgba(249,115,22,.04)" : "var(--paper)",
+                      background: provider === "flutterwave" ? "rgba(249,115,22,.12)" : "transparent",
+                      color: "var(--ink-1)",
                       display: "flex", alignItems: "center", gap: 12,
                       transition: "border-color .15s, background .15s",
                     }}
                   >
-                    <div style={{ width: 40, height: 40, borderRadius: 12, background: "#f4f3ff", display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    <div style={{ width: 40, height: 40, borderRadius: 12, background: "rgba(99,102,241,.15)", display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                       <i className="fas fa-bolt" style={{ color: "#f5a623", fontSize: "1.4rem" }} />
                     </div>
                     <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 700, fontSize: "1.3rem" }}>Pay with Flutterwave</div>
+                      <div style={{ fontWeight: 700, fontSize: "1.3rem", color: "var(--ink-1)" }}>Pay with Flutterwave</div>
                       <div style={{ fontSize: "1.1rem", color: "var(--ink-3)" }}>Cards, bank transfer, USSD, mobile money</div>
                     </div>
                     <span style={{
@@ -749,7 +753,7 @@ export default function Cart() {
                     <div style={{ flex: 1 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                         <span style={{ fontWeight: 700, fontSize: "1.3rem" }}>Pay with Paystack</span>
-                        <span style={{ fontSize: "1rem", fontWeight: 600, padding: "2px 7px", borderRadius: "var(--r-pill)", background: "#fef3c7", color: "#92400e", border: "1px solid #fde68a" }}>
+                        <span style={{ fontSize: "1rem", fontWeight: 600, padding: "2px 7px", borderRadius: "var(--r-pill)", background: "rgba(245,158,11,.15)", color: "#d97706", border: "1px solid rgba(245,158,11,.3)" }}>
                           Under verification
                         </span>
                       </div>

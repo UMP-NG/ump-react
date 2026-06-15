@@ -23,6 +23,7 @@ export default function Payouts() {
   const [loading, setLoading]         = useState(true);
   const [selected, setSelected]       = useState(new Set());
   const [processing, setProcessing]   = useState(null);
+  const [markingPaid, setMarkingPaid] = useState(null);
   const [batchProcessing, setBatchProcessing] = useState(false);
   const [drawer, setDrawer]           = useState(null);
 
@@ -57,6 +58,18 @@ export default function Payouts() {
     }
   }
 
+  async function markAsPaid(payoutId) {
+    setMarkingPaid(payoutId);
+    try {
+      await apiFetch(`/api/admins/payouts/${payoutId}/mark-paid`, { method: 'POST' });
+    } catch {
+      // refresh on error to stay consistent
+    } finally {
+      setMarkingPaid(null);
+      fetchPayouts();
+    }
+  }
+
   async function batchApprove() {
     const ids = selected.size > 0 ? [...selected] : payouts.map(p => p._id);
     if (!ids.length) return;
@@ -69,7 +82,8 @@ export default function Payouts() {
     fetchPayouts();
   }
 
-  const isPendingTab = TABS[tab].filter === 'pending';
+  const isPendingTab    = TABS[tab].filter === 'pending';
+  const isProcessingTab = TABS[tab].filter === 'processing';
   const pageCount = payouts.length;
   const allSelected  = payouts.length > 0 && selected.size === payouts.length;
 
@@ -180,6 +194,14 @@ export default function Payouts() {
                         >
                           {processing === p._id ? <i className="fa-solid fa-circle-notch fa-spin"></i> : 'Approve'}
                         </button>
+                      ) : isProcessingTab ? (
+                        <button
+                          className="abtn success sm"
+                          disabled={markingPaid === p._id}
+                          onClick={() => markAsPaid(p._id)}
+                        >
+                          {markingPaid === p._id ? <i className="fa-solid fa-circle-notch fa-spin"></i> : 'Mark as Paid'}
+                        </button>
                       ) : (
                         <button className="icon-action" onClick={() => setDrawer(p)}>
                           <i className="fa-solid fa-eye"></i>
@@ -194,12 +216,12 @@ export default function Payouts() {
         </div>
       </div>
 
-      {drawer && <PayoutDrawer payout={drawer} onClose={() => setDrawer(null)} onApprove={isPendingTab ? approvePayout : null} processing={processing} />}
+      {drawer && <PayoutDrawer payout={drawer} onClose={() => setDrawer(null)} onApprove={isPendingTab ? approvePayout : null} onMarkPaid={isProcessingTab ? markAsPaid : null} processing={processing} markingPaid={markingPaid} />}
     </>
   );
 }
 
-function PayoutDrawer({ payout, onClose, onApprove, processing }) {
+function PayoutDrawer({ payout, onClose, onApprove, onMarkPaid, processing, markingPaid }) {
   useEffect(() => {
     const handler = (e) => { if (e.key === "Escape") onClose(); };
     document.addEventListener("keydown", handler);
@@ -269,6 +291,24 @@ function PayoutDrawer({ payout, onClose, onApprove, processing }) {
               {processing === payout._id
                 ? <><i className="fa-solid fa-circle-notch fa-spin"></i> Approving…</>
                 : <><i className="fa-solid fa-check"></i> Approve payout</>}
+            </button>
+          </div>
+        )}
+        {onMarkPaid && payout.status === 'processing' && (
+          <div className="adm-drawer-foot" style={{ flexDirection: 'column', gap: 8 }}>
+            <div style={{ fontSize: '1.2rem', color: 'var(--ink-3)', textAlign: 'center', padding: '0 8px' }}>
+              <i className="fa-solid fa-circle-info" style={{ marginRight: 6 }} />
+              Transfer <strong>{payout.accountNumber}</strong> to <strong>{payout.accountName}</strong> at <strong>{payout.bankName}</strong>, then click below.
+            </div>
+            <button
+              className="abtn success"
+              style={{ flex: 1 }}
+              disabled={markingPaid === payout._id}
+              onClick={async () => { await onMarkPaid(payout._id); onClose(); }}
+            >
+              {markingPaid === payout._id
+                ? <><i className="fa-solid fa-circle-notch fa-spin"></i> Marking…</>
+                : <><i className="fa-solid fa-money-bill-transfer"></i> Mark as Paid</>}
             </button>
           </div>
         )}

@@ -1,8 +1,8 @@
-import { useState, useEffect, useRef } from 'react';
+﻿import { useState, useEffect, useRef } from 'react';
 import Thumb from '../components/Thumb';
 import { apiFetch } from '../../utils/api';
 
-// ── tiny image-upload hook (reused by create + edit forms) ───────────────────
+// â”€â”€ tiny image-upload hook (reused by create + edit forms) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function useImageUpload() {
   const [uploading, setUploading] = useState(false);
   const [url,       setUrl]       = useState('');
@@ -34,7 +34,7 @@ function useImageUpload() {
   return { url, publicId, uploading, error, pick, reset };
 }
 
-// ── main page ─────────────────────────────────────────────────────────────────
+// â”€â”€ main page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 export default function Categories() {
   const [allCategories, setAllCategories] = useState([]);
   const [loading,       setLoading]       = useState(true);
@@ -151,7 +151,7 @@ export default function Categories() {
         <div style={{ flex: 1 }} />
         <div className="adm-search" style={{ maxWidth: 280 }}>
           <i className="fa-solid fa-magnifying-glass" />
-          <input placeholder="Search categories…" value={search} onChange={e => setSearch(e.target.value)} />
+          <input placeholder="Search categoriesâ€¦" value={search} onChange={e => setSearch(e.target.value)} />
         </div>
       </div>
 
@@ -187,11 +187,11 @@ export default function Categories() {
                   <td>
                     {c.subcategoryCount > 0
                       ? <span className="pill blue dot">{c.subcategoryCount} sub{c.subcategoryCount !== 1 ? 's' : ''}</span>
-                      : <span className="muted">—</span>}
+                      : <span className="muted">â€”</span>}
                   </td>
                   <td className="muted">{(c.productCount || 0).toLocaleString()}</td>
                   <td className="muted">
-                    {c.createdAt ? new Date(c.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
+                    {c.createdAt ? new Date(c.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'â€”'}
                   </td>
                   <td onClick={e => e.stopPropagation()}>
                     <button className="icon-action" onClick={() => openDrawer(c)}>
@@ -217,7 +217,7 @@ export default function Categories() {
   );
 }
 
-// ── reusable image-picker row ─────────────────────────────────────────────────
+// â”€â”€ reusable image-picker row â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function ImagePicker({ label, upload }) {
   const ref = useRef();
   return (
@@ -240,7 +240,7 @@ function ImagePicker({ label, upload }) {
             onClick={() => ref.current?.click()}
           >
             {upload.uploading
-              ? <><i className="fa-solid fa-circle-notch fa-spin" /> Uploading…</>
+              ? <><i className="fa-solid fa-circle-notch fa-spin" /> Uploadingâ€¦</>
               : <><i className="fa-solid fa-upload" /> {upload.url ? 'Change image' : 'Upload image'}</>}
           </button>
           {upload.url && (
@@ -256,7 +256,7 @@ function ImagePicker({ label, upload }) {
   );
 }
 
-// ── drawer with inline edit ───────────────────────────────────────────────────
+// â”€â”€ drawer with inline edit â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function CategoryDrawer({ category, onClose, onDelete, onSaved }) {
   const [editing,  setEditing]  = useState(false);
   const [name,     setName]     = useState(category.name);
@@ -312,7 +312,7 @@ function CategoryDrawer({ category, onClose, onDelete, onSaved }) {
 
         <div className="adm-drawer-body">
 
-          {/* ── Edit form ── */}
+          {/* â”€â”€ Edit form â”€â”€ */}
           {editing ? (
             <form onSubmit={save} style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               <ImagePicker label="Category image" upload={editImg} />
@@ -365,9 +365,9 @@ function CategoryDrawer({ category, onClose, onDelete, onSaved }) {
                   <div className="adm-section-h">Subcategories ({category.subcategories.length})</div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                     {category.subcategories.map((s, i) => (
-                      <span key={s._id || i} style={{ padding: '4px 12px', background: '#f1f5f9', borderRadius: 20, fontSize: '1.2rem', color: 'var(--ink-2)' }}>
+                      <span key={s._id || i} style={{ padding: '4px 12px', background: 'var(--surface)', borderRadius: 20, fontSize: '1.2rem', color: 'var(--ink-2)' }}>
                         {s.name || s}
-                        {s.slug && <span style={{ color: 'var(--ink-4)', marginLeft: 4, fontFamily: 'monospace', fontSize: '1.05rem' }}>·{s.slug}</span>}
+                        {s.slug && <span style={{ color: 'var(--ink-4)', marginLeft: 4, fontFamily: 'monospace', fontSize: '1.05rem' }}>Â·{s.slug}</span>}
                       </span>
                     ))}
                   </div>
@@ -377,7 +377,7 @@ function CategoryDrawer({ category, onClose, onDelete, onSaved }) {
               <div className="adm-section-h">Details</div>
               <div className="adm-kv">
                 <span className="k">Slug</span><span className="v" style={{ fontFamily: 'monospace' }}>{category.slug}</span>
-                <span className="k">Created</span><span className="v">{category.createdAt ? new Date(category.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : '—'}</span>
+                <span className="k">Created</span><span className="v">{category.createdAt ? new Date(category.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : 'â€”'}</span>
               </div>
             </>
           )}
@@ -397,3 +397,4 @@ function CategoryDrawer({ category, onClose, onDelete, onSaved }) {
     </div>
   );
 }
+

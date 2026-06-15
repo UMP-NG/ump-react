@@ -1106,7 +1106,6 @@ export default function SellerDashboard() {
   const [deliveryConfigSaving, setDeliveryConfigSaving] = useState(false);
   const [deliveryConfigured, setDeliveryConfigured] = useState(true); // assume true until profile loads
   const [sbStates, setSbStates] = useState([]);
-  const [sbCities, setSbCities] = useState([]);
   const [sbLocLoading, setSbLocLoading] = useState(false);
   const deliveryCardRef = useRef(null);
 
@@ -1402,26 +1401,15 @@ export default function SellerDashboard() {
     } finally { setNotifSaving(false); }
   }
 
-  // Fetch Shipbubble states when the Shipbubble section is opened
+  // Fetch Shipbubble states eagerly on mount so dropdowns are always ready
   useEffect(() => {
-    if (!deliveryConfig.shipbubble.enabled || sbStates.length) return;
+    if (sbStates.length) return;
     setSbLocLoading(true);
     apiFetch("/api/delivery/locations")
       .then((d) => setSbStates(d.data || []))
       .catch(() => {})
       .finally(() => setSbLocLoading(false));
-  }, [deliveryConfig.shipbubble.enabled]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Fetch cities whenever the selected state changes
-  useEffect(() => {
-    const selectedState = sbStates.find(
-      (s) => s.name === deliveryConfig.shipbubble.pickupAddress.state
-    );
-    if (!selectedState) { setSbCities([]); return; }
-    apiFetch(`/api/delivery/locations?state_code=${encodeURIComponent(selectedState.code || selectedState.state_code || "")}`)
-      .then((d) => setSbCities(d.data || []))
-      .catch(() => setSbCities([]));
-  }, [deliveryConfig.shipbubble.pickupAddress.state, sbStates]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function saveDeliverySettings() {
     const anyEnabled = deliveryConfig.pickup.enabled || deliveryConfig.shipbubble.enabled;
@@ -2625,31 +2613,18 @@ export default function SellerDashboard() {
                     </div>
                     <div>
                       <label style={lSty}>State {sbLocLoading && <i className="fas fa-circle-notch fa-spin" style={{ fontSize: "1rem", marginLeft: 4 }} />}</label>
-                      {sbStates.length > 0 ? (
-                        <select style={iSty} value={deliveryConfig.shipbubble.pickupAddress.state}
-                          onChange={(e) => setDeliveryConfig((c) => ({ ...c, shipbubble: { ...c.shipbubble, pickupAddress: { ...c.shipbubble.pickupAddress, state: e.target.value, city: "" } } }))}>
-                          <option value="">Select state</option>
-                          {sbStates.map((s) => <option key={s.code || s.state_code} value={s.name}>{s.name}</option>)}
-                        </select>
-                      ) : (
-                        <input style={iSty} value={deliveryConfig.shipbubble.pickupAddress.state}
-                          onChange={(e) => setDeliveryConfig((c) => ({ ...c, shipbubble: { ...c.shipbubble, pickupAddress: { ...c.shipbubble.pickupAddress, state: e.target.value, city: "" } } }))}
-                          placeholder="e.g. Lagos" />
-                      )}
+                      <select style={iSty} value={deliveryConfig.shipbubble.pickupAddress.state}
+                        onChange={(e) => setDeliveryConfig((c) => ({ ...c, shipbubble: { ...c.shipbubble, pickupAddress: { ...c.shipbubble.pickupAddress, state: e.target.value, city: "" } } }))}
+                        disabled={sbLocLoading}>
+                        <option value="">{sbLocLoading ? "Loading states…" : "Select state"}</option>
+                        {sbStates.map((s) => <option key={s.code || s.state_code} value={s.name}>{s.name}</option>)}
+                      </select>
                     </div>
                     <div>
                       <label style={lSty}>City</label>
-                      {sbStates.length > 0 ? (
-                        <select style={iSty} value={deliveryConfig.shipbubble.pickupAddress.city}
-                          onChange={(e) => setDeliveryConfig((c) => ({ ...c, shipbubble: { ...c.shipbubble, pickupAddress: { ...c.shipbubble.pickupAddress, city: e.target.value } } }))}>
-                          <option value="">{deliveryConfig.shipbubble.pickupAddress.state ? (sbCities.length ? "Select city" : "Loading…") : "Select state first"}</option>
-                          {sbCities.map((c) => <option key={c.code || c.city_code} value={c.name}>{c.name}</option>)}
-                        </select>
-                      ) : (
-                        <input style={iSty} value={deliveryConfig.shipbubble.pickupAddress.city}
-                          onChange={(e) => setDeliveryConfig((c) => ({ ...c, shipbubble: { ...c.shipbubble, pickupAddress: { ...c.shipbubble.pickupAddress, city: e.target.value } } }))}
-                          placeholder="e.g. Lagos" />
-                      )}
+                      <input style={iSty} value={deliveryConfig.shipbubble.pickupAddress.city}
+                        onChange={(e) => setDeliveryConfig((c) => ({ ...c, shipbubble: { ...c.shipbubble, pickupAddress: { ...c.shipbubble.pickupAddress, city: e.target.value } } }))}
+                        placeholder="e.g. Yaba, Akoka, Ikeja" />
                     </div>
                   </div>
                 </div>

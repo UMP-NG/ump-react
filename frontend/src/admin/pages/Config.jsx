@@ -393,13 +393,13 @@ export default function Config() {
                     onClick={() => !slideUploading.has(i) && slideInputRefs.current[i]?.click()}
                   >
                     {slideUploading.has(i) && (
-                      <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(255,255,255,.7)', borderRadius: 6 }}>
-                        <i className="fa-solid fa-circle-notch fa-spin" style={{ fontSize: '1.4rem', color: '#64748b' }} />
+                      <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(15,23,42,.45)', borderRadius: 6 }}>
+                        <i className="fa-solid fa-circle-notch fa-spin" style={{ fontSize: '1.4rem', color: '#fff' }} />
                       </div>
                     )}
                     {s.image?.url
                       ? <img src={s.image.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                      : <div style={{ width: '100%', height: '100%', background: '#f5f6f8', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem', color: '#94a3b8', gap: 4 }}>
+                      : <div style={{ width: '100%', height: '100%', background: 'var(--surface)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem', color: 'var(--ink-3)', gap: 4 }}>
                           <i className="fa-solid fa-image" /> {i + 1}
                         </div>
                     }
@@ -525,7 +525,7 @@ export default function Config() {
           <div className="adm-card-body">
             <div className="adm-form-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
               {AD_PLAN_DEFS.map(({ key, days }) => (
-                <div key={key} style={{ border: '1px solid var(--adm-line)', borderRadius: 10, padding: 16 }}>
+                <div key={key} style={{ border: '1px solid var(--line)', borderRadius: 10, padding: 16 }}>
                   <div style={{ fontWeight: 700, fontSize: '1.3rem', marginBottom: 12 }}>
                     {adPlans[key]?.label || key}
                     <span style={{ fontWeight: 400, color: 'var(--ink-3)', marginLeft: 6, fontSize: '1.1rem' }}>· {days} days</span>
@@ -603,7 +603,7 @@ export default function Config() {
           )}
 
           {events.map(ev => (
-            <div key={ev._id} style={{ border: '1px solid var(--adm-line)', borderRadius: 10, padding: 16, marginBottom: 16 }}>
+            <div key={ev._id} style={{ border: '1px solid var(--line)', borderRadius: 10, padding: 16, marginBottom: 16 }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, gap: 8 }}>
                 <div style={{ fontWeight: 700, fontSize: '1.4rem' }}>{ev.emoji} {ev.title}</div>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -623,7 +623,7 @@ export default function Config() {
                 {(ev.productIds || []).map(pid => {
                   const pidStr = pid.toString ? pid.toString() : pid;
                   return (
-                    <span key={pidStr} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'var(--adm-surface)', borderRadius: 6, padding: '3px 8px', fontSize: '1.2rem' }}>
+                    <span key={pidStr} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'var(--surface)', borderRadius: 6, padding: '3px 8px', fontSize: '1.2rem' }}>
                       <span className="mono" style={{ fontSize: '1rem', color: '#94a3b8' }}>{pidStr.slice(-6)}</span>
                       <button onClick={() => removeProductFromEvent(ev, pidStr)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: '0 2px', fontSize: '1.1rem' }}>×</button>
                     </span>
@@ -646,13 +646,13 @@ export default function Config() {
                 />
                 {productSearching[ev._id] && <i className="fa-solid fa-spinner fa-spin" style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />}
                 {(productResults[ev._id] || []).length > 0 && (
-                  <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: 'var(--adm-bg)', border: '1px solid var(--adm-line)', borderRadius: 8, zIndex: 50, maxHeight: 220, overflowY: 'auto', boxShadow: '0 4px 16px rgba(0,0,0,.15)' }}>
+                  <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: 'var(--paper)', border: '1px solid var(--line)', borderRadius: 8, zIndex: 50, maxHeight: 220, overflowY: 'auto', boxShadow: '0 4px 16px rgba(0,0,0,.15)' }}>
                     {productResults[ev._id].map(p => (
                       <div
                         key={p._id}
                         onClick={() => addProductToEvent(ev, p)}
-                        style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid var(--adm-line)' }}
-                        onMouseEnter={e => e.currentTarget.style.background = 'var(--adm-surface)'}
+                        style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid var(--line)' }}
+                        onMouseEnter={e => e.currentTarget.style.background = 'var(--surface)'}
                         onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                       >
                         {p.images?.[0]?.url && (

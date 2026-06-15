@@ -6,7 +6,7 @@ export default function AdminGuard() {
 
   if (user === undefined) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: '#f5f6f8' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: 'var(--paper)' }}>
         <div style={{ textAlign: 'center', color: 'var(--ink-3)' }}>
           <i className="fa-solid fa-circle-notch fa-spin" style={{ fontSize: '2.4rem', color: 'var(--accent)' }}></i>
         </div>

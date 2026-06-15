@@ -88,7 +88,7 @@ export default function Disputes() {
                   {disputes.map(d => (
                     <tr
                       key={d._id}
-                      style={{ cursor: 'pointer', background: active?._id === d._id ? '#fff7ed' : undefined }}
+                      style={{ cursor: 'pointer', background: active?._id === d._id ? 'rgba(249,115,22,.1)' : undefined }}
                       onClick={() => setActive(d)}
                     >
                       <td className="mono">{d.caseRef || `D-${d._id ? d._id.slice(-4) : '???'}`}</td>
@@ -163,7 +163,7 @@ export default function Disputes() {
                   </div>
                 </div>
                 {resolveError && (
-                  <div style={{ color: '#ef4444', fontSize: '1.2rem', marginTop: 8, padding: '8px 12px', background: '#fef2f2', borderRadius: 8 }}>
+                  <div style={{ color: '#ef4444', fontSize: '1.2rem', marginTop: 8, padding: '8px 12px', background: 'rgba(239,68,68,.1)', border: '1px solid rgba(239,68,68,.25)', borderRadius: 8 }}>
                     <i className="fa-solid fa-circle-exclamation" style={{ marginRight: 6 }}></i>{resolveError}
                   </div>
                 )}
@@ -202,8 +202,8 @@ const PLAYBOOK = [
     outcome: 'Refund buyer in full',
     icon: 'fa-rotate-left',
     color: '#ef4444',
-    bg: '#fef2f2',
-    border: 'rgba(239,68,68,.2)',
+    bg: 'rgba(239,68,68,.1)',
+    border: 'rgba(239,68,68,.25)',
     when: [
       'Item was never received and tracking confirms non-delivery',
       'Item is significantly not as described (wrong product, major defect)',
@@ -221,8 +221,8 @@ const PLAYBOOK = [
     outcome: 'Refund 50%',
     icon: 'fa-scale-balanced',
     color: '#f59e0b',
-    bg: '#fffbeb',
-    border: 'rgba(245,158,11,.2)',
+    bg: 'rgba(245,158,11,.1)',
+    border: 'rgba(245,158,11,.25)',
     when: [
       'Item received but partially as described (minor defects, missing accessories)',
       'Both parties share some responsibility for the issue',
@@ -240,8 +240,8 @@ const PLAYBOOK = [
     outcome: 'Seller credit',
     icon: 'fa-store',
     color: '#3b82f6',
-    bg: '#eff6ff',
-    border: 'rgba(59,130,246,.2)',
+    bg: 'rgba(59,130,246,.1)',
+    border: 'rgba(59,130,246,.25)',
     when: [
       'Delivery was successful but buyer has a minor complaint',
       'Issue is cosmetic or does not substantially affect function',
@@ -259,8 +259,8 @@ const PLAYBOOK = [
     outcome: 'Reject claim',
     icon: 'fa-ban',
     color: '#6b7280',
-    bg: '#f9fafb',
-    border: 'rgba(107,114,128,.2)',
+    bg: 'rgba(107,114,128,.1)',
+    border: 'rgba(107,114,128,.25)',
     when: [
       'Dispute was filed after the 7-day dispute window',
       'Claim is clearly fraudulent or made in bad faith',

@@ -148,12 +148,12 @@ export default function Broadcast() {
             </div>
 
             {sendError && (
-              <div style={{ marginTop: 12, padding: '10px 14px', borderRadius: 8, background: '#fef2f2', color: '#dc2626', fontSize: '1.25rem', border: '1px solid #fca5a5' }}>
+              <div style={{ marginTop: 12, padding: '10px 14px', borderRadius: 8, background: 'rgba(239,68,68,.1)', color: '#ef4444', fontSize: '1.25rem', border: '1px solid rgba(239,68,68,.3)' }}>
                 <i className="fa-solid fa-circle-exclamation" style={{ marginRight: 6 }} />{sendError}
               </div>
             )}
             {sendSuccess && (
-              <div style={{ marginTop: 12, padding: '10px 14px', borderRadius: 8, background: '#f0fdf4', color: '#16a34a', fontSize: '1.25rem', border: '1px solid #86efac' }}>
+              <div style={{ marginTop: 12, padding: '10px 14px', borderRadius: 8, background: 'rgba(34,197,94,.1)', color: '#16a34a', fontSize: '1.25rem', border: '1px solid rgba(34,197,94,.3)' }}>
                 <i className="fa-solid fa-circle-check" style={{ marginRight: 6 }} />{sendSuccess}
               </div>
             )}

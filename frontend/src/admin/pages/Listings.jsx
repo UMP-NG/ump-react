@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+﻿import { useState, useEffect, useCallback } from 'react';
 import Thumb from '../components/Thumb';
 import { apiFetch } from '../../utils/api';
 
@@ -58,7 +58,7 @@ export default function Listings() {
         <div style={{ flex: 1 }}></div>
         <div className="adm-search" style={{ maxWidth: 280 }}>
           <i className="fa-solid fa-magnifying-glass"></i>
-          <input placeholder="Search listings…" value={search}
+          <input placeholder="Search listingsâ€¦" value={search}
             onChange={e => { setSearch(e.target.value); setPage(1); }} />
         </div>
       </div>
@@ -99,7 +99,7 @@ export default function Listings() {
                     <span className="naira"></span>{(l.price || 0).toLocaleString()}
                     <span className="muted" style={{ fontSize: '1.1rem' }}> /{l.rate?.replace('per ', '') || 'yr'}</span>
                   </td>
-                  <td className="muted">{l.beds}bd · {l.baths}ba</td>
+                  <td className="muted">{l.beds}bd Â· {l.baths}ba</td>
                   <td>
                     <span className={`pill dot ${l.available ? 'green' : 'red'}`}>
                       {l.available ? 'Available' : 'Unavailable'}
@@ -107,7 +107,7 @@ export default function Listings() {
                   </td>
                   <td className="muted">{l.ownerName}</td>
                   <td className="muted">
-                    {l.createdAt ? new Date(l.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : '—'}
+                    {l.createdAt ? new Date(l.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : 'â€”'}
                   </td>
                   <td onClick={e => e.stopPropagation()}>
                     <button className="icon-action" onClick={() => setDrawer(l)}>
@@ -121,7 +121,7 @@ export default function Listings() {
         </div>
         {total > 20 && (
           <div className="adm-pagination">
-            <span>Showing {((page - 1) * 20) + 1}–{Math.min(page * 20, total)} of {total.toLocaleString()}</span>
+            <span>Showing {((page - 1) * 20) + 1}â€“{Math.min(page * 20, total)} of {total.toLocaleString()}</span>
             <div className="pages">
               <button className="icon-action" disabled={page === 1} onClick={() => setPage(p => p - 1)}>
                 <i className="fa-solid fa-chevron-left"></i>
@@ -181,8 +181,8 @@ function ListingDrawer({ listing, onClose, onToggle }) {
               <div className="v"><span className="naira"></span>{(listing.price || 0).toLocaleString()}<span style={{ fontSize: '1rem', color: 'var(--ink-3)' }}> /{listing.rate?.replace('per ', '') || 'yr'}</span></div>
             </div>
             <div className="kpi">
-              <div className="l">Beds · Baths</div>
-              <div className="v">{listing.beds} · {listing.baths}</div>
+              <div className="l">Beds Â· Baths</div>
+              <div className="v">{listing.beds} Â· {listing.baths}</div>
             </div>
             <div className="kpi">
               <div className="l">Reviews</div>
@@ -193,7 +193,7 @@ function ListingDrawer({ listing, onClose, onToggle }) {
           <div className="adm-section-h">Details</div>
           <div className="adm-kv">
             <span className="k">Owner</span><span className="v">{listing.ownerName}</span>
-            <span className="k">Email</span><span className="v">{listing.ownerEmail || '—'}</span>
+            <span className="k">Email</span><span className="v">{listing.ownerEmail || 'â€”'}</span>
             <span className="k">Furnished</span><span className="v">{listing.furnished ? 'Yes' : 'No'}</span>
             {listing.distance && <><span className="k">Distance</span><span className="v">{listing.distance}</span></>}
             <span className="k">Status</span>
@@ -209,7 +209,7 @@ function ListingDrawer({ listing, onClose, onToggle }) {
               <div className="adm-section-h">Amenities</div>
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                 {listing.amenities.map((a, i) => (
-                  <span key={i} style={{ padding: '3px 10px', background: '#f1f5f9', borderRadius: 6, fontSize: '1.2rem' }}>{a}</span>
+                  <span key={i} style={{ padding: '3px 10px', background: 'var(--surface)', borderRadius: 6, fontSize: '1.2rem' }}>{a}</span>
                 ))}
               </div>
             </>
@@ -237,3 +237,4 @@ function ListingDrawer({ listing, onClose, onToggle }) {
     </div>
   );
 }
+

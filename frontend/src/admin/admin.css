@@ -1134,6 +1134,57 @@
 .rpt-row { transition: background .1s; }
 .rpt-row:hover { background: var(--surface); }
 
+/* ── Identity Verifications layout ───────────────────────────────── */
+.verif-layout {
+  display: flex;
+  gap: 20px;
+  height: calc(100vh - 64px);
+  overflow: hidden;
+}
+.verif-list-panel {
+  flex: 0 0 380px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0 4px 0 0;
+}
+.verif-detail-panel {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 20px 40px;
+  border-left: 1px solid var(--line);
+}
+.verif-fields-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+@media (max-width: 768px) {
+  .verif-layout {
+    display: block;
+    height: auto;
+    overflow: visible;
+  }
+  .verif-list-panel {
+    flex: none;
+    width: 100%;
+    overflow: visible;
+    padding: 0;
+  }
+  .verif-detail-panel {
+    flex: none;
+    width: 100%;
+    border-left: none;
+    padding: 0;
+    overflow: visible;
+  }
+  .verif-fields-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ═══════════════════════════════════════════════════════════
    Dark-mode overrides — admin panel uses hardcoded hex colours
    so we re-declare them here under [data-theme="dark"]
@@ -1208,7 +1259,9 @@
 }
 [data-theme="dark"] .abtn.ghost:hover:not(:disabled) { background: var(--line); }
 [data-theme="dark"] .abtn.danger  { background: #3b0a0a; color: #f87171; border-color: #7f1d1d; }
+[data-theme="dark"] .abtn.danger:hover:not(:disabled)  { background: #4c0d0d; }
 [data-theme="dark"] .abtn.success { background: #052e0f; color: #4ade80; border-color: #14532d; }
+[data-theme="dark"] .abtn.success:hover:not(:disabled) { background: #063d14; }
 
 /* ── Drawer ── */
 [data-theme="dark"] .adm-drawer { background: var(--white); }
@@ -1271,6 +1324,9 @@
 [data-theme="dark"] .act-row          { border-bottom-color: var(--line); }
 [data-theme="dark"] .fchip            { background: var(--surface); border-color: var(--line); color: var(--ink-1); }
 [data-theme="dark"] .rpt-row:hover    { background: var(--surface); }
+[data-theme="dark"] .adm-stat .lbl .ico { background: var(--line); }
+[data-theme="dark"] .adm-toggle       { background: var(--line-strong); }
+[data-theme="dark"] .adm-toggle::after { background: var(--ink-3); }
 
 /* ── Compose / broadcast ── */
 [data-theme="dark"] .compose-target {

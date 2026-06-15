@@ -152,7 +152,7 @@ export default function Analytics() {
                       <span style={{ width: 10, height: 10, borderRadius: '50%', background: PIE_COLORS[i % PIE_COLORS.length], flexShrink: 0, display: 'inline-block' }} />
                       {c.label}
                     </span>
-                    <span style={{ fontSize: '1.25rem', fontWeight: 600, color: 'var(--ink)' }}>
+                    <span style={{ fontSize: '1.25rem', fontWeight: 600, color: 'var(--ink-1)' }}>
                       {c.pct}%
                       <span style={{ fontWeight: 400, color: 'var(--ink-3)', marginLeft: 4 }}>· ₦{c.value}</span>
                     </span>
