@@ -11,7 +11,7 @@ import PrivateRoute from "./components/PrivateRoute";
 import InstallPrompt from "./components/InstallPrompt";
 import LimitedAccountBanner from "./components/LimitedAccountBanner";
 import NotificationBanner from "./components/NotificationBanner";
-import AdminRoutes from "./admin/index";
+const AdminRoutes = lazy(() => import("./admin/index"));
 import { AppConfigProvider, useAppConfig } from "./context/AppConfigContext";
 import { useUser } from "./context/UserContext";
 import { apiFetch } from "./utils/api";
@@ -174,6 +174,21 @@ export default function App() {
     // Capture phase so we catch error events before they reach any component-level onError handler
     document.addEventListener("error", handleImgError, true);
     return () => document.removeEventListener("error", handleImgError, true);
+  }, []);
+
+  useEffect(() => {
+    // When the browser is idle, prefetch the JS chunks for the most common next pages
+    // so navigation to them is instant rather than showing the PageLoader spinner.
+    if (!("requestIdleCallback" in window)) return;
+    const id = requestIdleCallback(
+      () => {
+        import("./pages/Market");
+        import("./pages/ProductDetail");
+        import("./pages/Cart");
+      },
+      { timeout: 4000 }
+    );
+    return () => cancelIdleCallback(id);
   }, []);
 
   return (

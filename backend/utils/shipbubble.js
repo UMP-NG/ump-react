@@ -21,6 +21,13 @@ function client() {
 const _catCache = { data: null, ts: 0 };
 const CACHE_TTL = 6 * 60 * 60 * 1000; // 6 hours
 
+// ── Address code cache ────────────────────────────────────────────────────────
+// Shipbubble charges per /address/validate call. Cache codes by canonical address
+// string to avoid re-validating the same seller pickup address on every rate fetch.
+const _addrCache = new Map(); // canonicalAddress → { code, ts }
+const ADDR_TTL   = 23 * 60 * 60 * 1000; // 23 hours (codes appear stable for 24h)
+const ADDR_MAX   = 500;
+
 async function fetchCategories(api) {
   if (_catCache.data?.length && Date.now() - _catCache.ts < CACHE_TTL) return _catCache.data;
   try {
@@ -50,6 +57,12 @@ async function validateAddress(api, addr) {
     .filter(Boolean)
     .join(", ");
 
+  const cacheKey = fullAddress.toLowerCase().trim();
+  const hit = _addrCache.get(cacheKey);
+  if (hit && Date.now() - hit.ts < ADDR_TTL) {
+    return { address_code: hit.code };
+  }
+
   const res = await api.post("/shipping/address/validate", {
     name:    addr.name  || "UMP User",
     phone:   addr.phone || "08000000000",
@@ -61,23 +74,29 @@ async function validateAddress(api, addr) {
   });
   const data = res.data?.data;
   if (!data?.address_code) throw new Error("Address validation returned no code");
+
+  if (_addrCache.size >= ADDR_MAX) _addrCache.delete(_addrCache.keys().next().value);
+  _addrCache.set(cacheKey, { code: data.address_code, ts: Date.now() });
+
   return data;
 }
 
 function buildParcel(parcel = {}) {
+  const qty        = parcel.quantity || 1;
+  const unitWeight = parcel.weight   ? parcel.weight / qty : 1.5; // kg per item
   return {
     package_dimension: {
-      length: parcel.length  || 15,
-      width:  parcel.breadth || parcel.width || 15,
-      height: parcel.height  || 10,
-      weight: parcel.weight  || 0.5,
+      length: parcel.length              || 30,
+      width:  parcel.breadth || parcel.width || 25,
+      height: parcel.height              || 20,
+      weight: parcel.weight              || unitWeight * qty,
     },
     package_items: [{
       name:        parcel.name        || "Marketplace item",
       description: parcel.description || "Student marketplace item",
-      quantity:    parcel.quantity    || 1,
-      unit_amount: parcel.value       || 5000,
-      unit_weight: parcel.weight      || 0.5,
+      quantity:    qty,
+      unit_amount: parcel.value       || 10000,
+      unit_weight: unitWeight,
     }],
   };
 }

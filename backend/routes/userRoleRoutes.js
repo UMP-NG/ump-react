@@ -170,5 +170,27 @@ router.post(
   }
 );
 
+// DELETE /api/users/provider — provider closes their own profile
+router.delete("/provider", protect, async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id);
+    if (!user) return res.status(404).json({ message: "User not found" });
+    if (!user.roles.includes("service_provider"))
+      return res.status(400).json({ message: "Not a service provider" });
+
+    const now = new Date();
+    await Service.updateMany({ provider: user._id }, { $set: { deletedAt: now } });
+
+    user.roles = user.roles.filter((r) => r !== "service_provider");
+    user.serviceProviderInfo = undefined;
+    await user.save();
+
+    res.json({ message: "Provider profile closed. Your account remains active." });
+  } catch (err) {
+    console.error("closeProvider:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
 export default router;
 

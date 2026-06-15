@@ -556,6 +556,8 @@ export default function ProviderAnalytics() {
   const [profileSaving, setProfileSaving] = useState(false);
   const [settingsForm, setSettingsForm]   = useState({ title: "", desc: "", timeSlots: "" });
   const [settingsSaving, setSettingsSaving] = useState(false);
+  const [closeProviderConfirm, setCloseProviderConfirm] = useState(false);
+  const [closeProviderBusy, setCloseProviderBusy] = useState(false);
 
   // ── Initial load ──────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -734,6 +736,18 @@ export default function ProviderAnalytics() {
       showToast("Settings saved", "success");
     } catch (err) { showToast(err?.message || "Failed", "error"); }
     finally { setSettingsSaving(false); }
+  }
+
+  async function handleCloseProvider() {
+    setCloseProviderBusy(true);
+    try {
+      await apiFetch("/api/users/provider", { method: "DELETE" });
+      showToast("Provider profile closed. Redirecting…", "success");
+      setTimeout(() => { window.location.href = "/"; }, 1500);
+    } catch (err) {
+      showToast(err?.message || "Couldn't close profile. Try again.", "error");
+      setCloseProviderBusy(false);
+    }
   }
 
   // ── Booking card ──────────────────────────────────────────────────────────────
@@ -1139,6 +1153,33 @@ export default function ProviderAnalytics() {
               </button>
             </div>
           )}
+
+          {/* ── Danger Zone ── */}
+          <div className="card" style={{ padding: 20, marginBottom: 16, border: "1px solid rgba(220,38,38,.3)" }}>
+            <h3 style={{ margin: "0 0 8px", fontSize: "1.6rem", fontWeight: 700, color: "#dc2626" }}>
+              <i className="fas fa-triangle-exclamation" style={{ marginRight: 8 }} />Danger Zone
+            </h3>
+            <p style={{ margin: "0 0 16px", fontSize: "1.3rem", color: "var(--ink-2)" }}>
+              Closing your provider profile removes all your services and bookings from UMP. Your buyer account stays active. This cannot be undone.
+            </p>
+            {closeProviderConfirm ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                <div style={{ padding: "10px 14px", background: "rgba(220,38,38,.07)", border: "1px solid rgba(220,38,38,.3)", borderRadius: "var(--r-md)", fontSize: "1.2rem", color: "#dc2626", fontWeight: 600 }}>
+                  <i className="fas fa-circle-exclamation" style={{ marginRight: 6 }} />Are you sure? All your services will be permanently removed.
+                </div>
+                <div style={{ display: "flex", gap: 10 }}>
+                  <button className="btn btn-sm btn-ghost" style={{ flex: 1 }} onClick={() => setCloseProviderConfirm(false)} disabled={closeProviderBusy}>Cancel</button>
+                  <button className="btn btn-sm" style={{ flex: 1, background: "#dc2626", color: "#fff", border: "none" }} disabled={closeProviderBusy} onClick={handleCloseProvider}>
+                    {closeProviderBusy ? <i className="fas fa-spinner fa-spin" /> : <><i className="fas fa-trash" /> Yes, close my profile</>}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button className="btn btn-sm" style={{ color: "#dc2626", border: "1px solid #dc2626", background: "transparent" }} onClick={() => setCloseProviderConfirm(true)}>
+                <i className="fas fa-user-slash" /> Close Provider Profile
+              </button>
+            )}
+          </div>
 
           {/* ── Account link ── */}
           <div className="card" style={{ padding: "14px 20px" }}>

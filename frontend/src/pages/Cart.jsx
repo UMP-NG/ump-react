@@ -134,16 +134,25 @@ export default function Cart() {
       .filter(([sid, sel]) => {
         if (sel.method !== "shipbubble") return false;
         const existing = shipbubbleRates[sid];
-        return !existing || existing.loading || (!existing.rates?.length && !existing.error);
+        return !existing || (!existing.loading && !existing.rates?.length && !existing.error);
       })
-      .map(([sid]) => sid);
+      .map(([sid]) => {
+        // Sum quantities for this seller so the backend can estimate a realistic weight
+        const totalQty = items
+          .filter((it) => {
+            const s = it.product?.seller;
+            return (typeof s === "object" ? s?._id : s)?.toString() === sid;
+          })
+          .reduce((sum, it) => sum + (it.quantity || 1), 0);
+        return { sid, itemCount: Math.max(1, totalQty) };
+      });
     if (!needsFetch.length) return;
 
     shipbubbleDebounce.current = setTimeout(() => {
-      needsFetch.forEach((sid) => {
+      needsFetch.forEach(({ sid, itemCount }) => {
         setShipbubbleRates((prev) => ({ ...prev, [sid]: { ...prev[sid], loading: true, error: "" } }));
         apiFetch(
-          `/api/delivery/quote?sellerId=${sid}&buyerName=${encodeURIComponent(delivery.name)}&buyerPhone=${encodeURIComponent(delivery.phone)}&buyerStreet=${encodeURIComponent(delivery.street)}&buyerCity=${encodeURIComponent(delivery.city)}&buyerState=${encodeURIComponent(delivery.state)}`
+          `/api/delivery/quote?sellerId=${sid}&itemCount=${itemCount}&buyerName=${encodeURIComponent(delivery.name)}&buyerPhone=${encodeURIComponent(delivery.phone)}&buyerStreet=${encodeURIComponent(delivery.street)}&buyerCity=${encodeURIComponent(delivery.city)}&buyerState=${encodeURIComponent(delivery.state)}`
         )
           .then((d) => setShipbubbleRates((prev) => ({ ...prev, [sid]: { rates: d.rates || [], loading: false, error: "" } })))
           .catch((err) => setShipbubbleRates((prev) => ({ ...prev, [sid]: { rates: [], loading: false, error: err?.message || "Failed to load rates" } })));

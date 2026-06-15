@@ -1,10 +1,25 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
+import { visualizer } from 'rollup-plugin-visualizer'
 
 export default defineConfig({
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor-react':    ['react', 'react-dom', 'react-router-dom'],
+          'vendor-firebase': ['firebase'],
+          'vendor-socket':   ['socket.io-client'],
+          'vendor-sentry':   ['@sentry/react'],
+        },
+      },
+    },
+    chunkSizeWarningLimit: 1000,
+  },
   plugins: [
     react(),
+    visualizer({ filename: 'dist/stats.html', gzipSize: true, brotliSize: true }),
     VitePWA({
       // injectManifest: VitePWA processes public/sw.js (injecting __WB_MANIFEST) instead
       // of generating a workbox-only SW that overwrites the custom one and loses push handlers.

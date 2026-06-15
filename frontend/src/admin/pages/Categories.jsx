@@ -151,7 +151,7 @@ export default function Categories() {
         <div style={{ flex: 1 }} />
         <div className="adm-search" style={{ maxWidth: 280 }}>
           <i className="fa-solid fa-magnifying-glass" />
-          <input placeholder="Search categoriesâ€¦" value={search} onChange={e => setSearch(e.target.value)} />
+          <input placeholder="Search categories…" value={search} onChange={e => setSearch(e.target.value)} />
         </div>
       </div>
 
@@ -187,11 +187,11 @@ export default function Categories() {
                   <td>
                     {c.subcategoryCount > 0
                       ? <span className="pill blue dot">{c.subcategoryCount} sub{c.subcategoryCount !== 1 ? 's' : ''}</span>
-                      : <span className="muted">â€”</span>}
+                      : <span className="muted">—</span>}
                   </td>
                   <td className="muted">{(c.productCount || 0).toLocaleString()}</td>
                   <td className="muted">
-                    {c.createdAt ? new Date(c.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : 'â€”'}
+                    {c.createdAt ? new Date(c.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '—'}
                   </td>
                   <td onClick={e => e.stopPropagation()}>
                     <button className="icon-action" onClick={() => openDrawer(c)}>
@@ -240,7 +240,7 @@ function ImagePicker({ label, upload }) {
             onClick={() => ref.current?.click()}
           >
             {upload.uploading
-              ? <><i className="fa-solid fa-circle-notch fa-spin" /> Uploadingâ€¦</>
+              ? <><i className="fa-solid fa-circle-notch fa-spin" /> Uploading…</>
               : <><i className="fa-solid fa-upload" /> {upload.url ? 'Change image' : 'Upload image'}</>}
           </button>
           {upload.url && (
@@ -367,7 +367,7 @@ function CategoryDrawer({ category, onClose, onDelete, onSaved }) {
                     {category.subcategories.map((s, i) => (
                       <span key={s._id || i} style={{ padding: '4px 12px', background: 'var(--surface)', borderRadius: 20, fontSize: '1.2rem', color: 'var(--ink-2)' }}>
                         {s.name || s}
-                        {s.slug && <span style={{ color: 'var(--ink-4)', marginLeft: 4, fontFamily: 'monospace', fontSize: '1.05rem' }}>Â·{s.slug}</span>}
+                        {s.slug && <span style={{ color: 'var(--ink-4)', marginLeft: 4, fontFamily: 'monospace', fontSize: '1.05rem' }}>·{s.slug}</span>}
                       </span>
                     ))}
                   </div>
@@ -377,7 +377,7 @@ function CategoryDrawer({ category, onClose, onDelete, onSaved }) {
               <div className="adm-section-h">Details</div>
               <div className="adm-kv">
                 <span className="k">Slug</span><span className="v" style={{ fontFamily: 'monospace' }}>{category.slug}</span>
-                <span className="k">Created</span><span className="v">{category.createdAt ? new Date(category.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : 'â€”'}</span>
+                <span className="k">Created</span><span className="v">{category.createdAt ? new Date(category.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : '—'}</span>
               </div>
             </>
           )}

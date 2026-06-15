@@ -1098,6 +1098,8 @@ export default function SellerDashboard() {
   const [notifSaving, setNotifSaving] = useState(false);
   const [dashPolicy, setDashPolicy] = useState({ returnPolicy: "", fulfillmentTime: "" });
   const [policySaving, setPolicySaving] = useState(false);
+  const [closeStoreConfirm, setCloseStoreConfirm] = useState(false);
+  const [closeStoreBusy, setCloseStoreBusy] = useState(false);
   const DEFAULT_DELIVERY_CONFIG = {
     pickup:     { enabled: true,  instructions: "" },
     shipbubble: { enabled: false, pickupAddress: { name: "", phone: "", email: "", street: "", city: "", state: "" } },
@@ -1422,6 +1424,18 @@ export default function SellerDashboard() {
     } catch (err) {
       showToast(err?.message || "Failed to save delivery settings", "error");
     } finally { setDeliveryConfigSaving(false); }
+  }
+
+  async function handleCloseStore() {
+    setCloseStoreBusy(true);
+    try {
+      await apiFetch("/api/sellers/me", { method: "DELETE" });
+      showToast("Store closed. Redirecting…", "success");
+      setTimeout(() => { window.location.href = "/"; }, 1500);
+    } catch (err) {
+      showToast(err?.message || "Couldn't close store. Try again.", "error");
+      setCloseStoreBusy(false);
+    }
   }
 
   // ── Payout handlers ────────────────────────────────────────────────────────────
@@ -2680,10 +2694,26 @@ export default function SellerDashboard() {
           {/* Danger Zone */}
           <div className="card" style={{ padding: 20, marginBottom: 16, border: "1px solid rgba(220,38,38,.3)" }}>
             <h3 style={{ margin: "0 0 8px", fontSize: "1.6rem", fontWeight: 700, color: "#dc2626" }}><i className="fas fa-triangle-exclamation" style={{ marginRight: 8 }} />Danger Zone</h3>
-            <p style={{ margin: "0 0 16px", fontSize: "1.3rem", color: "var(--ink-2)" }}>Deactivating your account will hide your store and listings from buyers. You can reactivate by contacting support.</p>
-            <button className="btn btn-sm" style={{ color: "#dc2626", border: "1px solid #dc2626", background: "transparent" }} onClick={() => showToast("To deactivate your account, contact admin@myump.com.ng", "info")}>
-              <i className="fas fa-power-off" /> Deactivate Account
-            </button>
+            <p style={{ margin: "0 0 16px", fontSize: "1.3rem", color: "var(--ink-2)" }}>
+              Closing your store permanently removes your seller profile and hides all your listings. Your buyer account stays active. This cannot be undone.
+            </p>
+            {closeStoreConfirm ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                <div style={{ padding: "10px 14px", background: "rgba(220,38,38,.07)", border: "1px solid rgba(220,38,38,.3)", borderRadius: "var(--r-md)", fontSize: "1.2rem", color: "#dc2626", fontWeight: 600 }}>
+                  <i className="fas fa-circle-exclamation" style={{ marginRight: 6 }} />Are you sure? All products and store data will be permanently deleted.
+                </div>
+                <div style={{ display: "flex", gap: 10 }}>
+                  <button className="btn btn-sm btn-ghost" style={{ flex: 1 }} onClick={() => setCloseStoreConfirm(false)} disabled={closeStoreBusy}>Cancel</button>
+                  <button className="btn btn-sm" style={{ flex: 1, background: "#dc2626", color: "#fff", border: "none" }} disabled={closeStoreBusy} onClick={handleCloseStore}>
+                    {closeStoreBusy ? <i className="fas fa-spinner fa-spin" /> : <><i className="fas fa-trash" /> Yes, close my store</>}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button className="btn btn-sm" style={{ color: "#dc2626", border: "1px solid #dc2626", background: "transparent" }} onClick={() => setCloseStoreConfirm(true)}>
+                <i className="fas fa-store-slash" /> Close Store
+              </button>
+            )}
           </div>
         </div>
       )}

@@ -81,7 +81,7 @@ export default function Services() {
         <div style={{ flex: 1 }}></div>
         <div className="adm-search" style={{ maxWidth: 280 }}>
           <i className="fa-solid fa-magnifying-glass"></i>
-          <input placeholder="Search servicesâ€¦" value={search}
+          <input placeholder="Search services…" value={search}
             onChange={e => { setSearch(e.target.value); setPage(1); }} />
         </div>
       </div>
@@ -133,23 +133,23 @@ export default function Services() {
                       </div>
                     </td>
                     <td>
-                      <div className="name" style={{ fontSize: '1.25rem' }}>{s.provider?.name || 'â€”'}</div>
+                      <div className="name" style={{ fontSize: '1.25rem' }}>{s.provider?.name || '—'}</div>
                       <div className="email">{s.provider?.email || ''}</div>
                     </td>
-                    <td className="muted">{s.category || 'â€”'}</td>
+                    <td className="muted">{s.category || '—'}</td>
                     <td className="amount">
-                      {s.rate ? <><span className="naira"></span>{s.rate.toLocaleString()}</> : 'â€”'}
+                      {s.rate ? <><span className="naira"></span>{s.rate.toLocaleString()}</> : '—'}
                     </td>
                     <td>
                       <span className="muted" style={{ fontSize: '1.15rem' }}>
-                        {(s.rating || 0).toFixed(1)} â˜…
+                        {(s.rating || 0).toFixed(1)} ★
                       </span>
                     </td>
                     <td><span className={`pill dot ${STATUS_COLOR[status] || 'gray'}`}>{status}</span></td>
                     <td className="muted">
                       {s.createdAt
                         ? new Date(s.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
-                        : 'â€”'}
+                        : '—'}
                     </td>
                     <td onClick={e => e.stopPropagation()}>
                       <button className="icon-action" onClick={() => setDrawer(s)}>
@@ -164,7 +164,7 @@ export default function Services() {
         </div>
         {total > 20 && (
           <div className="adm-pagination">
-            <span>Showing {((page - 1) * 20) + 1}â€“{Math.min(page * 20, total)} of {total.toLocaleString()}</span>
+            <span>Showing {((page - 1) * 20) + 1}–{Math.min(page * 20, total)} of {total.toLocaleString()}</span>
             <div className="pages">
               <button className="icon-action" disabled={page === 1} onClick={() => setPage(p => p - 1)}>
                 <i className="fa-solid fa-chevron-left"></i>
@@ -246,12 +246,12 @@ function ServiceDrawer({ service, onClose, onApprove, onSuspend, onReinstate, on
             <div className="kpi">
               <div className="l">Rate</div>
               <div className="v">
-                {service.rate ? <><span className="naira"></span>{service.rate.toLocaleString()}</> : 'â€”'}
+                {service.rate ? <><span className="naira"></span>{service.rate.toLocaleString()}</> : '—'}
               </div>
             </div>
             <div className="kpi">
               <div className="l">Rating</div>
-              <div className="v">{(service.rating || 0).toFixed(1)} â˜…</div>
+              <div className="v">{(service.rating || 0).toFixed(1)} ★</div>
             </div>
             <div className="kpi">
               <div className="l">Reviews</div>
@@ -262,9 +262,9 @@ function ServiceDrawer({ service, onClose, onApprove, onSuspend, onReinstate, on
           <div className="adm-section-h">Provider</div>
           <div className="adm-kv">
             <span className="k">Name</span>
-            <span className="v">{service.provider?.name || 'â€”'}</span>
+            <span className="v">{service.provider?.name || '—'}</span>
             <span className="k">Email</span>
-            <span className="v">{service.provider?.email || 'â€”'}</span>
+            <span className="v">{service.provider?.email || '—'}</span>
             {service.category && <><span className="k">Category</span><span className="v">{service.category}</span></>}
           </div>
 

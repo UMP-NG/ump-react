@@ -1,5 +1,7 @@
 /* UMP Admin Panel — scoped styles */
 
+:root { --adm-top-h: 64px; }
+
 .admin {
   display: flex;
   width: 100%;
@@ -141,7 +143,7 @@
 
 /* ── Topbar ─────────────────────────────────────── */
 .adm-top {
-  height: 64px;
+  height: var(--adm-top-h);
   flex-shrink: 0;
   background: #fff;
   border-bottom: 1px solid #e7e9ee;
@@ -1138,7 +1140,7 @@
 .verif-layout {
   display: flex;
   gap: 20px;
-  height: calc(100vh - 64px);
+  height: calc(100vh - var(--adm-top-h));
   overflow: hidden;
 }
 .verif-list-panel {
@@ -1190,8 +1192,12 @@
    so we re-declare them here under [data-theme="dark"]
    ═══════════════════════════════════════════════════════════ */
 
-/* Root background */
-[data-theme="dark"] .admin { background: var(--paper); }
+/* Root background — use --surface (#0f172a) not --paper (#0a1224) so the main
+   content area is visually distinct from the sidebar (also #0a1224 / navy-900) */
+[data-theme="dark"] .admin { background: var(--surface); }
+
+/* Add a visible right border so the sidebar boundary doesn't dissolve into the body */
+[data-theme="dark"] .adm-side { border-right: 1px solid var(--line); }
 
 /* ── Topbar ── */
 [data-theme="dark"] .adm-top {

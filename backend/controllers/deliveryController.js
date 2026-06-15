@@ -4,11 +4,11 @@ import { getRates, createShipment, trackShipment, getLocations } from "../utils/
 import { notify } from "../utils/notify.js";
 import logger from "../utils/logger.js";
 
-// GET /api/delivery/quote?sellerId=&buyerName=&buyerPhone=&buyerStreet=&buyerCity=&buyerState=
+// GET /api/delivery/quote?sellerId=&itemCount=&buyerName=&buyerPhone=&buyerStreet=&buyerCity=&buyerState=
 // Returns live Shipbubble rates for a seller → buyer address pair.
 export const getDeliveryQuote = async (req, res) => {
   try {
-    const { sellerId, buyerName, buyerPhone, buyerStreet, buyerCity, buyerState } = req.query;
+    const { sellerId, buyerName, buyerPhone, buyerStreet, buyerCity, buyerState, itemCount } = req.query;
 
     if (!sellerId) return res.status(400).json({ message: "sellerId is required" });
     if (!buyerCity || !buyerState)
@@ -23,6 +23,11 @@ export const getDeliveryQuote = async (req, res) => {
     const pickup = seller.delivery.shipbubble.pickupAddress;
     if (!pickup?.city || !pickup?.state)
       return res.status(400).json({ message: "Seller has not configured their pickup address" });
+
+    // Scale weight by item count: 1.5 kg per item is a realistic average for a mixed
+    // marketplace (shoes, electronics, clothing). Cap at 30 kg (max typical courier limit).
+    const count  = Math.max(1, Math.min(parseInt(itemCount, 10) || 1, 50));
+    const weight = Math.min(count * 1.5, 30);
 
     const rates = await getRates({
       sender: {
@@ -41,7 +46,7 @@ export const getDeliveryQuote = async (req, res) => {
         city:   buyerCity,
         state:  buyerState,
       },
-      parcel: { weight: 0.5 },
+      parcel: { weight, quantity: count },
     });
 
     return res.json({

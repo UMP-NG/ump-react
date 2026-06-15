@@ -26,6 +26,7 @@ export default function Payouts() {
   const [markingPaid, setMarkingPaid] = useState(null);
   const [batchProcessing, setBatchProcessing] = useState(false);
   const [drawer, setDrawer]           = useState(null);
+  const [actionError, setActionError] = useState('');
 
   const fetchPayouts = useCallback(() => {
     setLoading(true);
@@ -48,10 +49,11 @@ export default function Payouts() {
 
   async function approvePayout(payoutId) {
     setProcessing(payoutId);
+    setActionError('');
     try {
       await apiFetch(`/api/admins/payouts/${payoutId}/approve`, { method: 'POST' });
-    } catch {
-      // refresh on error to stay consistent
+    } catch (err) {
+      setActionError(err?.message || 'Failed to approve payout — please try again.');
     } finally {
       setProcessing(null);
       fetchPayouts();
@@ -60,10 +62,11 @@ export default function Payouts() {
 
   async function markAsPaid(payoutId) {
     setMarkingPaid(payoutId);
+    setActionError('');
     try {
       await apiFetch(`/api/admins/payouts/${payoutId}/mark-paid`, { method: 'POST' });
-    } catch {
-      // refresh on error to stay consistent
+    } catch (err) {
+      setActionError(err?.message || 'Failed to mark payout as paid — please try again.');
     } finally {
       setMarkingPaid(null);
       fetchPayouts();
@@ -109,6 +112,13 @@ export default function Payouts() {
           )}
         </div>
       </div>
+
+      {actionError && (
+        <div style={{ margin: '0 0 12px', padding: '10px 14px', borderRadius: 8, background: 'rgba(239,68,68,.1)', color: '#ef4444', fontSize: '1.25rem', border: '1px solid rgba(239,68,68,.3)', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <i className="fa-solid fa-circle-exclamation" />
+          {actionError}
+        </div>
+      )}
 
       <div className="adm-stats adm-stats-4">
         <MiniStat label="Pending value"  value={summary?.pendingValue  ?? '₦—'} icon="fa-hourglass"           color="#eab308" />
@@ -296,9 +306,13 @@ function PayoutDrawer({ payout, onClose, onApprove, onMarkPaid, processing, mark
         )}
         {onMarkPaid && payout.status === 'processing' && (
           <div className="adm-drawer-foot" style={{ flexDirection: 'column', gap: 8 }}>
-            <div style={{ fontSize: '1.2rem', color: 'var(--ink-3)', textAlign: 'center', padding: '0 8px' }}>
-              <i className="fa-solid fa-circle-info" style={{ marginRight: 6 }} />
-              Transfer <strong>{payout.accountNumber}</strong> to <strong>{payout.accountName}</strong> at <strong>{payout.bankName}</strong>, then click below.
+            <div style={{ fontSize: '1.2rem', color: 'var(--ink-2)', padding: '8px 10px', background: 'rgba(59,130,246,.08)', borderRadius: 8, border: '1px solid rgba(59,130,246,.2)' }}>
+              <div style={{ fontWeight: 700, marginBottom: 4 }}>Manual bank transfer checklist</div>
+              <div>Amount: <strong>₦{(payout.netAmount || payout.requestedAmount || 0).toLocaleString()}</strong></div>
+              <div>Bank: <strong>{payout.bankName || '—'}</strong></div>
+              <div>Account name: <strong>{payout.accountName || '—'}</strong></div>
+              <div>Account number: <strong style={{ letterSpacing: '0.08em', userSelect: 'all' }}>{payout.accountNumber || '—'}</strong></div>
+              <div style={{ marginTop: 6, color: 'var(--ink-3)' }}>Once the transfer is sent, click "Mark as Paid" to notify the seller and close this request.</div>
             </div>
             <button
               className="abtn success"

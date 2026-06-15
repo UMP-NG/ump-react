@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, memo } from "react";
 import { useNavigate } from "react-router-dom";
 import Ph from "./Ph";
 import { useToast } from "../context/ToastContext";
@@ -18,7 +18,7 @@ export function naira(n) {
   return "₦" + Number(n).toLocaleString("en-NG");
 }
 
-export default function ProductCard({ product, variant = "always", onAddToCart }) {
+function ProductCard({ product, variant = "always", onAddToCart }) {
   const navigate = useNavigate();
   const showToast = useToast();
   const { ids: wishlistIds, toggle: toggleWishlist } = useWishlist();
@@ -113,7 +113,7 @@ export default function ProductCard({ product, variant = "always", onAddToCart }
             : <i className={wishlisted ? "fas fa-heart" : "far fa-heart"} />}
         </button>
         {imgSrc ? (
-          <img src={imgSrc} alt={product.name} loading="lazy" style={{ display: "block", width: "100%", height: "100%", objectFit: "contain", padding: 4, opacity: outOfStock ? 0.55 : 1 }} />
+          <img src={imgSrc} alt={product.name} loading="lazy" decoding="async" style={{ display: "block", width: "100%", height: "100%", objectFit: "contain", padding: 4, opacity: outOfStock ? 0.55 : 1 }} />
         ) : (
           <Ph kind={product.category?.name?.toLowerCase() || "default"} />
         )}
@@ -176,3 +176,5 @@ export default function ProductCard({ product, variant = "always", onAddToCart }
     </>
   );
 }
+
+export default memo(ProductCard);

@@ -75,7 +75,7 @@ export default function Providers() {
         <div style={{ flex: 1 }}></div>
         <div className="adm-search" style={{ maxWidth: 280 }}>
           <i className="fa-solid fa-magnifying-glass"></i>
-          <input placeholder="Search providersâ€¦" value={search}
+          <input placeholder="Search providers…" value={search}
             onChange={e => { setSearch(e.target.value); setPage(1); }} />
         </div>
       </div>
@@ -114,25 +114,25 @@ export default function Providers() {
                               <span className="verified-tick"><i className="fa-solid fa-check"></i></span>
                             )}
                           </div>
-                          <div className="email">{p.email || 'â€”'}</div>
+                          <div className="email">{p.email || '—'}</div>
                         </div>
                       </div>
                     </td>
-                    <td className="muted">{p.category || 'â€”'}</td>
+                    <td className="muted">{p.category || '—'}</td>
                     <td className="amount">
-                      {p.rate ? <><span className="naira"></span>{p.rate.toLocaleString()}</> : 'â€”'}
+                      {p.rate ? <><span className="naira"></span>{p.rate.toLocaleString()}</> : '—'}
                     </td>
                     <td className="amount">{p.bookingCount ?? 0}</td>
                     <td>
                       <span className="muted" style={{ fontSize: '1.15rem' }}>
-                        {(p.averageRating || 0).toFixed(1)} â˜…
+                        {(p.averageRating || 0).toFixed(1)} ★
                       </span>
                     </td>
                     <td><span className={`pill dot ${STATUS_COLOR[status] || 'gray'}`}>{status}</span></td>
                     <td className="muted">
                       {p.createdAt
                         ? new Date(p.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
-                        : 'â€”'}
+                        : '—'}
                     </td>
                     <td onClick={e => e.stopPropagation()}>
                       <button className="icon-action" onClick={() => setDrawer(p)}>
@@ -147,7 +147,7 @@ export default function Providers() {
         </div>
         {total > 20 && (
           <div className="adm-pagination">
-            <span>Showing {((page - 1) * 20) + 1}â€“{Math.min(page * 20, total)} of {total.toLocaleString()}</span>
+            <span>Showing {((page - 1) * 20) + 1}–{Math.min(page * 20, total)} of {total.toLocaleString()}</span>
             <div className="pages">
               <button className="icon-action" disabled={page === 1} onClick={() => setPage(p => p - 1)}>
                 <i className="fa-solid fa-chevron-left"></i>
@@ -222,21 +222,21 @@ function ProviderDrawer({ provider, onClose, onApprove, onSuspend, onReinstate, 
               <div className="v">
                 {provider.rate
                   ? <><span className="naira"></span>{provider.rate.toLocaleString()}</>
-                  : 'â€”'}
+                  : '—'}
               </div>
             </div>
             <div className="kpi">
               <div className="l">Rating</div>
-              <div className="v">{(provider.averageRating || 0).toFixed(1)} â˜…</div>
+              <div className="v">{(provider.averageRating || 0).toFixed(1)} ★</div>
             </div>
           </div>
 
           <div className="adm-section-h">Contact details</div>
           <div className="adm-kv">
             <span className="k">Name</span>
-            <span className="v">{provider.businessName || 'â€”'}</span>
+            <span className="v">{provider.businessName || '—'}</span>
             <span className="k">Email</span>
-            <span className="v">{provider.email || 'â€”'}</span>
+            <span className="v">{provider.email || '—'}</span>
             {provider.phone && <><span className="k">Phone</span><span className="v">{provider.phone}</span></>}
             {provider.category && <><span className="k">Category</span><span className="v">{provider.category}</span></>}
           </div>
