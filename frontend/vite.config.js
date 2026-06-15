@@ -9,7 +9,7 @@ export default defineConfig({
       output: {
         manualChunks: {
           'vendor-react':    ['react', 'react-dom', 'react-router-dom'],
-          'vendor-firebase': ['firebase'],
+          'vendor-firebase': ['firebase/app', 'firebase/auth'],
           'vendor-socket':   ['socket.io-client'],
           'vendor-sentry':   ['@sentry/react'],
         },
