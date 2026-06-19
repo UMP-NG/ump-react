@@ -43,7 +43,7 @@ function applyConfig(data, setters) {
   if (data.logoUrl !== undefined) setLogoUrl(data.logoUrl);
   if (data.slides)    setSlides(data.slides);
   if (data.flags)     setFlags(data.flags);
-  if (data.fees)      setFees(f => ({ ...DEFAULT_FEES, ...f, ...data.fees }));
+  if (data.fees)      setFees({ ...DEFAULT_FEES, ...data.fees });
   if (data.events)    setEvents(data.events);
   if (data.subscriptions) {
     setSubscriptions(s => {
@@ -70,7 +70,7 @@ const AppConfigContext = createContext({
 });
 
 export function AppConfigProvider({ children }) {
-  const cached = loadCache();
+  const [cached] = useState(loadCache); // lazy init — loadCache() runs exactly once
   const [logoUrl, setLogoUrl]           = useState(cached?.logoUrl || DEFAULT_LOGO);
   const [slides, setSlides]             = useState(cached?.slides  || []);
   const [flags, setFlags]               = useState(cached?.flags   || {});
