@@ -10,7 +10,8 @@ const negotiationSchema = new mongoose.Schema(
     itemImage: { type: String },
     originalPrice: { type: Number, required: true },
     proposedPrice: { type: Number, required: true },
-    status: { type: String, enum: ["pending", "accepted", "rejected", "applied"], default: "pending" },
+    counterPrice: { type: Number },
+    status: { type: String, enum: ["pending", "countered", "accepted", "rejected", "applied"], default: "pending" },
     messageId: { type: mongoose.Schema.Types.ObjectId, ref: "Message" },
   },
   { timestamps: true }

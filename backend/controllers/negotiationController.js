@@ -118,26 +118,98 @@ export const createNegotiation = async (req, res) => {
 };
 
 // PUT /api/negotiations/:id/respond
-// Seller accepts or rejects a negotiation
+// Seller accepts, rejects, or counters a pending negotiation.
+// Buyer accepts or rejects a counter offer (status === "countered").
 export const respondToNegotiation = async (req, res) => {
   try {
-    const { action } = req.body; // "accept" | "reject"
+    const { action, counterPrice: rawCounter } = req.body;
     const { id } = req.params;
     const userId = req.user._id;
 
-    if (!["accept", "reject"].includes(action)) {
-      return res.status(400).json({ message: "Action must be 'accept' or 'reject'" });
+    if (!["accept", "reject", "counter"].includes(action)) {
+      return res.status(400).json({ message: "Action must be 'accept', 'reject', or 'counter'" });
     }
 
     const negotiation = await Negotiation.findById(id);
     if (!negotiation) return res.status(404).json({ message: "Negotiation not found" });
 
-    if (negotiation.seller.toString() !== userId.toString()) {
-      return res.status(403).json({ message: "Only the seller can respond to this negotiation" });
+    const isSeller = negotiation.seller.toString() === userId.toString();
+    const isBuyer  = negotiation.buyer.toString()  === userId.toString();
+
+    if (negotiation.status === "pending") {
+      if (!isSeller) return res.status(403).json({ message: "Only the seller can respond to this negotiation" });
+    } else if (negotiation.status === "countered") {
+      if (!isBuyer) return res.status(403).json({ message: "Only the buyer can respond to a counter offer" });
+      if (action === "counter") return res.status(400).json({ message: "Cannot counter again — please accept or reject" });
+    } else {
+      return res.status(400).json({ message: "This negotiation has already been responded to" });
     }
 
-    if (negotiation.status !== "pending") {
-      return res.status(400).json({ message: "This negotiation has already been responded to" });
+    const io = getIO();
+
+    // ── Counter offer ────────────────────────────────────────────────────────
+    if (action === "counter") {
+      const cp = Number(rawCounter);
+      if (!cp || cp <= negotiation.proposedPrice || cp >= negotiation.originalPrice) {
+        return res.status(400).json({ message: "Counter price must be between the buyer's offer and original price" });
+      }
+      negotiation.counterPrice = cp;
+      negotiation.status = "countered";
+      await negotiation.save();
+
+      if (negotiation.messageId) {
+        await Message.findByIdAndUpdate(negotiation.messageId, { "meta.status": "countered" });
+      }
+
+      const counterMeta = {
+        itemType: negotiation.itemType,
+        itemId: negotiation.item,
+        itemName: negotiation.itemName,
+        itemImage: negotiation.itemImage,
+        originalPrice: negotiation.originalPrice,
+        proposedPrice: negotiation.proposedPrice,
+        counterPrice: cp,
+        status: "countered",
+        isResponse: true,
+        isCounter: true,
+        canApply: false,
+        negotiationId: negotiation._id,
+      };
+
+      const counterMsg = await Message.create({
+        sender: userId,
+        receiver: negotiation.buyer,
+        text: `Counter offer for "${negotiation.itemName}" — ₦${Number(cp).toLocaleString()}`,
+        type: "negotiation",
+        negotiationId: negotiation._id,
+        meta: counterMeta,
+      });
+
+      if (io) {
+        const populated = await counterMsg.populate("sender receiver", "name avatar roles");
+        io.to(negotiation.buyer.toString()).emit("new_message", populated);
+        io.to(userId.toString()).emit("new_message", populated);
+        io.to(negotiation.buyer.toString()).emit("negotiation_update", {
+          negotiationId: negotiation._id,
+          status: "countered",
+        });
+      }
+
+      notify(negotiation.buyer.toString(), {
+        type: "account",
+        title: "Counter offer received",
+        message: `The seller countered at ₦${Number(cp).toLocaleString()} for "${negotiation.itemName}"`,
+        link: "/messages",
+      }).catch(() => {});
+
+      return res.json({ success: true, negotiation });
+    }
+
+    // ── Accept or reject ─────────────────────────────────────────────────────
+    const isCounterResponse = negotiation.status === "countered";
+
+    if (action === "accept" && isCounterResponse) {
+      negotiation.proposedPrice = negotiation.counterPrice;
     }
 
     negotiation.status = action === "accept" ? "accepted" : "rejected";
@@ -147,7 +219,9 @@ export const respondToNegotiation = async (req, res) => {
       await Message.findByIdAndUpdate(negotiation.messageId, { "meta.status": negotiation.status });
     }
 
-    const meta = {
+    // Always create the final response message as seller→buyer so iAmSeller
+    // logic in the frontend remains consistent regardless of who acted last.
+    const finalMeta = {
       itemType: negotiation.itemType,
       itemId: negotiation.item,
       itemName: negotiation.itemName,
@@ -162,34 +236,42 @@ export const respondToNegotiation = async (req, res) => {
 
     const responseText = action === "accept"
       ? `Negotiation accepted for "${negotiation.itemName}" — ₦${Number(negotiation.proposedPrice).toLocaleString()}`
-      : `Negotiation rejected for "${negotiation.itemName}" — original price applies`;
+      : isCounterResponse
+        ? `Counter offer declined for "${negotiation.itemName}" — original price applies`
+        : `Negotiation rejected for "${negotiation.itemName}" — original price applies`;
 
     const responseMsg = await Message.create({
-      sender: userId,
+      sender: negotiation.seller,
       receiver: negotiation.buyer,
       text: responseText,
       type: "negotiation",
       negotiationId: negotiation._id,
-      meta,
+      meta: finalMeta,
     });
 
-    const io = getIO();
     if (io) {
       const populated = await responseMsg.populate("sender receiver", "name avatar roles");
       io.to(negotiation.buyer.toString()).emit("new_message", populated);
-      io.to(userId.toString()).emit("new_message", populated);
+      io.to(negotiation.seller.toString()).emit("new_message", populated);
       io.to(negotiation.buyer.toString()).emit("negotiation_update", {
+        negotiationId: negotiation._id,
+        status: negotiation.status,
+      });
+      io.to(negotiation.seller.toString()).emit("negotiation_update", {
         negotiationId: negotiation._id,
         status: negotiation.status,
       });
     }
 
-    notify(negotiation.buyer.toString(), {
+    const notifyTarget = isCounterResponse ? negotiation.seller.toString() : negotiation.buyer.toString();
+    notify(notifyTarget, {
       type: "account",
-      title: action === "accept" ? "Offer accepted!" : "Offer rejected",
+      title: action === "accept"
+        ? (isCounterResponse ? "Counter offer accepted!" : "Offer accepted!")
+        : (isCounterResponse ? "Counter offer declined" : "Offer rejected"),
       message: action === "accept"
-        ? `Your offer of ₦${Number(negotiation.proposedPrice).toLocaleString()} for "${negotiation.itemName}" was accepted!`
-        : `Your offer for "${negotiation.itemName}" was rejected — the original price applies.`,
+        ? `${isCounterResponse ? "Your counter offer" : "The offer"} of ₦${Number(negotiation.proposedPrice).toLocaleString()} for "${negotiation.itemName}" was accepted!`
+        : `${isCounterResponse ? "Your counter offer" : "The offer"} for "${negotiation.itemName}" was declined.`,
       link: "/messages",
     }).catch(() => {});
 
@@ -248,6 +330,12 @@ export const applyNegotiatedPrice = async (req, res) => {
     // Mark as applied so it cannot be re-applied
     negotiation.status = "applied";
     await negotiation.save();
+
+    // Persist _applied on the response message so the badge survives page refresh
+    await Message.updateMany(
+      { negotiationId: negotiation._id, "meta.isResponse": true, "meta.canApply": true },
+      { $set: { "meta._applied": true } }
+    );
 
     const io = getIO();
     if (io) {

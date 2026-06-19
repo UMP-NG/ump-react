@@ -399,20 +399,35 @@ function NegotiationCard({ msg, iAmSeller, onRespond, onApply }) {
   const [acting, setActing] = useState(false);
   const [applying, setApplying] = useState(false);
   const [cardError, setCardError] = useState("");
+  const [counterMode, setCounterMode] = useState(false);
+  const [counterInput, setCounterInput] = useState("");
   const status = msg._negotiationStatus || meta.status || "pending";
 
   const fmt = (n) => "₦" + Number(n).toLocaleString("en-NG");
 
-  const statusColor = status === "accepted" ? "#16a34a" : status === "rejected" ? "#ef4444" : "#f59e0b";
-  const statusLabel = status === "accepted" ? "Accepted" : status === "rejected" ? "Rejected" : "Pending";
-  const statusIcon  = status === "accepted" ? "fa-check-circle" : status === "rejected" ? "fa-times-circle" : "fa-clock";
+  const statusColor = status === "accepted" ? "#16a34a"
+    : status === "rejected" ? "#ef4444"
+    : status === "countered" ? "#f97316"
+    : "#f59e0b";
+  const statusLabel = status === "accepted" ? "Accepted"
+    : status === "rejected" ? "Rejected"
+    : status === "countered" ? "Counter offer"
+    : "Pending";
+  const statusIcon = status === "accepted" ? "fa-check-circle"
+    : status === "rejected" ? "fa-times-circle"
+    : status === "countered" ? "fa-arrows-left-right"
+    : "fa-clock";
 
-  async function respond(action) {
+  async function respond(action, counterPrice) {
     if (acting) return;
     setActing(true);
     setCardError("");
     try {
-      await onRespond(msg.negotiationId, action);
+      await onRespond(msg.negotiationId, action, counterPrice);
+      if (action === "counter") {
+        setCounterMode(false);
+        setCounterInput("");
+      }
     } catch (err) {
       setCardError(err?.body?.message || err?.message || "Action failed. Try again.");
     } finally {
@@ -432,6 +447,9 @@ function NegotiationCard({ msg, iAmSeller, onRespond, onApply }) {
       setApplying(false);
     }
   }
+
+  const counterVal = Number(counterInput);
+  const counterValid = counterVal > meta.proposedPrice && counterVal < meta.originalPrice;
 
   return (
     <div style={{
@@ -465,8 +483,17 @@ function NegotiationCard({ msg, iAmSeller, onRespond, onApply }) {
         </div>
         <i className="fas fa-arrow-right" style={{ color: "var(--ink-4)", fontSize: "1rem" }} />
         <div>
-          <div style={{ fontSize: "1.05rem", color: "var(--ink-4)", marginBottom: 1 }}>Offer</div>
-          <div style={{ fontSize: "1.5rem", fontWeight: 800, color: "var(--accent)" }}>{fmt(meta.proposedPrice)}</div>
+          <div style={{ fontSize: "1.05rem", color: "var(--ink-4)", marginBottom: 1 }}>
+            {meta.isCounter ? "Counter offer" : "Offer"}
+          </div>
+          <div style={{ fontSize: "1.5rem", fontWeight: 800, color: "var(--accent)" }}>
+            {fmt(meta.isCounter ? meta.counterPrice : meta.proposedPrice)}
+          </div>
+          {meta.isCounter && (
+            <div style={{ fontSize: "1rem", color: "var(--ink-4)" }}>
+              Buyer offered {fmt(meta.proposedPrice)}
+            </div>
+          )}
         </div>
       </div>
 
@@ -476,15 +503,83 @@ function NegotiationCard({ msg, iAmSeller, onRespond, onApply }) {
         <span style={{ fontSize: "1.1rem", fontWeight: 700, color: statusColor }}>{statusLabel}</span>
       </div>
 
-      {/* Seller actions — only on the initiating (non-response) card, when pending */}
-      {iAmSeller && !meta.isResponse && status === "pending" && (
+      {/* Seller actions — Reject / Counter / Accept on the initiating card while pending */}
+      {iAmSeller && !meta.isResponse && status === "pending" && !counterMode && (
+        <div style={{ display: "flex", gap: 0, borderTop: "1px solid var(--line)" }}>
+          <button
+            onClick={() => respond("reject")}
+            disabled={acting}
+            style={{ flex: 1, padding: "10px 0", background: "none", border: "none", borderRight: "1px solid var(--line)", cursor: acting ? "default" : "pointer", fontSize: "1.2rem", fontWeight: 700, color: "#ef4444", fontFamily: "var(--font-sans)" }}
+          >
+            {acting ? <i className="fas fa-spinner fa-spin" /> : "Reject"}
+          </button>
+          <button
+            onClick={() => setCounterMode(true)}
+            disabled={acting}
+            style={{ flex: 1, padding: "10px 0", background: "none", border: "none", borderRight: "1px solid var(--line)", cursor: acting ? "default" : "pointer", fontSize: "1.2rem", fontWeight: 700, color: "var(--accent)", fontFamily: "var(--font-sans)" }}
+          >
+            Counter
+          </button>
+          <button
+            onClick={() => respond("accept")}
+            disabled={acting}
+            style={{ flex: 1, padding: "10px 0", background: "none", border: "none", cursor: acting ? "default" : "pointer", fontSize: "1.2rem", fontWeight: 700, color: "#16a34a", fontFamily: "var(--font-sans)" }}
+          >
+            {acting ? <i className="fas fa-spinner fa-spin" /> : "Accept"}
+          </button>
+        </div>
+      )}
+
+      {/* Counter price input — shown when seller clicks Counter */}
+      {iAmSeller && !meta.isResponse && status === "pending" && counterMode && (
+        <div style={{ padding: "10px 12px", borderTop: "1px solid var(--line)" }}>
+          <div style={{ fontSize: "1.15rem", fontWeight: 600, color: "var(--ink-2)", marginBottom: 6 }}>Your counter offer</div>
+          <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+            <div style={{ position: "relative", flex: 1 }}>
+              <span style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", fontSize: "1.3rem", fontWeight: 700, color: "var(--ink-2)", pointerEvents: "none" }}>₦</span>
+              <input
+                type="number"
+                min="1"
+                step="1"
+                className="input"
+                style={{ paddingLeft: 26, fontSize: "1.3rem", fontWeight: 700, height: 38 }}
+                placeholder={(meta.proposedPrice + 1).toString()}
+                value={counterInput}
+                onChange={(e) => { setCounterInput(e.target.value); setCardError(""); }}
+                autoFocus
+              />
+            </div>
+            <button
+              onClick={() => respond("counter", counterVal)}
+              disabled={acting || !counterInput || !counterValid}
+              style={{ padding: "8px 12px", background: counterValid ? "var(--accent)" : "var(--surface)", color: counterValid ? "#fff" : "var(--ink-3)", border: "none", borderRadius: 8, cursor: counterValid && !acting ? "pointer" : "default", fontSize: "1.2rem", fontWeight: 700, fontFamily: "var(--font-sans)", whiteSpace: "nowrap" }}
+            >
+              {acting ? <i className="fas fa-spinner fa-spin" /> : "Send"}
+            </button>
+            <button
+              onClick={() => { setCounterMode(false); setCounterInput(""); setCardError(""); }}
+              style={{ padding: "8px 10px", background: "none", border: "1px solid var(--line)", borderRadius: 8, cursor: "pointer", fontSize: "1.15rem", color: "var(--ink-3)", fontFamily: "var(--font-sans)" }}
+            >
+              ✕
+            </button>
+          </div>
+          {counterInput && !counterValid && (
+            <p style={{ fontSize: "1.05rem", color: "#ef4444", marginTop: 4, marginBottom: 0 }}>
+              Must be between {fmt(meta.proposedPrice)} and {fmt(meta.originalPrice)}
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Buyer counter-response — Accept or Reject the seller's counter offer */}
+      {!iAmSeller && meta.isResponse && meta.isCounter && status === "countered" && (
         <div style={{ display: "flex", gap: 0, borderTop: "1px solid var(--line)" }}>
           <button
             onClick={() => respond("reject")}
             disabled={acting}
             style={{ flex: 1, padding: "10px 0", background: "none", border: "none", borderRight: "1px solid var(--line)", cursor: acting ? "default" : "pointer", fontSize: "1.25rem", fontWeight: 700, color: "#ef4444", fontFamily: "var(--font-sans)" }}
           >
-            {acting ? <i className="fas fa-spinner fa-spin" /> : "Reject"}
+            {acting ? <i className="fas fa-spinner fa-spin" /> : "Decline"}
           </button>
           <button
             onClick={() => respond("accept")}
@@ -672,15 +767,16 @@ function MsgThread({ convo, onBack }) {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  async function handleNegotiationRespond(negotiationId, action) {
+  async function handleNegotiationRespond(negotiationId, action, counterPrice) {
     await apiFetch(`/api/negotiations/${negotiationId}/respond`, {
       method: "PUT",
-      body: { action },
+      body: action === "counter" ? { action, counterPrice } : { action },
     });
+    const newStatus = action === "accept" ? "accepted" : action === "reject" ? "rejected" : "countered";
     setMessages((prev) =>
       prev.map((m) =>
         m.negotiationId?.toString() === negotiationId?.toString()
-          ? { ...m, _negotiationStatus: action === "accept" ? "accepted" : "rejected" }
+          ? { ...m, _negotiationStatus: newStatus }
           : m
       )
     );
