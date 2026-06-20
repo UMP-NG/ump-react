@@ -67,7 +67,7 @@ export default function Navbar({ frosted = false, dark = false }) {
     }
     socket.on("new_notification", onNewNotif);
     return () => socket.off("new_notification", onNewNotif);
-  }, [user, pathname, showToast]);
+  }, [user, pathname, showToast, socket]);
 
   // Reset badge when user marks all as read on the Notifications page
   useEffect(() => {
