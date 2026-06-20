@@ -102,8 +102,6 @@ const productSchema = new mongoose.Schema(
       default: 1,
     },
 
-    deliveryFee: { type: Number, default: 0, min: [0, "Delivery fee cannot be negative"] },
-
     // Optional hostel/real estate fields
     location: String,
     beds: Number,

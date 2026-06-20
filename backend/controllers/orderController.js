@@ -56,7 +56,6 @@ export const createOrder = async (req, res) => {
     }
 
     let subtotal = 0;
-    let deliveryFee = 0;
 
     // Process each item
     const processedItems = [];
@@ -72,8 +71,7 @@ export const createOrder = async (req, res) => {
         return res.status(404).json({ message: `Product not found: ${item.product}` });
       }
 
-      subtotal    += product.price * qty;
-      deliveryFee += Math.max(0, product.deliveryFee || 0);
+      subtotal += product.price * qty;
 
       processedItems.push({
         product: product._id,
@@ -84,14 +82,14 @@ export const createOrder = async (req, res) => {
     }
 
     const tax = 0;
-    const totalAmount = subtotal + tax + deliveryFee;
+    const totalAmount = subtotal + tax;
 
     const order = await Order.create({
       buyer: req.user._id,
       items: processedItems,
       subtotal,
       tax,
-      deliveryFee,
+      deliveryFee: 0,
       totalAmount,
       shippingAddress,
       notes,
@@ -1089,8 +1087,9 @@ export const confirmTransfer = async (req, res) => {
 
     // Parse order data from FormData
     const info = JSON.parse(orderInfo);
-    const { fullName, email, location, phone, notes, items, shippingAddress } =
+    const { fullName, email, location, phone, notes, items, shippingAddress, deliverySelections: rawDeliverySelections } =
       info;
+    const deliverySelections = rawDeliverySelections || {};
 
     if (!items?.length) {
       return res.status(400).json({ success: false, message: "Cart is empty" });
@@ -1117,20 +1116,20 @@ export const confirmTransfer = async (req, res) => {
 
     // Create an order per seller
     for (const [sellerId, sellerItems] of Object.entries(itemsBySeller)) {
-      // Always fetch authoritative price + deliveryFee from DB — never trust client-submitted prices
+      // Always fetch authoritative price from DB — never trust client-submitted prices
       const productIds = [...new Set(sellerItems.map(i => i.product).filter(Boolean).map(String))];
-      const productDocs = await Product.find({ _id: { $in: productIds } }).select("_id price deliveryFee").lean();
-      const priceMap = new Map(productDocs.map(p => [p._id.toString(), { price: p.price, fee: p.deliveryFee || 0 }]));
+      const productDocs = await Product.find({ _id: { $in: productIds } }).select("_id price").lean();
+      const priceMap = new Map(productDocs.map(p => [p._id.toString(), p.price]));
 
       // Resolve per-item price: verify negotiation from DB when present, fall back to canonical price
       const resolvedItems = await Promise.all(sellerItems.map(async (item) => {
-        const canonical = priceMap.get(String(item.product))?.price || 0;
+        const canonical = priceMap.get(String(item.product)) || 0;
         if (item.negotiationId && mongoose.Types.ObjectId.isValid(item.negotiationId)) {
           const neg = await Negotiation.findOne({
             _id:    item.negotiationId,
             item:   item.product,
             buyer:  req.user._id,
-            status: "accepted",
+            status: { $in: ["accepted", "applied"] },
           }).select("proposedPrice").lean();
           if (neg) return { ...item, resolvedPrice: neg.proposedPrice };
         }
@@ -1138,12 +1137,55 @@ export const confirmTransfer = async (req, res) => {
       }));
 
       const subtotal = resolvedItems.reduce((sum, item) => sum + item.resolvedPrice * (item.quantity || 1), 0);
-      const deliveryFee = productIds.reduce((s, pid) => s + Math.max(0, priceMap.get(pid)?.fee || 0), 0);
       const serviceCharge = calcServiceCharge(
         resolvedItems.map(i => ({ price: i.resolvedPrice, quantity: i.quantity || 1 })),
         feeConfig
       );
-      const totalAmount = subtotal + deliveryFee + serviceCharge;
+
+      // Shipbubble delivery fee — re-fetch live rates, never trust client amount
+      const sel = deliverySelections[sellerId] || {};
+      let orderDeliveryFee = 0;
+      if (sel.method === "shipbubble") {
+        if (!sel.serviceCode) {
+          return res.status(400).json({ success: false, message: "A courier service must be selected for Shipbubble delivery" });
+        }
+        const sellerDoc = await Seller.findOne({ user: sellerId }).select("delivery storeName").lean();
+        const pickup = sellerDoc?.delivery?.shipbubble?.pickupAddress;
+        if (!pickup?.city || !pickup?.state) {
+          return res.status(400).json({ success: false, message: "Seller has not configured a Shipbubble pickup address" });
+        }
+        let liveRates;
+        try {
+          liveRates = await getRates({
+            sender: {
+              name:   pickup.name   || sellerDoc.storeName || "Seller",
+              email:  pickup.email  || "",
+              phone:  pickup.phone  || "",
+              street: pickup.street || "",
+              city:   pickup.city,
+              state:  pickup.state,
+            },
+            recipient: {
+              name:   shippingAddress?.name  || "Buyer",
+              phone:  shippingAddress?.phone || "",
+              street: shippingAddress?.address || shippingAddress?.street || "",
+              city:   shippingAddress?.city   || "",
+              state:  shippingAddress?.state  || "",
+            },
+            parcel: { weight: 0.5 },
+          });
+        } catch (rateErr) {
+          logger.error("confirmTransfer getRates:", rateErr.message);
+          return res.status(502).json({ success: false, message: "Could not verify shipping rate — please try again." });
+        }
+        const matched = liveRates.find((r) => r.service_code === sel.serviceCode);
+        if (!matched) {
+          return res.status(400).json({ success: false, message: "The selected courier rate is no longer available. Please go back and choose a courier again." });
+        }
+        orderDeliveryFee = Math.round(matched.total || 0);
+      }
+
+      const totalAmount = subtotal + serviceCharge + orderDeliveryFee;
 
       // Build order items using DB-verified prices
       const orderItems = resolvedItems.map(item => ({
@@ -1159,7 +1201,7 @@ export const confirmTransfer = async (req, res) => {
         items: orderItems,
         subtotal,
         serviceCharge,
-        deliveryFee,
+        deliveryFee: orderDeliveryFee,
         totalAmount,
         shippingAddress,
         notes,

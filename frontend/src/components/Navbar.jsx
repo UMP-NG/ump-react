@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from "react-router-dom";
 import Logo from "./Logo";
 import ProfilePopup from "./Profilepopup";
 import { useUser } from "../context/UserContext";
+import { useToast } from "../context/ToastContext";
 import { apiFetch } from "../utils/api";
 import { socket } from "../utils/socket";
 
@@ -34,6 +35,7 @@ export default function Navbar({ frosted = false, dark = false }) {
   const { pathname } = useLocation();
   const { user } = useUser();
   const [showProfile, setShowProfile] = useState(false);
+  const showToast = useToast();
   const [isDark, toggleTheme] = useTheme();
   const [search, setSearch] = useState("");
   const [mobSearch, setMobSearch] = useState(false);
@@ -54,12 +56,18 @@ export default function Navbar({ frosted = false, dark = false }) {
       .catch(() => {});
   }, [user]);
 
-  // Real-time: bump badge whenever a new notification arrives over the socket
+  // Real-time: bump badge and show toast for incoming messages
   useEffect(() => {
-    function onNewNotif() { if (user) setNotifCount((c) => c + 1); }
+    function onNewNotif(notif) {
+      if (!user) return;
+      setNotifCount((c) => c + 1);
+      if (notif?.type === "message" && !pathname.startsWith("/messages")) {
+        showToast(notif.title || "New message", "info");
+      }
+    }
     socket.on("new_notification", onNewNotif);
     return () => socket.off("new_notification", onNewNotif);
-  }, [user]);
+  }, [user, pathname, showToast]);
 
   // Reset badge when user marks all as read on the Notifications page
   useEffect(() => {

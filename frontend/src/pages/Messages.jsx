@@ -398,6 +398,7 @@ function NegotiationCard({ msg, iAmSeller, onRespond, onApply }) {
   const meta = msg.meta || {};
   const [acting, setActing] = useState(false);
   const [applying, setApplying] = useState(false);
+  const [appliedLocally, setAppliedLocally] = useState(false);
   const [cardError, setCardError] = useState("");
   const [counterMode, setCounterMode] = useState(false);
   const [counterInput, setCounterInput] = useState("");
@@ -436,12 +437,14 @@ function NegotiationCard({ msg, iAmSeller, onRespond, onApply }) {
   }
 
   async function applyPrice() {
-    if (applying) return;
+    if (applying || appliedLocally || meta._applied) return;
+    setAppliedLocally(true); // disable instantly; revert only on error
     setApplying(true);
     setCardError("");
     try {
       await onApply(msg.negotiationId);
     } catch (err) {
+      setAppliedLocally(false);
       setCardError(err?.body?.message || err?.message || "Could not apply price. Try again.");
     } finally {
       setApplying(false);
@@ -594,23 +597,28 @@ function NegotiationCard({ msg, iAmSeller, onRespond, onApply }) {
       {/* Apply-to-cart button — seller sees this on the response card after accepting a Product negotiation */}
       {iAmSeller && meta.isResponse && meta.canApply && meta.itemType === "Product" && (
         <div style={{ padding: "10px 12px", borderTop: "1px solid var(--line)" }}>
-          <button
-            onClick={applyPrice}
-            disabled={applying || meta._applied}
-            style={{
-              width: "100%", padding: "9px 0", borderRadius: 8,
-              background: applying || meta._applied ? "var(--surface)" : "var(--accent)",
-              color: applying || meta._applied ? "var(--ink-3)" : "#fff",
-              border: "none", cursor: applying || meta._applied ? "default" : "pointer",
-              fontSize: "1.25rem", fontWeight: 700, fontFamily: "var(--font-sans)",
-            }}
-          >
-            {applying
-              ? <><i className="fas fa-spinner fa-spin" /> Applying…</>
-              : meta._applied
-              ? <><i className="fas fa-check" /> Price applied to cart</>
-              : <><i className="fas fa-cart-plus" /> Apply price to buyer's cart</>}
-          </button>
+          {(() => {
+            const done = meta._applied || appliedLocally;
+            return (
+              <button
+                onClick={applyPrice}
+                disabled={applying || done}
+                style={{
+                  width: "100%", padding: "9px 0", borderRadius: 8,
+                  background: applying || done ? "var(--surface)" : "var(--accent)",
+                  color: applying || done ? "var(--ink-3)" : "#fff",
+                  border: "none", cursor: applying || done ? "default" : "pointer",
+                  fontSize: "1.25rem", fontWeight: 700, fontFamily: "var(--font-sans)",
+                }}
+              >
+                {applying
+                  ? <><i className="fas fa-spinner fa-spin" /> Applying…</>
+                  : done
+                  ? <><i className="fas fa-check" /> Price applied to cart</>
+                  : <><i className="fas fa-cart-plus" /> Apply price to buyer's cart</>}
+              </button>
+            );
+          })()}
         </div>
       )}
 
