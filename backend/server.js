@@ -23,7 +23,13 @@ const ENABLE_CLUSTER =
   !!process.env.REDIS_URL;
 
 if (ENABLE_CLUSTER && cluster.isPrimary) {
-  const count = os.cpus().length;
+  // WEB_CONCURRENCY is set automatically by Render on paid plans based on RAM.
+  // Default to 2 so a 512 MB instance (free/starter) doesn't OOM spawning one
+  // process per CPU core (Render VMs report 8 cores but share 512 MB RAM).
+  const count = Math.min(
+    os.cpus().length,
+    parseInt(process.env.WEB_CONCURRENCY || "2", 10)
+  );
   console.log(`[Cluster] Primary ${process.pid} — starting ${count} workers`);
   for (let i = 0; i < count; i++) cluster.fork();
   cluster.on("exit", (worker, code) => {
