@@ -218,6 +218,22 @@ export const initializePayment = async (req, res) => {
         .json({ success: false, message: "Unsupported provider" });
     }
 
+    // Idempotency — if a pending payment already exists for these exact orders,
+    // return it instead of creating a second Paystack transaction on retry/double-click.
+    const existingPayment = await Payment.findOne({
+      orders: { $all: orders.map((o) => o._id), $size: orders.length },
+      user: req.user._id,
+      status: "pending",
+    });
+    if (existingPayment) {
+      return res.status(200).json({
+        success: true,
+        message: "Payment already initialised",
+        authorization_url: existingPayment.authorizationUrl || null,
+        reference: existingPayment.reference,
+      });
+    }
+
     const totalAmount = orders.reduce((s, o) => s + o.totalAmount, 0);
     const amountKobo = Math.round(totalAmount * 100);
     const reference = `UMP_${Date.now()}`;
@@ -262,7 +278,7 @@ export const initializePayment = async (req, res) => {
         .json({ success: false, message: "Invalid payment method" });
     }
 
-    // Save payment record
+    // Save payment record — store authorizationUrl so retries can replay it
     await Payment.create({
       orders: orders.map((o) => o._id),
       user: req.user._id,
@@ -272,6 +288,7 @@ export const initializePayment = async (req, res) => {
       status: "pending",
       method,
       virtualAccount,
+      authorizationUrl: authorization_url || null,
     });
 
     return res.status(200).json({
@@ -473,9 +490,15 @@ export const paystackWebhook = async (req, res) => {
   try {
     const secret = process.env.PAYSTACK_SECRET_KEY;
 
+    // express.raw() delivers req.body as a Buffer — use it directly so the HMAC
+    // is computed over the exact bytes Paystack signed, not a re-serialised object.
+    const rawBody = Buffer.isBuffer(req.body)
+      ? req.body
+      : Buffer.from(JSON.stringify(req.body));
+
     const hash = crypto
       .createHmac("sha512", secret)
-      .update(JSON.stringify(req.body))
+      .update(rawBody)
       .digest("hex");
 
     if (hash !== req.headers["x-paystack-signature"]) {

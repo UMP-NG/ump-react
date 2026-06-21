@@ -197,19 +197,19 @@ export default function Cart() {
     return typeof it.product === "object" ? it.product?._id : it.product;
   }
 
-  async function removeItem(itemId, productId) {
+  async function removeItem(itemId) {
     setItems((prev) => prev.filter((i) => (i._id || i.id) !== itemId));
     try {
-      await apiFetch(`/api/cart/remove/${productId}`, { method: "DELETE" });
+      await apiFetch(`/api/cart/remove/${itemId}`, { method: "DELETE" });
     } catch {
       apiFetch("/api/cart").then((d) => setItems(d.items || d || [])).catch(() => {});
     }
   }
 
   async function updateQty(itemId, productId, qty) {
-    if (qty < 1) { removeItem(itemId, productId); return; }
+    if (qty < 1) { removeItem(itemId); return; }
     setItems((prev) => prev.map((i) => (i._id || i.id) === itemId ? { ...i, quantity: qty, qty } : i));
-    try { await apiFetch("/api/cart/update", { method: "PUT", body: { productId, quantity: qty } }); } catch { /* ignore */ }
+    try { await apiFetch("/api/cart/update", { method: "PUT", body: { itemId, quantity: qty } }); } catch { /* ignore */ }
   }
 
   function fullAddress() {
@@ -838,13 +838,13 @@ export default function Cart() {
               <div style={{ height: 1, background: "var(--line)", margin: "10px 0" }} />
               {serviceCharge > 0 && (
                 <div style={{ display: "flex", justifyContent: "space-between", fontSize: "1.3rem", marginBottom: 4 }}>
-                  <span style={{ color: "var(--ink-3)" }}>Service charge</span>
+                  <span style={{ color: "var(--ink-3)" }}>Service fee</span>
                   <span style={{ color: "var(--ink-2)", fontWeight: 600 }}>{naira(serviceCharge)}</span>
                 </div>
               )}
               {totalDeliveryFee > 0 && (
                 <div style={{ display: "flex", justifyContent: "space-between", fontSize: "1.3rem", marginBottom: 4 }}>
-                  <span style={{ color: "var(--ink-3)" }}>Delivery</span>
+                  <span style={{ color: "var(--ink-3)" }}>Delivery fee</span>
                   <span style={{ color: "#f59e0b" }}>{naira(totalDeliveryFee)}</span>
                 </div>
               )}
@@ -1052,7 +1052,7 @@ function MobileOrderSummary({ items, sub, deliveryFeeTotal, orderTotal, serviceC
             <div style={{ fontSize: "1rem", opacity: 0.7, lineHeight: 1.4 }}>Service fee <span style={{ fontWeight: 700 }}>{naira(serviceCharge)}</span></div>
           )}
           {deliveryFeeTotal > 0 && (
-            <div style={{ fontSize: "1rem", opacity: 0.7, lineHeight: 1.4 }}>Delivery <span style={{ fontWeight: 700 }}>{naira(deliveryFeeTotal)}</span></div>
+            <div style={{ fontSize: "1rem", opacity: 0.7, lineHeight: 1.4 }}>Delivery fee <span style={{ fontWeight: 700 }}>{naira(deliveryFeeTotal)}</span></div>
           )}
           <div style={{ fontSize: "1rem", opacity: 0.6, lineHeight: 1 }}>Total</div>
           <div style={{ fontSize: "1.8rem", fontWeight: 800, color: "var(--accent)", lineHeight: 1.2 }}>{naira(orderTotal)}</div>
@@ -1089,7 +1089,7 @@ function MobileOrderSummary({ items, sub, deliveryFeeTotal, orderTotal, serviceC
           </div>
           {serviceCharge > 0 && (
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: "1.25rem", color: "var(--ink-3)" }}>
-              <span>Service charge</span><span>{naira(serviceCharge)}</span>
+              <span>Service fee</span><span>{naira(serviceCharge)}</span>
             </div>
           )}
           {deliveryFeeTotal > 0 && (

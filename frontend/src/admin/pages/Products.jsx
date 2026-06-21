@@ -461,7 +461,7 @@ function CreateProductModal({ onClose, onSave }) {
             {images.length < 4 && (
               <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', padding: '8px 14px', borderRadius: 8, border: '1px dashed var(--adm-line)', width: 'fit-content', fontSize: '1.2rem' }}>
                 <i className="fa-solid fa-cloud-arrow-up"></i> Add photos
-                <input ref={fileRef} type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={handleImages} />
+                <input ref={fileRef} type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={(e) => { handleImages(e); if (fileRef.current) fileRef.current.value = ''; }} />
               </label>
             )}
             {previews.length > 0 && (

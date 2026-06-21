@@ -205,60 +205,6 @@ export const NIGERIAN_INSTITUTIONS = [
   "Zamfara State Polytechnic, Kaura-Namoda",
 ];
 
-// ── Faculties / Schools ──────────────────────────────────────────────────────
-// Covers both universities (Faculty of X) and polytechnics (School of X).
-export const NIGERIAN_FACULTIES = [
-  // University Faculties
-  "Faculty of Agriculture",
-  "Faculty of Allied Health Sciences",
-  "Faculty of Architecture",
-  "Faculty of Arts",
-  "Faculty of Arts and Humanities",
-  "Faculty of Basic Clinical Sciences",
-  "Faculty of Basic Medical Sciences",
-  "Faculty of Business Administration",
-  "Faculty of Clinical Sciences",
-  "Faculty of Communication and Media Studies",
-  "Faculty of Computing and Information Technology",
-  "Faculty of Dentistry",
-  "Faculty of Economics",
-  "Faculty of Education",
-  "Faculty of Engineering",
-  "Faculty of Environmental Design and Management",
-  "Faculty of Environmental Sciences",
-  "Faculty of General Studies",
-  "Faculty of Law",
-  "Faculty of Management Sciences",
-  "Faculty of Medicine",
-  "Faculty of Natural Sciences",
-  "Faculty of Nursing Sciences",
-  "Faculty of Pharmacy",
-  "Faculty of Physical Sciences",
-  "Faculty of Public Administration and Management",
-  "Faculty of Public Health",
-  "Faculty of Pure and Applied Sciences",
-  "Faculty of Science",
-  "Faculty of Social Sciences",
-  "Faculty of Technology",
-  "Faculty of Veterinary Medicine",
-  "Postgraduate School / School of Postgraduate Studies",
-  // Polytechnic Schools
-  "School of Agricultural Technology",
-  "School of Applied Sciences",
-  "School of Art, Design and Printing Technology",
-  "School of Business Studies",
-  "School of Communication and Information Technology",
-  "School of Engineering Technology",
-  "School of Environmental Studies",
-  "School of Financial Studies",
-  "School of General Studies",
-  "School of Hospitality and Tourism",
-  "School of Information and Communication Technology",
-  "School of Management Technology",
-  "School of Science and Technology",
-  "School of Technical Education",
-];
-
 // ── Faculty → Departments mapping ────────────────────────────────────────────
 // Department lists per faculty/school. Used to filter the department dropdown.
 export const FACULTY_DEPARTMENTS = {
@@ -908,8 +854,10 @@ export const FACULTY_DEPARTMENTS = {
   ],
 };
 
-// ── Flat lists (used for "Other" detection and the backend) ──────────────────
-export const NIGERIAN_FACULTIES_LIST = Object.keys(FACULTY_DEPARTMENTS);
+// ── Flat lists ────────────────────────────────────────────────────────────────
+// NIGERIAN_FACULTIES is derived from FACULTY_DEPARTMENTS keys so the dropdown
+// list and the department mapping can never drift out of sync.
+export const NIGERIAN_FACULTIES = Object.keys(FACULTY_DEPARTMENTS);
 
 // Master department list — union of all faculty-specific lists, sorted.
 export const NIGERIAN_DEPARTMENTS = [

@@ -112,17 +112,17 @@ export const addToCart = async (req, res) => {
 // ✅ Update item quantity
 export const updateQuantity = async (req, res) => {
   try {
-    const { productId, quantity } = req.body;
+    const { itemId, quantity } = req.body;
     const userId = req.user._id;
 
     const cart = await Cart.findOne({ user: userId });
     if (!cart) return res.status(404).json({ message: "Cart not found" });
 
-    const item = cart.items.find((i) => i.product.toString() === productId);
-    if (!item)
-      return res.status(404).json({ message: "Item not found in cart" });
+    // Match by subdocument _id so two variants of the same product update independently
+    const item = cart.items.id(itemId);
+    if (!item) return res.status(404).json({ message: "Item not found in cart" });
 
-    item.quantity = Math.max(1, quantity); // ✅ never below 1
+    item.quantity = Math.max(1, quantity);
     await cart.save();
 
     res.json({ message: "✅ Quantity updated", cart });
@@ -135,13 +135,14 @@ export const updateQuantity = async (req, res) => {
 // ✅ Remove item from cart
 export const removeFromCart = async (req, res) => {
   try {
-    const { productId } = req.params; // ✅ use params instead of body
+    const { itemId } = req.params;
     const userId = req.user._id;
 
     const cart = await Cart.findOne({ user: userId });
     if (!cart) return res.status(404).json({ message: "Cart not found" });
 
-    cart.items = cart.items.filter((i) => i.product.toString() !== productId);
+    // Match by subdocument _id so only the specific variant is removed
+    cart.items = cart.items.filter((i) => i._id.toString() !== itemId);
     await cart.save();
 
     res.json({ message: "🗑️ Item removed", cart });

@@ -732,7 +732,7 @@ function ListingModal({ listing, onClose, onSave, showToast }) {
             <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", padding: "8px 14px", borderRadius: "var(--r-md)", border: "1px dashed var(--line)", background: "var(--surface)", width: "fit-content" }}>
               <i className="fas fa-cloud-arrow-up" style={{ color: "var(--accent)" }} />
               <span style={{ fontSize: "1.2rem", color: "var(--ink-2)" }}>{imageFiles.length > 0 ? `${imageFiles.length} photo(s) selected` : "Choose photos"}</span>
-              <input type="file" accept="image/*" multiple style={{ display: "none" }} onChange={handleImagePick} />
+              <input type="file" accept="image/*" multiple style={{ display: "none" }} onChange={(e) => { handleImagePick(e); e.target.value = ""; }} />
             </label>
             {imagePreviews.length > 0 && (
               <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
@@ -969,7 +969,7 @@ function AddProductModal({ onClose, onSave, showToast }) {
               <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", padding: "8px 14px", borderRadius: "var(--r-md)", border: "1px dashed var(--line)", background: "var(--surface)", width: "fit-content" }}>
                 <i className="fas fa-cloud-arrow-up" style={{ color: "var(--accent)" }} />
                 <span style={{ fontSize: "1.2rem", color: "var(--ink-2)" }}>Add photos</span>
-                <input type="file" accept="image/*" multiple style={{ display: "none" }} onChange={handleImages} />
+                <input type="file" accept="image/*" multiple style={{ display: "none" }} onChange={(e) => { handleImages(e); e.target.value = ""; }} />
               </label>
             )}
             {imagePreviews.length > 0 && (

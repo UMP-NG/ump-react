@@ -15,6 +15,6 @@ const auditLogSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-auditLogSchema.index({ createdAt: 1 }, { expireAfterSeconds: 60 * 60 * 24 * 365 }); // auto-purge after 1 year
+auditLogSchema.index({ createdAt: 1 }); // indexed for range queries — no TTL, financial records are permanent
 
 export default mongoose.model("AuditLog", auditLogSchema);

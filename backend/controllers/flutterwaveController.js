@@ -69,6 +69,21 @@ export const initializeFlwPayment = async (req, res) => {
     if (!orders.length)
       return res.status(404).json({ success: false, message: "Orders not found" });
 
+    // Idempotency — return the existing pending payment on retry / double-click
+    const existingPayment = await Payment.findOne({
+      orders: { $all: orders.map((o) => o._id), $size: orders.length },
+      user: req.user._id,
+      status: "pending",
+      provider: "Flutterwave",
+    });
+    if (existingPayment) {
+      return res.json({
+        success: true,
+        payment_link: existingPayment.authorizationUrl,
+        reference: existingPayment.reference,
+      });
+    }
+
     const totalAmount = orders.reduce((s, o) => s + o.totalAmount, 0);
     const reference = `UMP_FLW_${Date.now()}`;
     const base = clientUrl();
@@ -106,6 +121,7 @@ export const initializeFlwPayment = async (req, res) => {
       amount: totalAmount,
       reference,
       status: "pending",
+      authorizationUrl: paymentLink,
     });
 
     return res.json({ success: true, payment_link: paymentLink, reference });
@@ -300,7 +316,10 @@ export const flutterwaveWebhook = async (req, res) => {
       return res.status(401).send("Invalid signature");
     }
 
-    const event = req.body;
+    // express.raw() delivers req.body as a Buffer — parse it before accessing fields
+    const event = Buffer.isBuffer(req.body)
+      ? JSON.parse(req.body.toString("utf8"))
+      : req.body;
 
     if (event.event === "charge.completed" && event.data?.status === "successful") {
       const data = event.data;
@@ -471,6 +490,19 @@ export const payCartLink = async (req, res) => {
     if (new Date() > new Date(cartReq.expiresAt))
       return res.status(410).json({ success: false, message: "This payment link has expired." });
 
+    // Idempotency — return the existing pending payment if the payer retries
+    const existingCartPayment = await Payment.findOne({
+      "metadata.cartPaymentToken": token,
+      status: "pending",
+    });
+    if (existingCartPayment) {
+      return res.json({
+        success: true,
+        payment_link: existingCartPayment.authorizationUrl,
+        reference: existingCartPayment.reference,
+      });
+    }
+
     const reference = `UMP_CARTLINK_${Date.now()}_${token.slice(0, 8)}`;
     const base = clientUrl();
 
@@ -507,6 +539,7 @@ export const payCartLink = async (req, res) => {
       amount: cartReq.total,
       reference,
       status: "pending",
+      authorizationUrl: paymentLink,
       metadata: { cartPaymentToken: token, type: "cart_link" },
     });
 

@@ -95,6 +95,13 @@ export default function ProductDetail() {
     return () => mq.removeEventListener("change", handler);
   }, []);
 
+  // Reset variant selections whenever the viewed product changes
+  useEffect(() => {
+    setSelectedColor("");
+    setSelectedSize("");
+    setSelectedType("");
+  }, [id]);
+
   useEffect(() => {
     setLoading(true);
     apiFetch(`/api/products/${id}`)
@@ -256,9 +263,12 @@ export default function ProductDetail() {
 
   async function handleAddToCart() {
     if (cartLoading) return;
-    const needsColor = Array.isArray(product?.colors) && product.colors.length > 0 && !selectedColor;
-    const needsSize  = Array.isArray(product?.sizes)  && product.sizes.length  > 0 && !selectedSize;
-    const needsType  = Array.isArray(product?.types)  && product.types.length  > 0 && !selectedType;
+    const validColor = !product?.colors?.length || product.colors.some((c) => c.name === selectedColor);
+    const validSize  = !product?.sizes?.length  || product.sizes.includes(selectedSize);
+    const validType  = !product?.types?.length  || product.types.includes(selectedType);
+    const needsColor = product?.colors?.length > 0 && (!selectedColor || !validColor);
+    const needsSize  = product?.sizes?.length  > 0 && (!selectedSize  || !validSize);
+    const needsType  = product?.types?.length  > 0 && (!selectedType  || !validType);
     if (needsColor) { showToast("Please select a colour"); return; }
     if (needsSize)  { showToast("Please select a size");   return; }
     if (needsType)  { showToast("Please select a type");   return; }

@@ -105,6 +105,9 @@ export const adminCreateProduct = async (req, res) => {
         ? req.files.images.map((f) => ({ url: f.path, publicId: f.filename }))
         : [];
 
+    if (!images.length)
+      return res.status(400).json({ message: "At least one product image is required" });
+
     const product = await Product.create({
       name: name.trim(),
       desc: desc || "",

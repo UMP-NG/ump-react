@@ -32,7 +32,10 @@ const paymentSchema = new mongoose.Schema(
       default: "pending",
     },
     paidAt: Date,
-    metadata: mongoose.Schema.Types.Mixed, // store provider response
+    method: { type: String },
+    virtualAccount: mongoose.Schema.Types.Mixed,
+    authorizationUrl: { type: String },  // stored so retries can replay the checkout URL
+    metadata: mongoose.Schema.Types.Mixed,
   },
   { timestamps: true }
 );

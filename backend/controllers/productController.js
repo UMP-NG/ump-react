@@ -69,6 +69,9 @@ export const createProduct = async (req, res) => {
           }))
         : [];
 
+    if (!images.length)
+      return res.status(400).json({ message: "At least one product image is required" });
+
     // --- ✅ Create Product ---
     const product = await Product.create({
       name,

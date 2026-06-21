@@ -186,11 +186,10 @@ if (ENABLE_CLUSTER && cluster.isPrimary) {
           "name avatar role"
         );
 
-        const senderSocket = onlineUsers.get(sender);
-        const receiverSocket = onlineUsers.get(receiver);
-
-        if (senderSocket) io.to(senderSocket).emit("new_message", populated);
-        if (receiverSocket) io.to(receiverSocket).emit("new_message", populated);
+        // Room-based delivery works across all cluster workers via the Redis adapter.
+        // Each user joins a room named after their userId on "register".
+        io.to(sender).emit("new_message", populated);
+        io.to(receiver).emit("new_message", populated);
 
         console.log(`💬 Message sent from ${sender} → ${receiver}`);
       } catch (err) {

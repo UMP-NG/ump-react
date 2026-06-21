@@ -11,7 +11,7 @@ const MAX_ENTRIES = 1000;
 function _prune() {
   const now = Date.now();
   for (const [k, v] of _store) {
-    if (v.expiresAt < now) { _store.delete(k); break; }
+    if (v.expiresAt < now) _store.delete(k);
   }
   if (_store.size >= MAX_ENTRIES) _store.delete(_store.keys().next().value);
 }
