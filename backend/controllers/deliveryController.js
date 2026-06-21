@@ -56,7 +56,7 @@ export const getDeliveryQuote = async (req, res) => {
         courierName:   r.courier_name,
         amount:        r.total || 0,
         estimatedDays: r.delivery_eta || "",
-        logoUrl:       r.courier_image || null,
+        logoUrl:       r.courier_image ? r.courier_image.replace(/^http:\/\//i, "https://") : null,
       })),
     });
   } catch (err) {

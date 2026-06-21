@@ -8,7 +8,7 @@ import { apiFetch } from "../utils/api";
 import { isPushSupported } from "../utils/pushNotification";
 import { subscribeToPush, unsubscribeFromPush } from "../utils/push";
 import ImageCropModal from "../components/ImageCropModal";
-import { NIGERIAN_INSTITUTIONS, NIGERIAN_FACULTIES, NIGERIAN_DEPARTMENTS } from "../data/nigerianInstitutions";
+import { NIGERIAN_INSTITUTIONS, NIGERIAN_FACULTIES, NIGERIAN_DEPARTMENTS, FACULTY_DEPARTMENTS } from "../data/nigerianInstitutions";
 import { useTheme } from "../components/Navbar";
 
 const DOMAIN = "@live.unilag.edu.ng";
@@ -1256,35 +1256,47 @@ function VerifyTab({ user, setUser, showToast }) {
                   <select
                     className="input"
                     value={!docForm.faculty ? "" : NIGERIAN_FACULTIES.includes(docForm.faculty) ? docForm.faculty : "__other__"}
-                    onChange={(e) => setDocForm({ ...docForm, faculty: e.target.value === "__other__" ? "__other__" : e.target.value })}
+                    onChange={(e) => {
+                      const val = e.target.value === "__other__" ? "__other__" : e.target.value;
+                      setDocForm({ ...docForm, faculty: val, department: "" });
+                    }}
                   >
-                    <option value="">-- Select faculty --</option>
+                    <option value="">-- Select faculty / school --</option>
                     {NIGERIAN_FACULTIES.map((f) => <option key={f} value={f}>{f}</option>)}
                     <option value="__other__">Other (type below)</option>
                   </select>
                   {(docForm.faculty === "__other__" || (!NIGERIAN_FACULTIES.includes(docForm.faculty) && docForm.faculty && docForm.faculty !== "")) && (
-                    <input className="input" style={{ marginTop: 8 }} placeholder="Enter your faculty"
+                    <input className="input" style={{ marginTop: 8 }} placeholder="Enter your faculty / school"
                       value={docForm.faculty === "__other__" ? "" : docForm.faculty}
-                      onChange={(e) => setDocForm({ ...docForm, faculty: e.target.value })} required />
+                      onChange={(e) => setDocForm({ ...docForm, faculty: e.target.value, department: "" })} required />
                   )}
                 </div>
 
                 <div>
-                  <div className="label" style={{ marginBottom: 6 }}>Department *</div>
-                  <select
-                    className="input"
-                    value={!docForm.department ? "" : NIGERIAN_DEPARTMENTS.includes(docForm.department) ? docForm.department : "__other__"}
-                    onChange={(e) => setDocForm({ ...docForm, department: e.target.value === "__other__" ? "__other__" : e.target.value })}
-                  >
-                    <option value="">-- Select department --</option>
-                    {NIGERIAN_DEPARTMENTS.map((d) => <option key={d} value={d}>{d}</option>)}
-                    <option value="__other__">Other (type below)</option>
-                  </select>
-                  {(docForm.department === "__other__" || (!NIGERIAN_DEPARTMENTS.includes(docForm.department) && docForm.department && docForm.department !== "")) && (
-                    <input className="input" style={{ marginTop: 8 }} placeholder="Enter your department"
-                      value={docForm.department === "__other__" ? "" : docForm.department}
-                      onChange={(e) => setDocForm({ ...docForm, department: e.target.value })} required />
-                  )}
+                  {(() => {
+                    const activeFaculty = NIGERIAN_FACULTIES.includes(docForm.faculty) ? docForm.faculty : null;
+                    const deptList = activeFaculty ? (FACULTY_DEPARTMENTS[activeFaculty] || NIGERIAN_DEPARTMENTS) : NIGERIAN_DEPARTMENTS;
+                    const deptInList = deptList.includes(docForm.department);
+                    return (
+                      <>
+                        <div className="label" style={{ marginBottom: 6 }}>Department *</div>
+                        <select
+                          className="input"
+                          value={!docForm.department ? "" : deptInList ? docForm.department : "__other__"}
+                          onChange={(e) => setDocForm({ ...docForm, department: e.target.value === "__other__" ? "__other__" : e.target.value })}
+                        >
+                          <option value="">-- Select department --</option>
+                          {deptList.map((d) => <option key={d} value={d}>{d}</option>)}
+                          <option value="__other__">Other (type below)</option>
+                        </select>
+                        {(docForm.department === "__other__" || (!deptInList && docForm.department && docForm.department !== "")) && (
+                          <input className="input" style={{ marginTop: 8 }} placeholder="Enter your department"
+                            value={docForm.department === "__other__" ? "" : docForm.department}
+                            onChange={(e) => setDocForm({ ...docForm, department: e.target.value })} required />
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
 
                 {/* Document upload */}

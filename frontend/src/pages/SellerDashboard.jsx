@@ -170,6 +170,8 @@ function QuickEditModal({ product, onClose, onSave, showToast }) {
     condition: product.condition || "New",
     status: product.status || "active",
     colors: Array.isArray(product.colors) ? product.colors : [],
+    sizes: Array.isArray(product.sizes) ? product.sizes : [],
+    types: Array.isArray(product.types) ? product.types : [],
     specs: Object.entries(product.specs || {}).map(([k, v]) => ({ k, v })),
     existingImages: Array.isArray(product.images)
       ? product.images.map((img) => (typeof img === "string" ? { url: img, publicId: "" } : img))
@@ -180,6 +182,8 @@ function QuickEditModal({ product, onClose, onSave, showToast }) {
   });
   const [saving, setSaving] = useState(false);
   const [colorInput, setColorInput] = useState({ name: "", code: "#e0e0e0" });
+  const [sizeInput, setSizeInput] = useState("");
+  const [typeInput, setTypeInput] = useState("");
   const [specInput, setSpecInput] = useState({ k: "", v: "" });
 
   const set = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.value }));
@@ -190,6 +194,10 @@ function QuickEditModal({ product, onClose, onSave, showToast }) {
     setColorInput({ name: "", code: "#e0e0e0" });
   };
   const removeColor = (i) => setForm((f) => ({ ...f, colors: f.colors.filter((_, idx) => idx !== i) }));
+  const addSize = () => { const s = sizeInput.trim().toUpperCase(); if (!s) return; setForm((f) => ({ ...f, sizes: f.sizes.includes(s) ? f.sizes : [...f.sizes, s] })); setSizeInput(""); };
+  const removeSize = (i) => setForm((f) => ({ ...f, sizes: f.sizes.filter((_, idx) => idx !== i) }));
+  const addType = () => { const t = typeInput.trim(); if (!t) return; setForm((f) => ({ ...f, types: f.types.includes(t) ? f.types : [...f.types, t] })); setTypeInput(""); };
+  const removeType = (i) => setForm((f) => ({ ...f, types: f.types.filter((_, idx) => idx !== i) }));
 
   const addSpec = () => {
     if (!specInput.k.trim()) return;
@@ -217,6 +225,8 @@ function QuickEditModal({ product, onClose, onSave, showToast }) {
           condition: form.condition,
           status: form.status,
           colors: form.colors,
+          sizes: form.sizes,
+          types: form.types,
           specs: specsObj,
           removeImages: form.removeImages,
           salePrice: form.salePrice !== "" ? Number(form.salePrice) : null,
@@ -341,6 +351,40 @@ function QuickEditModal({ product, onClose, onSave, showToast }) {
               <span style={{ width: 24, height: 24, borderRadius: "50%", background: colorInput.code || "#e0e0e0", border: "1px solid rgba(0,0,0,.15)", flexShrink: 0, display: "inline-block" }} title={colorInput.code} />
               <input type="color" value={colorInput.code} onChange={(e) => setColorInput((c) => ({ ...c, code: e.target.value }))} style={{ width: 40, height: 38, border: "1px solid var(--line)", borderRadius: "var(--r-md)", cursor: "pointer", padding: 2, flexShrink: 0 }} />
               <button className="btn btn-sm btn-ghost" onClick={addColor} style={{ flexShrink: 0 }}>Add</button>
+            </div>
+          </div>
+
+          {/* Sizes */}
+          <div style={{ marginBottom: 14 }}>
+            <label style={lSty}>Sizes <span style={{ fontWeight: 400, color: "var(--ink-4)" }}>(optional)</span></label>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
+              {form.sizes.map((s, i) => (
+                <span key={i} style={{ display: "flex", alignItems: "center", gap: 5, padding: "3px 10px", borderRadius: "var(--r-md)", background: "var(--surface)", border: "1px solid var(--line)", fontSize: "1.2rem", fontWeight: 600 }}>
+                  {s}<button onClick={() => removeSize(i)} style={{ border: "none", background: "none", cursor: "pointer", color: "var(--ink-3)", padding: 0, fontSize: "1rem", lineHeight: 1 }}><i className="fas fa-xmark" /></button>
+                </span>
+              ))}
+              {form.sizes.length === 0 && <span style={{ fontSize: "1.2rem", color: "var(--ink-4)" }}>No sizes</span>}
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <input style={{ ...iSty, flex: 1 }} placeholder="e.g. S, M, L, XL, 42" value={sizeInput} onChange={(e) => setSizeInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addSize()} />
+              <button className="btn btn-sm btn-ghost" onClick={addSize} style={{ flexShrink: 0 }}>Add</button>
+            </div>
+          </div>
+
+          {/* Types / Variants */}
+          <div style={{ marginBottom: 14 }}>
+            <label style={lSty}>Types / Variants <span style={{ fontWeight: 400, color: "var(--ink-4)" }}>(optional)</span></label>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
+              {form.types.map((t, i) => (
+                <span key={i} style={{ display: "flex", alignItems: "center", gap: 5, padding: "3px 10px", borderRadius: "var(--r-md)", background: "var(--surface)", border: "1px solid var(--line)", fontSize: "1.2rem" }}>
+                  {t}<button onClick={() => removeType(i)} style={{ border: "none", background: "none", cursor: "pointer", color: "var(--ink-3)", padding: 0, fontSize: "1rem", lineHeight: 1 }}><i className="fas fa-xmark" /></button>
+                </span>
+              ))}
+              {form.types.length === 0 && <span style={{ fontSize: "1.2rem", color: "var(--ink-4)" }}>No types</span>}
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <input style={{ ...iSty, flex: 1 }} placeholder="e.g. Eau de Parfum, 50ml, Red" value={typeInput} onChange={(e) => setTypeInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addType()} />
+              <button className="btn btn-sm btn-ghost" onClick={addType} style={{ flexShrink: 0 }}>Add</button>
             </div>
           </div>
 
@@ -745,7 +789,7 @@ function ListingModal({ listing, onClose, onSave, showToast }) {
 
 // ─── Add Product Modal ────────────────────────────────────────────────────────
 function AddProductModal({ onClose, onSave, showToast }) {
-  const [form, setForm] = useState({ name: "", price: "", stock: "", desc: "", condition: "New", status: "active", category: "", colors: [], specs: [] });
+  const [form, setForm] = useState({ name: "", price: "", stock: "", desc: "", condition: "New", status: "active", category: "", colors: [], sizes: [], types: [], specs: [] });
   const [imageFiles, setImageFiles] = useState([]);
   const [imagePreviews, setImagePreviews] = useState([]);
   const [mainImageIdx, setMainImageIdx] = useState(0);
@@ -753,6 +797,8 @@ function AddProductModal({ onClose, onSave, showToast }) {
   const [saving, setSaving] = useState(false);
   const [addError, setAddError] = useState("");
   const [colorInput, setColorInput] = useState({ name: "", code: "#e0e0e0" });
+  const [sizeInput, setSizeInput] = useState("");
+  const [typeInput, setTypeInput] = useState("");
   const [specInput, setSpecInput] = useState({ k: "", v: "" });
   const [cropQueue, setCropQueue] = useState([]);
   const [cropSrc, setCropSrc] = useState(null);
@@ -801,6 +847,10 @@ function AddProductModal({ onClose, onSave, showToast }) {
 
   const addColor = () => { if (!colorInput.name.trim()) return; setForm((f) => ({ ...f, colors: [...f.colors, { ...colorInput }] })); setColorInput({ name: "", code: "#e0e0e0" }); };
   const removeColor = (i) => setForm((f) => ({ ...f, colors: f.colors.filter((_, idx) => idx !== i) }));
+  const addSize = () => { const s = sizeInput.trim().toUpperCase(); if (!s) return; setForm((f) => ({ ...f, sizes: f.sizes.includes(s) ? f.sizes : [...f.sizes, s] })); setSizeInput(""); };
+  const removeSize = (i) => setForm((f) => ({ ...f, sizes: f.sizes.filter((_, idx) => idx !== i) }));
+  const addType = () => { const t = typeInput.trim(); if (!t) return; setForm((f) => ({ ...f, types: f.types.includes(t) ? f.types : [...f.types, t] })); setTypeInput(""); };
+  const removeType = (i) => setForm((f) => ({ ...f, types: f.types.filter((_, idx) => idx !== i) }));
   const addSpec = () => { if (!specInput.k.trim()) return; setForm((f) => ({ ...f, specs: [...f.specs, { ...specInput }] })); setSpecInput({ k: "", v: "" }); };
   const removeSpec = (i) => setForm((f) => ({ ...f, specs: f.specs.filter((_, idx) => idx !== i) }));
 
@@ -820,6 +870,8 @@ function AddProductModal({ onClose, onSave, showToast }) {
       fd.append("status", form.status);
       if (form.category) fd.append("category", form.category);
       fd.append("colors", JSON.stringify(form.colors));
+      if (form.sizes.length) fd.append("sizes", JSON.stringify(form.sizes));
+      if (form.types.length) fd.append("types", JSON.stringify(form.types));
       form.specs.forEach(({ k, v }) => { fd.append("specKey", k); fd.append("specValue", v); });
       // Send main image first so it becomes the cover
       const orderedFiles = mainImageIdx === 0
@@ -964,6 +1016,42 @@ function AddProductModal({ onClose, onSave, showToast }) {
               <span style={{ width: 24, height: 24, borderRadius: "50%", background: colorInput.code || "#e0e0e0", border: "1px solid rgba(0,0,0,.15)", flexShrink: 0, display: "inline-block" }} title={colorInput.code} />
               <input type="color" value={colorInput.code} onChange={(e) => setColorInput((c) => ({ ...c, code: e.target.value }))} style={{ width: 40, height: 38, border: "1px solid var(--line)", borderRadius: "var(--r-md)", cursor: "pointer", padding: 2, flexShrink: 0 }} />
               <button className="btn btn-sm btn-ghost" onClick={addColor} style={{ flexShrink: 0 }}>Add</button>
+            </div>
+          </div>
+
+          {/* Sizes */}
+          <div style={{ marginBottom: 14 }}>
+            <label style={lSty}>Sizes <span style={{ fontWeight: 400, color: "var(--ink-4)" }}>(optional — e.g. S, M, L, XL, 42)</span></label>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
+              {form.sizes.map((s, i) => (
+                <span key={i} style={{ display: "flex", alignItems: "center", gap: 5, padding: "3px 10px", borderRadius: "var(--r-md)", background: "var(--surface)", border: "1px solid var(--line)", fontSize: "1.2rem", fontWeight: 600 }}>
+                  {s}
+                  <button onClick={() => removeSize(i)} style={{ border: "none", background: "none", cursor: "pointer", color: "var(--ink-3)", padding: 0, fontSize: "1rem" }}><i className="fas fa-xmark" /></button>
+                </span>
+              ))}
+              {form.sizes.length === 0 && <span style={{ fontSize: "1.2rem", color: "var(--ink-4)" }}>No sizes added</span>}
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <input style={{ ...iSty, flex: 1 }} placeholder="Size (e.g. M, XL, 42)" value={sizeInput} onChange={(e) => setSizeInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addSize()} />
+              <button className="btn btn-sm btn-ghost" onClick={addSize} style={{ flexShrink: 0 }}>Add</button>
+            </div>
+          </div>
+
+          {/* Types / Variants */}
+          <div style={{ marginBottom: 14 }}>
+            <label style={lSty}>Types / Variants <span style={{ fontWeight: 400, color: "var(--ink-4)" }}>(optional — e.g. Eau de Parfum, Red, 100ml)</span></label>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
+              {form.types.map((t, i) => (
+                <span key={i} style={{ display: "flex", alignItems: "center", gap: 5, padding: "3px 10px", borderRadius: "var(--r-md)", background: "var(--surface)", border: "1px solid var(--line)", fontSize: "1.2rem" }}>
+                  {t}
+                  <button onClick={() => removeType(i)} style={{ border: "none", background: "none", cursor: "pointer", color: "var(--ink-3)", padding: 0, fontSize: "1rem" }}><i className="fas fa-xmark" /></button>
+                </span>
+              ))}
+              {form.types.length === 0 && <span style={{ fontSize: "1.2rem", color: "var(--ink-4)" }}>No types added</span>}
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <input style={{ ...iSty, flex: 1 }} placeholder="Type (e.g. Eau de Parfum, 50ml)" value={typeInput} onChange={(e) => setTypeInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addType()} />
+              <button className="btn btn-sm btn-ghost" onClick={addType} style={{ flexShrink: 0 }}>Add</button>
             </div>
           </div>
 

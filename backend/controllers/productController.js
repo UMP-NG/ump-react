@@ -9,7 +9,7 @@ const escapeRegex = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 export const createProduct = async (req, res) => {
   try {
-    const { name, desc, price, category, condition, colors, stock } = req.body;
+    const { name, desc, price, category, condition, colors, sizes, types, stock } = req.body;
 
     // --- 🎨 Parse Colors safely ---
     let parsedColors = [];
@@ -32,6 +32,17 @@ export const createProduct = async (req, res) => {
         parsedColors = [];
       }
     }
+
+    // --- Parse Sizes & Types safely ---
+    const parseSArray = (raw) => {
+      if (!raw) return [];
+      try {
+        const arr = Array.isArray(raw) ? raw : JSON.parse(raw);
+        return arr.filter((s) => typeof s === "string" && s.trim()).map((s) => s.trim());
+      } catch { return []; }
+    };
+    const parsedSizes = parseSArray(sizes);
+    const parsedTypes = parseSArray(types);
 
     // --- 🧩 Build Specs safely ---
     let specs = {};
@@ -66,6 +77,8 @@ export const createProduct = async (req, res) => {
       category,
       condition,
       colors: parsedColors,
+      sizes: parsedSizes,
+      types: parsedTypes,
       specs,
       images,
       seller: req.user?._id,
@@ -459,6 +472,18 @@ export const updateProduct = async (req, res) => {
           : { name: String(c), code: "" }
       );
     }
+
+    const parseSArray = (raw) => {
+      if (!raw) return null;
+      try {
+        const arr = Array.isArray(raw) ? raw : JSON.parse(raw);
+        return arr.filter((s) => typeof s === "string" && s.trim()).map((s) => s.trim());
+      } catch { return null; }
+    };
+    const newSizes = parseSArray(req.body.sizes);
+    const newTypes = parseSArray(req.body.types);
+    if (newSizes !== null) product.sizes = newSizes;
+    if (newTypes !== null) product.types = newTypes;
 
     // --- Handle images
     product.images = Array.isArray(product.images) ? product.images : [];

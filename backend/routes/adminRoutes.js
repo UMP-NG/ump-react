@@ -2,7 +2,7 @@ import express from "express";
 import Admin from "../models/Admin.js";
 import { bulkImportProducts, updateUserRole, deleteUser, updateProduct, deleteProduct, updateListing, deleteListing, updateService, deleteService, updateOrder, deleteOrder, updateSellerStatus, deleteSeller } from "../controllers/adminController.js";
 import { protect, requireRole } from "../middleware/authMiddleware.js";
-import { uploadSingle } from "../middleware/upload.js";
+import { uploadSingle, uploadListingMedia } from "../middleware/upload.js";
 import logger from "../utils/logger.js";
 import {
   getAdminStats,
@@ -28,6 +28,7 @@ import {
   approveProvider,
   getAdminServices,
   getAdminProducts,
+  adminCreateProduct,
   bulkProductAction,
   getAdminBookings,
   getAdminListings,
@@ -125,10 +126,11 @@ router.get ("/providers",                      ...adm, getAdminProviders);
 router.post("/providers/:userId/approve",      ...adm, approveProvider);
 
 // ── Products ───────────────────────────────────────────────────────────────
-router.get   ("/products",             ...adm, getAdminProducts);
-router.post  ("/products/bulk",        ...adm, bulkProductAction);
-router.put   ("/products/:productId",  ...adm, updateProduct);
-router.delete("/products/:productId",  ...adm, deleteProduct);
+router.get   ("/products",                  ...adm, getAdminProducts);
+router.post  ("/products",                  ...adm, uploadListingMedia, adminCreateProduct);
+router.post  ("/products/bulk",             ...adm, bulkProductAction);
+router.put   ("/products/:productId",       ...adm, updateProduct);
+router.delete("/products/:productId",       ...adm, deleteProduct);
 
 // ── Reviews ────────────────────────────────────────────────────────────────
 router.get   ("/reviews",            ...adm, getAdminReviews);
@@ -175,7 +177,7 @@ router.put   ("/categories/:categoryId",  ...adm, updateAdminCategory);
 router.delete("/categories/:categoryId",  ...adm, deleteCategory);
 
 // ── Support roles ──────────────────────────────────────────────────────────
-router.get ("/support/team",                    protect, getSupportTeam); // requires login
+router.get ("/support/team",                    ...adm, getSupportTeam);
 router.get ("/support/admins",                  ...adm, getSupportAdmins);
 router.put ("/support/admins/:userId/role",     ...adm, setSupportRole);
 

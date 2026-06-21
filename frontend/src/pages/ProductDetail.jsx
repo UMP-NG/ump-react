@@ -50,6 +50,9 @@ export default function ProductDetail() {
   const [showReport, setShowReport] = useState(false);
   const [qty, setQty] = useState(1);
   const [thumb, setThumb] = useState(0);
+  const [selectedColor, setSelectedColor] = useState("");
+  const [selectedSize,  setSelectedSize]  = useState("");
+  const [selectedType,  setSelectedType]  = useState("");
   const [loading, setLoading] = useState(true);
   const [cartLoading, setCartLoading] = useState(false);
   const [related, setRelated] = useState([]);
@@ -253,9 +256,15 @@ export default function ProductDetail() {
 
   async function handleAddToCart() {
     if (cartLoading) return;
+    const needsColor = Array.isArray(product?.colors) && product.colors.length > 0 && !selectedColor;
+    const needsSize  = Array.isArray(product?.sizes)  && product.sizes.length  > 0 && !selectedSize;
+    const needsType  = Array.isArray(product?.types)  && product.types.length  > 0 && !selectedType;
+    if (needsColor) { showToast("Please select a colour"); return; }
+    if (needsSize)  { showToast("Please select a size");   return; }
+    if (needsType)  { showToast("Please select a type");   return; }
     setCartLoading(true);
     try {
-      await addToCart(id, qty);
+      await addToCart(id, qty, { selectedColor, selectedSize, selectedType });
       navigate("/cart");
     } catch (err) {
       if (err?.status === 401) navigate("/login");
@@ -406,17 +415,72 @@ export default function ProductDetail() {
         </div>
       )}
 
-      {/* Color swatches */}
+      {/* Colour picker */}
       {Array.isArray(product.colors) && product.colors.length > 0 && (
         <div style={{ marginBottom: 16 }}>
-          <div style={{ fontSize: "1.2rem", fontWeight: 600, color: "var(--ink-3)", marginBottom: 8 }}>Colors</div>
+          <div style={{ fontSize: "1.2rem", fontWeight: 600, color: "var(--ink-3)", marginBottom: 8 }}>
+            Colour{selectedColor ? <span style={{ color: "var(--accent)", marginLeft: 6 }}>{selectedColor}</span> : <span style={{ color: "var(--ink-4)", fontWeight: 400 }}> — select one</span>}
+          </div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-            {product.colors.map((c, i) => (
-              <div key={i} style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 10px", borderRadius: 20, background: "var(--surface)", border: "1px solid var(--line)", fontSize: "1.2rem" }}>
-                {c.code && <span style={{ width: 14, height: 14, borderRadius: "50%", background: c.code, flexShrink: 0, border: "1px solid rgba(0,0,0,.1)" }} />}
-                {c.name}
-              </div>
-            ))}
+            {product.colors.map((c, i) => {
+              const active = selectedColor === c.name;
+              return (
+                <button key={i} type="button" onClick={() => setSelectedColor(active ? "" : c.name)}
+                  style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 12px", borderRadius: 20,
+                    background: active ? "rgba(249,115,22,.12)" : "var(--surface)",
+                    border: `2px solid ${active ? "var(--accent)" : "var(--line)"}`,
+                    fontSize: "1.2rem", cursor: "pointer", fontFamily: "var(--font-sans)" }}>
+                  {c.code && <span style={{ width: 14, height: 14, borderRadius: "50%", background: c.code, flexShrink: 0, border: "1px solid rgba(0,0,0,.1)" }} />}
+                  {c.name}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Size picker */}
+      {Array.isArray(product.sizes) && product.sizes.length > 0 && (
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: "1.2rem", fontWeight: 600, color: "var(--ink-3)", marginBottom: 8 }}>
+            Size{selectedSize ? <span style={{ color: "var(--accent)", marginLeft: 6 }}>{selectedSize}</span> : <span style={{ color: "var(--ink-4)", fontWeight: 400 }}> — select one</span>}
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            {product.sizes.map((s, i) => {
+              const active = selectedSize === s;
+              return (
+                <button key={i} type="button" onClick={() => setSelectedSize(active ? "" : s)}
+                  style={{ minWidth: 44, padding: "6px 14px", borderRadius: "var(--r-md)",
+                    background: active ? "rgba(249,115,22,.12)" : "var(--surface)",
+                    border: `2px solid ${active ? "var(--accent)" : "var(--line)"}`,
+                    fontSize: "1.3rem", fontWeight: 600, cursor: "pointer", fontFamily: "var(--font-sans)" }}>
+                  {s}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Type/variant picker */}
+      {Array.isArray(product.types) && product.types.length > 0 && (
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: "1.2rem", fontWeight: 600, color: "var(--ink-3)", marginBottom: 8 }}>
+            Type{selectedType ? <span style={{ color: "var(--accent)", marginLeft: 6 }}>{selectedType}</span> : <span style={{ color: "var(--ink-4)", fontWeight: 400 }}> — select one</span>}
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            {product.types.map((t, i) => {
+              const active = selectedType === t;
+              return (
+                <button key={i} type="button" onClick={() => setSelectedType(active ? "" : t)}
+                  style={{ padding: "6px 14px", borderRadius: "var(--r-md)",
+                    background: active ? "rgba(249,115,22,.12)" : "var(--surface)",
+                    border: `2px solid ${active ? "var(--accent)" : "var(--line)"}`,
+                    fontSize: "1.2rem", cursor: "pointer", fontFamily: "var(--font-sans)" }}>
+                  {t}
+                </button>
+              );
+            })}
           </div>
         </div>
       )}

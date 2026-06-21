@@ -77,6 +77,16 @@ const productSchema = new mongoose.Schema(
       default: [],
     },
 
+    sizes: {
+      type: [{ type: String, trim: true }],
+      default: [],
+    },
+
+    types: {
+      type: [{ type: String, trim: true }],
+      default: [],
+    },
+
     specs: {
       type: mongoose.Schema.Types.Mixed, // flexible object
       default: {},

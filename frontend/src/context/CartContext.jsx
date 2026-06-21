@@ -68,10 +68,9 @@ export function CartProvider({ children }) {
     }
   }
 
-  async function addToCart(productId, quantity = 1) {
+  async function addToCart(productId, quantity = 1, variants = {}) {
     const pid = productId.toString();
 
-    // Optimistic update — reflect the addition immediately so the UI feels instant
     setCartItems((prev) => {
       const m = new Map(prev);
       const existing = m.get(pid);
@@ -84,10 +83,10 @@ export function CartProvider({ children }) {
     });
 
     try {
-      await apiFetch("/api/cart/add", { method: "POST", body: { productId, quantity } });
-      refreshCart(); // background sync to get accurate price / server state
+      await apiFetch("/api/cart/add", { method: "POST", body: { productId, quantity, ...variants } });
+      refreshCart();
     } catch (err) {
-      refreshCart(); // revert optimistic update to real server state
+      refreshCart();
       throw err;
     }
   }

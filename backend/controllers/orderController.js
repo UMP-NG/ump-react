@@ -255,34 +255,26 @@ export const checkoutCart = async (req, res) => {
       const sel = deliverySelections[sid] || {};
       const requestedMethod = VALID_METHODS.includes(sel.method) ? sel.method : "pickup";
 
-      // Fetch seller delivery config once — needed for fee validation and method authorization
       const sellerDoc = await Seller.findOne({ user: sid }).select("delivery storeName").lean();
-      const dlv = sellerDoc?.delivery || {};
-
-      // Ensure the requested delivery method is actually enabled by the seller
-      const methodEnabled =
-        requestedMethod === "pickup"     ? (dlv.pickup?.enabled !== false) :
-        requestedMethod === "shipbubble" ? !!dlv.shipbubble?.enabled : false;
-
-      const orderDeliveryMethod = methodEnabled ? requestedMethod : "pickup";
 
       // Shipbubble fee: never trust the client-sent amount.
       // Re-fetch live rates from Shipbubble and match by serviceCode so the
       // price is always what Shipbubble charged at the time of checkout.
+      // Never silently fall back to pickup — if buyer selected Shipbubble, charge it or error.
       let orderDeliveryFee = 0;
-      if (orderDeliveryMethod === "shipbubble") {
+      if (requestedMethod === "shipbubble") {
         if (!sel.serviceCode) {
           return res.status(400).json({ message: "A courier service must be selected for Shipbubble delivery" });
         }
         const pickup = sellerDoc?.delivery?.shipbubble?.pickupAddress;
         if (!pickup?.city || !pickup?.state) {
-          return res.status(400).json({ message: "Seller has not configured a Shipbubble pickup address" });
+          return res.status(400).json({ message: "Seller has not configured a courier pickup address — please choose pickup instead." });
         }
         let liveRates;
         try {
           liveRates = await getRates({
             sender: {
-              name:   pickup.name   || sellerDoc.storeName || "Seller",
+              name:   pickup.name   || sellerDoc?.storeName || "Seller",
               email:  pickup.email  || "",
               phone:  pickup.phone  || "",
               street: pickup.street || "",
@@ -322,8 +314,8 @@ export const checkoutCart = async (req, res) => {
         couponId: couponDoc?._id || undefined,
         shippingAddress: shippingAddress || {},
         paymentMethod,
-        deliveryMethod: orderDeliveryMethod,
-        shipbubble: orderDeliveryMethod === "shipbubble" ? { serviceCode: sel.serviceCode || null } : undefined,
+        deliveryMethod: requestedMethod,
+        shipbubble: requestedMethod === "shipbubble" ? { serviceCode: sel.serviceCode || null } : undefined,
         status: "pending",
         deliveryCode: generateDeliveryCode(),
       });
@@ -342,6 +334,19 @@ export const checkoutCart = async (req, res) => {
       message: `${orderWord.charAt(0).toUpperCase() + orderWord.slice(1)} created. Complete your payment to confirm.`,
       link: "/orders",
     });
+
+    // Notify each seller that a buyer has initiated checkout (payment pending)
+    const sellerIds = [...new Set(createdOrders.map(o => o.seller?.toString()).filter(Boolean))];
+    for (const sid of sellerIds) {
+      const orderForSeller = createdOrders.find(o => o.seller?.toString() === sid);
+      const shortId = orderForSeller._id.toString().slice(-6).toUpperCase();
+      notify(sid, {
+        type: "order",
+        title: "New order incoming!",
+        message: `A buyer placed order #${shortId} — awaiting payment confirmation.`,
+        link: "/seller-dashboard",
+      });
+    }
 
     return res.status(201).json({ success: true, orders: createdOrders, order: createdOrders[0] });
   } catch (err) {

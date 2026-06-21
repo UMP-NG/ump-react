@@ -18,6 +18,9 @@ const cartItemSchema = new mongoose.Schema({
   },
   negotiatedPrice: { type: Number },
   negotiationId: { type: mongoose.Schema.Types.ObjectId },
+  selectedColor: { type: String, default: "" },
+  selectedSize:  { type: String, default: "" },
+  selectedType:  { type: String, default: "" },
 });
 
 const cartSchema = new mongoose.Schema(

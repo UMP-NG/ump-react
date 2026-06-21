@@ -28,6 +28,13 @@ const _addrCache = new Map(); // canonicalAddress → { code, ts }
 const ADDR_TTL   = 23 * 60 * 60 * 1000; // 23 hours (codes appear stable for 24h)
 const ADDR_MAX   = 500;
 
+// ── Rates cache ───────────────────────────────────────────────────────────────
+// Cache the full fetch_rates result per route+parcel for 5 minutes.
+// Address codes are already stable for 23h, so the key is deterministic.
+const _ratesCache = new Map(); // key → { data, ts }
+const RATES_TTL   = 5 * 60 * 1000;
+const RATES_MAX   = 200;
+
 async function fetchCategories(api) {
   if (_catCache.data?.length && Date.now() - _catCache.ts < CACHE_TTL) return _catCache.data;
   try {
@@ -112,6 +119,13 @@ export async function getRates({ sender, recipient, parcel }) {
       defaultCategoryId(api),
     ]);
 
+    // Check rates cache — keyed on resolved address codes + parcel dimensions
+    const ratesKey = `${senderData.address_code}:${recipientData.address_code}:${parcel?.weight || 1.5}:${parcel?.quantity || 1}`;
+    const cachedRates = _ratesCache.get(ratesKey);
+    if (cachedRates && Date.now() - cachedRates.ts < RATES_TTL) {
+      return cachedRates.data;
+    }
+
     const today = new Date().toISOString().split("T")[0];
     const { package_dimension, package_items } = buildParcel(parcel);
 
@@ -124,7 +138,12 @@ export async function getRates({ sender, recipient, parcel }) {
       package_items,
     });
 
-    return res.data?.data?.couriers || [];
+    const couriers = res.data?.data?.couriers || [];
+
+    if (_ratesCache.size >= RATES_MAX) _ratesCache.delete(_ratesCache.keys().next().value);
+    _ratesCache.set(ratesKey, { data: couriers, ts: Date.now() });
+
+    return couriers;
   } catch (err) {
     const sbMsg = err.response?.data?.message || err.message || "";
     logger.error("Shipbubble getRates:", err.response?.data || err.message);

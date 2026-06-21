@@ -387,6 +387,13 @@ export default function Cart() {
                           </div>
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <div style={{ fontSize: "1.3rem", fontWeight: 600, lineHeight: 1.3 }}>{p.name}</div>
+                            {(it.selectedColor || it.selectedSize || it.selectedType) && (
+                              <div style={{ fontSize: "1.1rem", color: "var(--ink-3)", marginTop: 2, display: "flex", flexWrap: "wrap", gap: 4 }}>
+                                {it.selectedColor && <span style={{ background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 20, padding: "1px 7px" }}>{it.selectedColor}</span>}
+                                {it.selectedSize  && <span style={{ background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 20, padding: "1px 7px" }}>{it.selectedSize}</span>}
+                                {it.selectedType  && <span style={{ background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 20, padding: "1px 7px" }}>{it.selectedType}</span>}
+                              </div>
+                            )}
                             <div style={{ fontSize: "1.5rem", fontWeight: 700, marginTop: 6, color: "var(--accent)" }}>
                             {it.negotiatedPrice ? (
                               <>
@@ -1041,6 +1048,12 @@ function MobileOrderSummary({ items, sub, deliveryFeeTotal, orderTotal, serviceC
           <i className={`fas fa-chevron-${open ? "up" : "down"}`} style={{ fontSize: "1rem", opacity: 0.6 }} />
         </div>
         <div style={{ textAlign: "right" }}>
+          {serviceCharge > 0 && (
+            <div style={{ fontSize: "1rem", opacity: 0.7, lineHeight: 1.4 }}>Service fee <span style={{ fontWeight: 700 }}>{naira(serviceCharge)}</span></div>
+          )}
+          {deliveryFeeTotal > 0 && (
+            <div style={{ fontSize: "1rem", opacity: 0.7, lineHeight: 1.4 }}>Delivery <span style={{ fontWeight: 700 }}>{naira(deliveryFeeTotal)}</span></div>
+          )}
           <div style={{ fontSize: "1rem", opacity: 0.6, lineHeight: 1 }}>Total</div>
           <div style={{ fontSize: "1.8rem", fontWeight: 800, color: "var(--accent)", lineHeight: 1.2 }}>{naira(orderTotal)}</div>
         </div>

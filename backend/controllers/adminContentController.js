@@ -78,6 +78,55 @@ export const bulkProductAction = async (req, res) => {
   }
 };
 
+export const adminCreateProduct = async (req, res) => {
+  try {
+    const { sellerId, name, desc, price, category, condition, stock, colors, sizes, types } = req.body;
+    if (!sellerId || !mongoose.Types.ObjectId.isValid(sellerId))
+      return res.status(400).json({ message: "Valid sellerId is required" });
+    if (!name?.trim()) return res.status(400).json({ message: "Product name is required" });
+    if (!price || Number(price) <= 0) return res.status(400).json({ message: "A valid price is required" });
+
+    const sellerUser = await User.findById(sellerId).select("_id name").lean();
+    if (!sellerUser) return res.status(404).json({ message: "Seller user not found" });
+
+    const sellerProfile = await Seller.findOne({ user: sellerId }).select("_id storeName").lean();
+    if (!sellerProfile) return res.status(400).json({ message: "This user does not have a seller profile. They must register as a seller first." });
+
+    const parseArr = (raw) => {
+      if (!raw) return [];
+      try { const a = Array.isArray(raw) ? raw : JSON.parse(raw); return a.filter(Boolean); } catch { return []; }
+    };
+    const parsedColors = parseArr(colors).map((c) => typeof c === "object" ? { name: c.name || "", code: c.code || "" } : { name: String(c), code: "" });
+    const parsedSizes  = parseArr(sizes).filter((s) => typeof s === "string" && s.trim()).map((s) => s.trim());
+    const parsedTypes  = parseArr(types).filter((t) => typeof t === "string" && t.trim()).map((t) => t.trim());
+
+    const images =
+      req.files?.images && Array.isArray(req.files.images)
+        ? req.files.images.map((f) => ({ url: f.path, publicId: f.filename }))
+        : [];
+
+    const product = await Product.create({
+      name: name.trim(),
+      desc: desc || "",
+      price: Number(price),
+      category: category && mongoose.Types.ObjectId.isValid(category) ? category : undefined,
+      condition: condition || "New",
+      stock: stock ? Math.max(0, Number(stock)) : 1,
+      seller: sellerId,
+      colors: parsedColors,
+      sizes: parsedSizes,
+      types: parsedTypes,
+      images,
+    });
+
+    logger.info(`Admin ${req.user._id} created product ${product._id} on behalf of seller ${sellerId}`);
+    res.status(201).json({ success: true, product });
+  } catch (err) {
+    logger.error("adminCreateProduct:", err);
+    res.status(500).json({ message: err.message || "Server error" });
+  }
+};
+
 export const getAdminServices = async (req, res) => {
   try {
     const page  = Math.max(1, parseInt(req.query.page)  || 1);
