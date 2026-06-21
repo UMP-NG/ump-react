@@ -907,17 +907,23 @@ function AddProductModal({ onClose, onSave, showToast }) {
     }
     if (!allToSubmit.length) { setAddError("Please fill in at least one product."); return; }
     setSaving(true);
-    try {
-      const results = await Promise.all(allToSubmit.map(item => apiFetch("/api/products/", { method: "POST", body: buildFormData(item) })));
-      const created = results.map(r => r.product).filter(Boolean);
-      showToast(created.length === 1 ? "Product created!" : `${created.length} products created!`, "success");
-      onSave(created.length === 1 ? created[0] : created);
+    const results = await Promise.allSettled(
+      allToSubmit.map(item => apiFetch("/api/products/", { method: "POST", body: buildFormData(item) }))
+    );
+    setSaving(false);
+    const failedIdxs = results.reduce((acc, r, i) => r.status === "rejected" ? [...acc, i] : acc, []);
+    const succeeded  = results.filter(r => r.status === "fulfilled").map(r => r.value?.product).filter(Boolean);
+    if (failedIdxs.length === 0) {
+      showToast(succeeded.length === 1 ? "Product created!" : `${succeeded.length} products created!`, "success");
+      onSave(succeeded.length === 1 ? succeeded[0] : succeeded);
       onClose();
-    } catch (err) {
-      const msg = err?.message || "Failed to create product(s). Please try again.";
-      setAddError(msg);
-    } finally {
-      setSaving(false);
+    } else if (succeeded.length > 0) {
+      // Re-stage only the failed items so a retry won't duplicate the successes
+      setStaged(failedIdxs.map(i => allToSubmit[i]));
+      onSave(succeeded.length === 1 ? succeeded[0] : succeeded);
+      setAddError(`${succeeded.length} product${succeeded.length > 1 ? "s" : ""} created. ${failedIdxs.length} failed — review the queued items and resubmit.`);
+    } else {
+      setAddError(results[0]?.reason?.message || "Failed to create product(s). Please try again.");
     }
   }
 

@@ -410,13 +410,20 @@ function CreateProductModal({ onClose, onSave }) {
     }
     if (!allToSubmit.length) { setError('Please fill in at least one product.'); return; }
     setSaving(true);
-    try {
-      await Promise.all(allToSubmit.map(item => apiFetch('/api/admins/products', { method: 'POST', body: buildFormData(item) })));
+    const results = await Promise.allSettled(
+      allToSubmit.map(item => apiFetch('/api/admins/products', { method: 'POST', body: buildFormData(item) }))
+    );
+    setSaving(false);
+    const failedIdxs = results.reduce((acc, r, i) => r.status === 'rejected' ? [...acc, i] : acc, []);
+    const successCount = results.length - failedIdxs.length;
+    if (failedIdxs.length === 0) {
       onSave();
-    } catch (err) {
-      setError(err?.message || 'Failed to create product(s).');
-    } finally {
-      setSaving(false);
+    } else if (successCount > 0) {
+      // Re-stage only the failed items so a retry won't duplicate the successes
+      setStaged(failedIdxs.map(i => allToSubmit[i]));
+      setError(`${successCount} product${successCount > 1 ? 's' : ''} created. ${failedIdxs.length} failed — review the queued items and resubmit.`);
+    } else {
+      setError(results[0]?.reason?.message || 'Failed to create product(s). Please try again.');
     }
   }
 

@@ -63,7 +63,7 @@ export const sendMessage = async (req, res) => {
       title: `New message from ${req.user.name || "someone"}`,
       message: (text || "").slice(0, 100),
       link: "/messages",
-    }).catch(() => {});
+    }).catch((err) => logger.warn("notify failed (HTTP send):", err.message));
 
     res.status(201).json({ success: true, message });
   } catch (error) {

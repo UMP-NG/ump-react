@@ -370,8 +370,17 @@ export const getProductById = async (req, res) => {
       ? sellerProfile.followers?.some((f) => f.toString?.() === userId || f === userId)
       : false;
 
+    // Compute isWatchingPrice for the requesting user, then strip the raw
+    // priceWatchers array so other users' IDs and subscription prices aren't
+    // sent to every client.
+    const isWatchingPrice = userId
+      ? (product.priceWatchers?.some((w) => w.user?.toString() === userId) ?? false)
+      : false;
+    delete product.priceWatchers;
+
     const normalized = {
       ...product,
+      isWatchingPrice,
       reviews: [],
       seller: {
         _id: product.seller._id,
@@ -838,7 +847,7 @@ export const toggleRestockAlert = async (req, res) => {
 export const togglePriceWatch = async (req, res) => {
   try {
     const userId = req.user._id;
-    const product = await Product.findById(req.params.id).select("priceWatchers price name");
+    const product = await Product.findById(req.params.id).select("priceWatchers price salePrice name");
     if (!product) return res.status(404).json({ message: "Product not found" });
 
     const idx = product.priceWatchers.findIndex((w) => w.user.toString() === userId.toString());

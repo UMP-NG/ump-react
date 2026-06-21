@@ -205,7 +205,7 @@ if (ENABLE_CLUSTER && cluster.isPrimary) {
           title: populated.sender?.name || "New message",
           message: text ? (text.length > 60 ? text.slice(0, 60) + "…" : text) : "📎 Attachment",
           link: `/messages?with=${sender}`,
-        }).catch(() => {});
+        }).catch((err) => console.warn("⚠️  notify failed (socket send):", err.message));
 
         console.log(`💬 Message sent from ${sender} → ${receiver}`);
       } catch (err) {

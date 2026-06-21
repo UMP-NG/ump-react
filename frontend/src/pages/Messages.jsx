@@ -179,20 +179,33 @@ export default function Messages() {
 
       const isActiveThread = activeThread?.receiverId?.toString() === otherId;
       const preview = msg.text || (msg.attachments?.length ? "📎 Attachment" : "");
+      const unreadDelta = isActiveThread || senderId === myId ? 0 : 1;
 
-      setConvos((prev) =>
-        prev.map((c) => {
-          const cId = c.conversationWith?.toString() || c._id?.toString();
-          if (cId !== otherId) return c;
-          return {
-            ...c,
-            latestMessage: preview,
-            unreadCount: isActiveThread || senderId === myId
-              ? 0
-              : (c.unreadCount || 0) + 1,
-          };
-        })
-      );
+      setConvos((prev) => {
+        const exists = prev.some((c) => (c.conversationWith?.toString() || c._id?.toString()) === otherId);
+        if (exists) {
+          return prev.map((c) => {
+            const cId = c.conversationWith?.toString() || c._id?.toString();
+            if (cId !== otherId) return c;
+            return { ...c, latestMessage: preview, unreadCount: (c.unreadCount || 0) + unreadDelta };
+          });
+        }
+        // First message in a new conversation — build a minimal sidebar entry from the payload.
+        // The sender/receiver fields are populated objects when coming from the HTTP route.
+        const otherUser = senderId === myId
+          ? (typeof msg.receiver === "object" ? msg.receiver : null)
+          : (typeof msg.sender   === "object" ? msg.sender   : null);
+        if (!otherUser) return prev; // can't build entry without populated user data
+        return [{
+          conversationWith: otherId,
+          _id: otherId,
+          name: otherUser.name,
+          avatar: otherUser.avatar,
+          roles: otherUser.roles || (otherUser.role ? [otherUser.role] : []),
+          latestMessage: preview,
+          unreadCount: unreadDelta,
+        }, ...prev];
+      });
     }
     socket.on("new_message", onNewMessage);
     return () => socket.off("new_message", onNewMessage);

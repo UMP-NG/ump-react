@@ -109,6 +109,7 @@ export default function ProductDetail() {
         const p = d.product || d;
         setProduct(p);
         setFollowing(p.seller?.isFollowing || false);
+        setWatchingPrice(p.isWatchingPrice ?? false);
         return Promise.all([
           apiFetch(`/api/products/${id}/related`).catch(() => apiFetch(`/api/products?limit=6`)),
           apiFetch(`/api/reviews/Product/${id}`).catch(() => ({ reviews: [] })),
@@ -798,10 +799,12 @@ export default function ProductDetail() {
             {restockLoading ? <i className="fas fa-spinner fa-spin" /> : restockSubscribed ? <><i className="fas fa-bell-slash" /> Remove restock alert</> : <><i className="fas fa-bell" /> Notify me when back in stock</>}
           </button>
         )}
-        {/* Price watch — always shown */}
-        <button className="btn btn-ghost" style={{ width: "100%", marginTop: 8, gap: 8, color: watchingPrice ? "var(--accent)" : undefined }} onClick={handleWatchPrice} disabled={watchLoading}>
-          {watchLoading ? <i className="fas fa-spinner fa-spin" /> : watchingPrice ? <><i className="fas fa-eye-slash" /> Stop watching price</> : <><i className="fas fa-tag" /> Watch for price drop</>}
-        </button>
+        {/* Price watch — full button on desktop; icon-only in the mobile fixed bar below */}
+        {isDesktop && (
+          <button className="btn btn-ghost" style={{ width: "100%", marginTop: 8, gap: 8, color: watchingPrice ? "var(--accent)" : undefined }} onClick={handleWatchPrice} disabled={watchLoading}>
+            {watchLoading ? <i className="fas fa-spinner fa-spin" /> : watchingPrice ? <><i className="fas fa-eye-slash" /> Stop watching price</> : <><i className="fas fa-tag" /> Watch for price drop</>}
+          </button>
+        )}
         <div style={{ marginTop: 14, padding: "10px 12px", background: "rgba(245,158,11,.06)", border: "1px solid rgba(245,158,11,.22)", borderRadius: "var(--r-md)", display: "flex", gap: 10, alignItems: "flex-start" }}>
           <i className="fas fa-shield-halved" style={{ color: "#f59e0b", marginTop: 2, flexShrink: 0, fontSize: "1.2rem" }} />
           <p style={{ margin: 0, fontSize: "1.15rem", color: "var(--ink-2)", lineHeight: 1.55 }}>
@@ -931,6 +934,20 @@ export default function ProductDetail() {
               <i className="fas fa-handshake" />
             </button>
           )}
+          <button
+            className="icon-btn"
+            title={watchingPrice ? "Stop watching price" : "Watch for price drop"}
+            style={{ flexShrink: 0, color: watchingPrice ? "var(--accent)" : undefined }}
+            onClick={handleWatchPrice}
+            disabled={watchLoading}
+          >
+            {watchLoading
+              ? <i className="fas fa-spinner fa-spin" />
+              : watchingPrice
+                ? <i className="fas fa-eye-slash" />
+                : <i className="fas fa-tag" />
+            }
+          </button>
           <button className="btn btn-primary" style={{ flex: 1, opacity: outOfStock ? 0.6 : 1 }} onClick={handleAddToCart} disabled={cartLoading || outOfStock}>
             {cartLoading ? <i className="fas fa-spinner fa-spin" /> : outOfStock ? "Out of Stock" : <><i className="fas fa-bag-shopping" /> Add — {naira(product.price * qty)}</>}
           </button>
