@@ -794,6 +794,7 @@ function AddProductModal({ onClose, onSave, showToast }) {
   const [imagePreviews, setImagePreviews] = useState([]);
   const [mainImageIdx, setMainImageIdx] = useState(0);
   const [categories, setCategories] = useState([]);
+  const [staged, setStaged] = useState([]);
   const [saving, setSaving] = useState(false);
   const [addError, setAddError] = useState("");
   const [colorInput, setColorInput] = useState({ name: "", code: "#e0e0e0" });
@@ -854,37 +855,66 @@ function AddProductModal({ onClose, onSave, showToast }) {
   const addSpec = () => { if (!specInput.k.trim()) return; setForm((f) => ({ ...f, specs: [...f.specs, { ...specInput }] })); setSpecInput({ k: "", v: "" }); };
   const removeSpec = (i) => setForm((f) => ({ ...f, specs: f.specs.filter((_, idx) => idx !== i) }));
 
+  function validate() {
+    if (!form.name.trim()) { setAddError("Product name is required."); return false; }
+    if (!form.price || Number(form.price) <= 0) { setAddError("A valid price greater than ₦0 is required."); return false; }
+    if (!imageFiles.length) { setAddError("At least one product image is required."); return false; }
+    return true;
+  }
+
+  function resetFields() {
+    // Keep condition, status, category — sellers usually list similar products back-to-back
+    setForm(f => ({ ...f, name: "", price: "", stock: "", desc: "", colors: [], sizes: [], types: [], specs: [] }));
+    setImageFiles([]); setImagePreviews([]); setMainImageIdx(0);
+    setColorInput({ name: "", code: "#e0e0e0" });
+    setSizeInput(""); setTypeInput(""); setSpecInput({ k: "", v: "" });
+    setAddError("");
+  }
+
+  function queueProduct() {
+    setAddError("");
+    if (!validate()) return;
+    setStaged(s => [...s, { form: { ...form }, imageFiles: [...imageFiles], imagePreviews: [...imagePreviews], mainImageIdx }]);
+    resetFields();
+  }
+
+  function buildFormData(item) {
+    const fd = new FormData();
+    fd.append("name", item.form.name.trim());
+    fd.append("price", Number(item.form.price));
+    if (item.form.stock) fd.append("stock", Number(item.form.stock));
+    if (item.form.desc) fd.append("desc", item.form.desc);
+    fd.append("condition", item.form.condition);
+    fd.append("status", item.form.status);
+    if (item.form.category) fd.append("category", item.form.category);
+    fd.append("colors", JSON.stringify(item.form.colors));
+    if (item.form.sizes.length) fd.append("sizes", JSON.stringify(item.form.sizes));
+    if (item.form.types.length) fd.append("types", JSON.stringify(item.form.types));
+    item.form.specs.forEach(({ k, v }) => { fd.append("specKey", k); fd.append("specValue", v); });
+    const orderedFiles = item.mainImageIdx === 0
+      ? item.imageFiles
+      : [item.imageFiles[item.mainImageIdx], ...item.imageFiles.filter((_, i) => i !== item.mainImageIdx)];
+    orderedFiles.forEach((file) => fd.append("images", file));
+    return fd;
+  }
+
   async function handleSave() {
     setAddError("");
-    if (!form.name.trim()) { setAddError("Product name is required."); return; }
-    if (!form.price || Number(form.price) <= 0) { setAddError("A valid price greater than ₦0 is required."); return; }
-    if (!imageFiles.length) { setAddError("At least one product image is required."); return; }
+    const allToSubmit = [...staged];
+    if (form.name.trim() || imageFiles.length) {
+      if (!validate()) return;
+      allToSubmit.push({ form: { ...form }, imageFiles: [...imageFiles], imagePreviews: [...imagePreviews], mainImageIdx });
+    }
+    if (!allToSubmit.length) { setAddError("Please fill in at least one product."); return; }
     setSaving(true);
     try {
-      const fd = new FormData();
-      fd.append("name", form.name.trim());
-      fd.append("price", Number(form.price));
-      if (form.stock) fd.append("stock", Number(form.stock));
-      if (form.desc) fd.append("desc", form.desc);
-      fd.append("condition", form.condition);
-      fd.append("status", form.status);
-      if (form.category) fd.append("category", form.category);
-      fd.append("colors", JSON.stringify(form.colors));
-      if (form.sizes.length) fd.append("sizes", JSON.stringify(form.sizes));
-      if (form.types.length) fd.append("types", JSON.stringify(form.types));
-      form.specs.forEach(({ k, v }) => { fd.append("specKey", k); fd.append("specValue", v); });
-      // Send main image first so it becomes the cover
-      const orderedFiles = mainImageIdx === 0
-        ? imageFiles
-        : [imageFiles[mainImageIdx], ...imageFiles.filter((_, i) => i !== mainImageIdx)];
-      orderedFiles.forEach((file) => fd.append("images", file));
-
-      const result = await apiFetch("/api/products/", { method: "POST", body: fd });
-      showToast("Product created!", "success");
-      onSave(result.product);
+      const results = await Promise.all(allToSubmit.map(item => apiFetch("/api/products/", { method: "POST", body: buildFormData(item) })));
+      const created = results.map(r => r.product).filter(Boolean);
+      showToast(created.length === 1 ? "Product created!" : `${created.length} products created!`, "success");
+      onSave(created.length === 1 ? created[0] : created);
       onClose();
     } catch (err) {
-      const msg = err?.message || "Failed to create product. Please try again.";
+      const msg = err?.message || "Failed to create product(s). Please try again.";
       setAddError(msg);
     } finally {
       setSaving(false);
@@ -913,6 +943,28 @@ function AddProductModal({ onClose, onSave, showToast }) {
         </div>
 
         <div style={{ padding: 20 }}>
+          {/* Queued products */}
+          {staged.length > 0 && (
+            <div style={{ background: "var(--surface)", borderRadius: "var(--r-md)", padding: "10px 12px", border: "1px solid var(--line)", marginBottom: 14 }}>
+              <div style={{ fontSize: "1.1rem", fontWeight: 700, color: "var(--ink-2)", marginBottom: 8 }}>
+                <i className="fas fa-layer-group" style={{ marginRight: 6 }}></i>
+                Queued ({staged.length})
+              </div>
+              {staged.map((item, i) => (
+                <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: i < staged.length - 1 ? "1px solid var(--line)" : "none" }}>
+                  {item.imagePreviews[0] && <img src={item.imagePreviews[0]} alt="" style={{ width: 36, height: 36, borderRadius: 6, objectFit: "cover", flexShrink: 0 }} />}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: "1.2rem", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.form.name}</div>
+                    <div style={{ fontSize: "1.1rem", color: "var(--ink-3)" }}>₦{Number(item.form.price).toLocaleString()}</div>
+                  </div>
+                  <button onClick={() => setStaged(s => s.filter((_, idx) => idx !== i))} style={{ border: "none", background: "none", cursor: "pointer", color: "var(--ink-3)", padding: 4, flexShrink: 0 }}>
+                    <i className="fas fa-xmark" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
           {/* Name */}
           <div style={{ marginBottom: 14 }}>
             <label style={lSty}>Product Name *</label>
@@ -1087,11 +1139,21 @@ function AddProductModal({ onClose, onSave, showToast }) {
           </div>
         )}
 
-        <div style={{ padding: "14px 20px", borderTop: "1px solid var(--line)", display: "flex", gap: 10, justifyContent: "flex-end", position: "sticky", bottom: 0, background: "var(--card)" }}>
+        <div style={{ padding: "14px 20px", borderTop: "1px solid var(--line)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, position: "sticky", bottom: 0, background: "var(--card)" }}>
           <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary" disabled={saving} onClick={handleSave}>
-            {saving ? <i className="fas fa-spinner fa-spin" /> : <><i className="fas fa-plus" /> Create Product</>}
-          </button>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button className="btn btn-ghost" onClick={queueProduct} disabled={saving} title="Save this product and clear the form to add another">
+              <i className="fas fa-layer-group" /> Queue &amp; Add Another
+            </button>
+            <button className="btn btn-primary" disabled={saving} onClick={handleSave}>
+              {saving
+                ? <i className="fas fa-spinner fa-spin" />
+                : staged.length
+                  ? <><i className="fas fa-check" /> Submit All ({staged.length + (form.name.trim() || imageFiles.length ? 1 : 0)})</>
+                  : <><i className="fas fa-plus" /> Create Product</>
+              }
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -2153,7 +2215,7 @@ export default function SellerDashboard() {
           )}
 
           {quickEdit && <QuickEditModal product={quickEdit} onClose={() => setQuickEdit(null)} showToast={showToast} onSave={(updated) => { setProducts((p) => p.map((x) => x._id === updated._id ? { ...x, ...updated } : x)); setQuickEdit(null); }} />}
-          {addProductOpen && <AddProductModal onClose={() => setAddProductOpen(false)} showToast={showToast} onSave={(product) => { if (product) setProducts((p) => [product, ...p]); setAddProductOpen(false); }} />}
+          {addProductOpen && <AddProductModal onClose={() => setAddProductOpen(false)} showToast={showToast} onSave={(result) => { if (result) setProducts((p) => [...(Array.isArray(result) ? result : [result]), ...p]); setAddProductOpen(false); }} />}
 
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
             <h2 style={{ fontSize: "2rem", fontWeight: 800, margin: 0 }}>Products</h2>

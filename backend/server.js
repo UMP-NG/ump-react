@@ -10,6 +10,7 @@ import app from "./app.js";
 import Message from "./models/Message.js";
 import { setIO } from "./utils/socket.js";
 import { startAutoCancelJob } from "./utils/autoCancel.js";
+import { notify } from "./utils/notify.js";
 
 dotenv.config();
 
@@ -196,6 +197,15 @@ if (ENABLE_CLUSTER && cluster.isPrimary) {
         // Each user joins a room named after their userId on "register".
         io.to(sender).emit("new_message", populated);
         io.to(receiver).emit("new_message", populated);
+
+        // Persist a notification and emit new_notification so the recipient's
+        // badge and banner update — mirrors what messageController does on the HTTP path.
+        notify(receiver, {
+          type: "message",
+          title: populated.sender?.name || "New message",
+          message: text ? (text.length > 60 ? text.slice(0, 60) + "…" : text) : "📎 Attachment",
+          link: `/messages?with=${sender}`,
+        }).catch(() => {});
 
         console.log(`💬 Message sent from ${sender} → ${receiver}`);
       } catch (err) {

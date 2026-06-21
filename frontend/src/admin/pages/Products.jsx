@@ -324,6 +324,7 @@ function CreateProductModal({ onClose, onSave }) {
   const [typeInput, setTypeInput] = useState('');
   const [images, setImages] = useState([]);
   const [previews, setPreviews] = useState([]);
+  const [staged, setStaged] = useState([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const fileRef = useRef();
@@ -358,57 +359,111 @@ function CreateProductModal({ onClose, onSave }) {
     !sellerSearch || (s.storeName || s.name || '').toLowerCase().includes(sellerSearch.toLowerCase())
   );
 
+  function validate() {
+    if (!form.sellerId) { setError('Please select a seller.'); return false; }
+    if (!form.name.trim()) { setError('Product name is required.'); return false; }
+    if (!form.price || Number(form.price) <= 0) { setError('A valid price is required.'); return false; }
+    if (!images.length) { setError('At least one product image is required.'); return false; }
+    return true;
+  }
+
+  function resetFields() {
+    // Keep sellerId/sellerSearch and category — usually listing multiple products for the same seller
+    setForm(f => ({ ...f, name: '', price: '', stock: '1', desc: '', condition: 'New' }));
+    setColors([]); setSizes([]); setTypes([]);
+    setImages([]); setPreviews([]);
+    setColorInput({ name: '', code: '#e0e0e0' });
+    setSizeInput(''); setTypeInput('');
+    if (fileRef.current) fileRef.current.value = '';
+    setError('');
+  }
+
+  function queueProduct() {
+    setError('');
+    if (!validate()) return;
+    setStaged(s => [...s, { form: { ...form }, images: [...images], previews: [...previews], colors: [...colors], sizes: [...sizes], types: [...types] }]);
+    resetFields();
+  }
+
+  function buildFormData(item) {
+    const fd = new FormData();
+    fd.append('sellerId', item.form.sellerId);
+    fd.append('name', item.form.name.trim());
+    fd.append('price', Number(item.form.price));
+    fd.append('stock', Number(item.form.stock) || 1);
+    if (item.form.desc) fd.append('desc', item.form.desc);
+    fd.append('condition', item.form.condition);
+    if (item.form.category) fd.append('category', item.form.category);
+    fd.append('colors', JSON.stringify(item.colors));
+    if (item.sizes.length) fd.append('sizes', JSON.stringify(item.sizes));
+    if (item.types.length) fd.append('types', JSON.stringify(item.types));
+    item.images.forEach(f => fd.append('images', f));
+    return fd;
+  }
+
   async function handleSave() {
     setError('');
-    if (!form.sellerId) { setError('Please select a seller.'); return; }
-    if (!form.name.trim()) { setError('Product name is required.'); return; }
-    if (!form.price || Number(form.price) <= 0) { setError('A valid price is required.'); return; }
-    if (!images.length) { setError('At least one product image is required.'); return; }
+    const allToSubmit = [...staged];
+    if (form.name.trim() || images.length) {
+      if (!validate()) return;
+      allToSubmit.push({ form: { ...form }, images: [...images], previews: [...previews], colors: [...colors], sizes: [...sizes], types: [...types] });
+    }
+    if (!allToSubmit.length) { setError('Please fill in at least one product.'); return; }
     setSaving(true);
     try {
-      const fd = new FormData();
-      fd.append('sellerId', form.sellerId);
-      fd.append('name', form.name.trim());
-      fd.append('price', Number(form.price));
-      fd.append('stock', Number(form.stock) || 1);
-      if (form.desc) fd.append('desc', form.desc);
-      fd.append('condition', form.condition);
-      if (form.category) fd.append('category', form.category);
-      fd.append('colors', JSON.stringify(colors));
-      if (sizes.length) fd.append('sizes', JSON.stringify(sizes));
-      if (types.length) fd.append('types', JSON.stringify(types));
-      images.forEach(f => fd.append('images', f));
-      await apiFetch('/api/admins/products', { method: 'POST', body: fd });
+      await Promise.all(allToSubmit.map(item => apiFetch('/api/admins/products', { method: 'POST', body: buildFormData(item) })));
       onSave();
     } catch (err) {
-      setError(err?.message || 'Failed to create product.');
+      setError(err?.message || 'Failed to create product(s).');
     } finally {
       setSaving(false);
     }
   }
 
-  const iSty = { width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid var(--adm-line)', background: 'var(--adm-surface)', color: 'var(--adm-ink)', fontSize: '1.3rem', fontFamily: 'inherit', boxSizing: 'border-box' };
-  const lSty = { fontSize: '1.15rem', fontWeight: 600, color: 'var(--adm-muted)', marginBottom: 4, display: 'block' };
+  const iSty = { width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink-1)', fontSize: '1.3rem', fontFamily: 'inherit', boxSizing: 'border-box' };
+  const lSty = { fontSize: '1.15rem', fontWeight: 600, color: 'var(--ink-3)', marginBottom: 4, display: 'block' };
 
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.6)', zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }} onClick={onClose}>
-      <div style={{ background: 'var(--adm-card)', borderRadius: 12, maxWidth: 580, width: '100%', maxHeight: '90vh', overflowY: 'auto', padding: 0 }} onClick={e => e.stopPropagation()}>
-        <div style={{ padding: '18px 20px', borderBottom: '1px solid var(--adm-line)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: 0, background: 'var(--adm-card)', zIndex: 1 }}>
+      <div style={{ background: 'var(--white)', borderRadius: 12, maxWidth: 580, width: '100%', maxHeight: '90vh', overflowY: 'auto', padding: 0 }} onClick={e => e.stopPropagation()}>
+        <div style={{ padding: '18px 20px', borderBottom: '1px solid var(--line)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: 0, background: 'var(--white)', zIndex: 1 }}>
           <div style={{ fontWeight: 800, fontSize: '1.8rem' }}>List Product for Seller</div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.6rem', color: 'var(--adm-muted)' }}><i className="fa-solid fa-xmark"></i></button>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.6rem', color: 'var(--ink-3)' }}><i className="fa-solid fa-xmark"></i></button>
         </div>
 
         <div style={{ padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+          {/* Queued products */}
+          {staged.length > 0 && (
+            <div style={{ background: 'var(--surface)', borderRadius: 8, padding: '10px 12px', border: '1px solid var(--line)' }}>
+              <div style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--ink-2)', marginBottom: 8 }}>
+                <i className="fa-solid fa-layer-group" style={{ marginRight: 6 }}></i>
+                Queued ({staged.length})
+              </div>
+              {staged.map((item, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderBottom: i < staged.length - 1 ? '1px solid var(--line)' : 'none' }}>
+                  {item.previews[0] && <img src={item.previews[0]} alt="" style={{ width: 36, height: 36, borderRadius: 6, objectFit: 'cover', flexShrink: 0 }} />}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: '1.2rem', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.form.name}</div>
+                    <div style={{ fontSize: '1.1rem', color: 'var(--ink-3)' }}>₦{Number(item.form.price).toLocaleString()}</div>
+                  </div>
+                  <button onClick={() => setStaged(s => s.filter((_, idx) => idx !== i))} style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--ink-3)', padding: 4, flexShrink: 0 }}>
+                    <i className="fa-solid fa-xmark"></i>
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
           {/* Seller picker */}
           <div>
             <label style={lSty}>Seller <span style={{ color: '#ef4444' }}>*</span></label>
             <input style={iSty} placeholder="Search seller name or store…" value={sellerSearch} onChange={e => { setSellerSearch(e.target.value); setForm(f => ({ ...f, sellerId: '' })); }} />
             {sellerSearch && !form.sellerId && filteredSellers.length > 0 && (
-              <div style={{ border: '1px solid var(--adm-line)', borderRadius: 8, marginTop: 4, background: 'var(--adm-card)', maxHeight: 180, overflowY: 'auto' }}>
+              <div style={{ border: '1px solid var(--line)', borderRadius: 8, marginTop: 4, background: 'var(--white)', maxHeight: 180, overflowY: 'auto' }}>
                 {filteredSellers.slice(0, 8).map(s => (
                   <div key={s._id} onClick={() => { setForm(f => ({ ...f, sellerId: s.userId || s._id })); setSellerSearch(s.storeName || s.name || s._id); }}
-                    style={{ padding: '8px 12px', cursor: 'pointer', fontSize: '1.3rem', borderBottom: '1px solid var(--adm-line)' }}>
-                    <strong>{s.storeName || '—'}</strong> <span style={{ color: 'var(--adm-muted)', fontSize: '1.1rem' }}>{s.name || ''}</span>
+                    style={{ padding: '8px 12px', cursor: 'pointer', fontSize: '1.3rem', borderBottom: '1px solid var(--line)' }}>
+                    <strong>{s.storeName || '—'}</strong> <span style={{ color: 'var(--ink-3)', fontSize: '1.1rem' }}>{s.name || ''}</span>
                   </div>
                 ))}
               </div>
@@ -457,9 +512,9 @@ function CreateProductModal({ onClose, onSave }) {
 
           {/* Images */}
           <div>
-            <label style={lSty}>Images <span style={{ color: '#ef4444' }}>*</span> <span style={{ fontWeight: 400, color: 'var(--adm-muted)' }}>(max 4)</span></label>
+            <label style={lSty}>Images <span style={{ color: '#ef4444' }}>*</span> <span style={{ fontWeight: 400, color: 'var(--ink-3)' }}>(max 4)</span></label>
             {images.length < 4 && (
-              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', padding: '8px 14px', borderRadius: 8, border: '1px dashed var(--adm-line)', width: 'fit-content', fontSize: '1.2rem' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', padding: '8px 14px', borderRadius: 8, border: '1px dashed var(--line)', width: 'fit-content', fontSize: '1.2rem' }}>
                 <i className="fa-solid fa-cloud-arrow-up"></i> Add photos
                 <input ref={fileRef} type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={(e) => { handleImages(e); if (fileRef.current) fileRef.current.value = ''; }} />
               </label>
@@ -480,34 +535,34 @@ function CreateProductModal({ onClose, onSave }) {
 
           {/* Colors */}
           <div>
-            <label style={lSty}>Colours <span style={{ fontWeight: 400, color: 'var(--adm-muted)' }}>(optional)</span></label>
+            <label style={lSty}>Colours <span style={{ fontWeight: 400, color: 'var(--ink-3)' }}>(optional)</span></label>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 6 }}>
               {colors.map((c, i) => (
-                <span key={i} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 8px', borderRadius: 20, border: '1px solid var(--adm-line)', fontSize: '1.2rem' }}>
+                <span key={i} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 8px', borderRadius: 20, border: '1px solid var(--line)', fontSize: '1.2rem' }}>
                   <span style={{ width: 12, height: 12, borderRadius: '50%', background: c.code, border: '1px solid rgba(0,0,0,.1)', flexShrink: 0 }} />
                   {c.name}
-                  <button onClick={() => setColors(arr => arr.filter((_, idx) => idx !== i))} style={{ border: 'none', background: 'none', cursor: 'pointer', padding: 0, fontSize: '1rem', color: 'var(--adm-muted)' }}><i className="fa-solid fa-xmark"></i></button>
+                  <button onClick={() => setColors(arr => arr.filter((_, idx) => idx !== i))} style={{ border: 'none', background: 'none', cursor: 'pointer', padding: 0, fontSize: '1rem', color: 'var(--ink-3)' }}><i className="fa-solid fa-xmark"></i></button>
                 </span>
               ))}
             </div>
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               <input style={{ ...iSty, flex: 1 }} placeholder="Colour name" value={colorInput.name} onChange={e => setColorInput(c => ({ ...c, name: e.target.value }))} onKeyDown={e => e.key === 'Enter' && addColor()} />
               <span style={{ width: 24, height: 24, borderRadius: '50%', background: colorInput.code, border: '1px solid rgba(0,0,0,.15)', flexShrink: 0 }} />
-              <input type="color" value={colorInput.code} onChange={e => setColorInput(c => ({ ...c, code: e.target.value }))} style={{ width: 40, height: 38, border: '1px solid var(--adm-line)', borderRadius: 8, cursor: 'pointer', padding: 2, flexShrink: 0 }} />
+              <input type="color" value={colorInput.code} onChange={e => setColorInput(c => ({ ...c, code: e.target.value }))} style={{ width: 40, height: 38, border: '1px solid var(--line)', borderRadius: 8, cursor: 'pointer', padding: 2, flexShrink: 0 }} />
               <button className="abtn sm ghost" onClick={addColor}>Add</button>
             </div>
           </div>
 
           {/* Sizes */}
           <div>
-            <label style={lSty}>Sizes <span style={{ fontWeight: 400, color: 'var(--adm-muted)' }}>(optional)</span></label>
+            <label style={lSty}>Sizes <span style={{ fontWeight: 400, color: 'var(--ink-3)' }}>(optional)</span></label>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 6 }}>
               {sizes.map((s, i) => (
-                <span key={i} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 8, border: '1px solid var(--adm-line)', fontSize: '1.2rem', fontWeight: 600 }}>
-                  {s}<button onClick={() => setSizes(arr => arr.filter((_, idx) => idx !== i))} style={{ border: 'none', background: 'none', cursor: 'pointer', padding: 0, fontSize: '1rem', color: 'var(--adm-muted)' }}><i className="fa-solid fa-xmark"></i></button>
+                <span key={i} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 8, border: '1px solid var(--line)', fontSize: '1.2rem', fontWeight: 600 }}>
+                  {s}<button onClick={() => setSizes(arr => arr.filter((_, idx) => idx !== i))} style={{ border: 'none', background: 'none', cursor: 'pointer', padding: 0, fontSize: '1rem', color: 'var(--ink-3)' }}><i className="fa-solid fa-xmark"></i></button>
                 </span>
               ))}
-              {!sizes.length && <span style={{ fontSize: '1.2rem', color: 'var(--adm-muted)' }}>None added</span>}
+              {!sizes.length && <span style={{ fontSize: '1.2rem', color: 'var(--ink-3)' }}>None added</span>}
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
               <input style={{ ...iSty, flex: 1 }} placeholder="e.g. S, M, L, XL, 42" value={sizeInput} onChange={e => setSizeInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && addSize()} />
@@ -517,14 +572,14 @@ function CreateProductModal({ onClose, onSave }) {
 
           {/* Types */}
           <div>
-            <label style={lSty}>Types / Variants <span style={{ fontWeight: 400, color: 'var(--adm-muted)' }}>(optional)</span></label>
+            <label style={lSty}>Types / Variants <span style={{ fontWeight: 400, color: 'var(--ink-3)' }}>(optional)</span></label>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 6 }}>
               {types.map((t, i) => (
-                <span key={i} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 8, border: '1px solid var(--adm-line)', fontSize: '1.2rem' }}>
-                  {t}<button onClick={() => setTypes(arr => arr.filter((_, idx) => idx !== i))} style={{ border: 'none', background: 'none', cursor: 'pointer', padding: 0, fontSize: '1rem', color: 'var(--adm-muted)' }}><i className="fa-solid fa-xmark"></i></button>
+                <span key={i} style={{ display: 'flex', alignItems: 'center', gap: 4, padding: '3px 10px', borderRadius: 8, border: '1px solid var(--line)', fontSize: '1.2rem' }}>
+                  {t}<button onClick={() => setTypes(arr => arr.filter((_, idx) => idx !== i))} style={{ border: 'none', background: 'none', cursor: 'pointer', padding: 0, fontSize: '1rem', color: 'var(--ink-3)' }}><i className="fa-solid fa-xmark"></i></button>
                 </span>
               ))}
-              {!types.length && <span style={{ fontSize: '1.2rem', color: 'var(--adm-muted)' }}>None added</span>}
+              {!types.length && <span style={{ fontSize: '1.2rem', color: 'var(--ink-3)' }}>None added</span>}
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
               <input style={{ ...iSty, flex: 1 }} placeholder="e.g. Eau de Parfum, 50ml" value={typeInput} onChange={e => setTypeInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && addType()} />
@@ -539,11 +594,21 @@ function CreateProductModal({ onClose, onSave }) {
           )}
         </div>
 
-        <div style={{ padding: '14px 20px', borderTop: '1px solid var(--adm-line)', display: 'flex', justifyContent: 'flex-end', gap: 8, position: 'sticky', bottom: 0, background: 'var(--adm-card)' }}>
+        <div style={{ padding: '14px 20px', borderTop: '1px solid var(--line)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, position: 'sticky', bottom: 0, background: 'var(--white)' }}>
           <button className="abtn ghost" onClick={onClose} disabled={saving}>Cancel</button>
-          <button className="abtn" onClick={handleSave} disabled={saving}>
-            {saving ? <><i className="fa-solid fa-circle-notch fa-spin"></i> Saving…</> : <><i className="fa-solid fa-plus"></i> Create Product</>}
-          </button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button className="abtn ghost" onClick={queueProduct} disabled={saving} title="Save this product and clear the form to add another">
+              <i className="fa-solid fa-layer-group"></i> Queue &amp; Add Another
+            </button>
+            <button className="abtn" onClick={handleSave} disabled={saving}>
+              {saving
+                ? <><i className="fa-solid fa-circle-notch fa-spin"></i> Saving…</>
+                : staged.length
+                  ? <><i className="fa-solid fa-check"></i> Submit All ({staged.length + (form.name.trim() || images.length ? 1 : 0)})</>
+                  : <><i className="fa-solid fa-plus"></i> Create Product</>
+              }
+            </button>
+          </div>
         </div>
       </div>
     </div>

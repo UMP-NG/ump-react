@@ -166,6 +166,38 @@ export default function Messages() {
 
   useEffect(() => { loadConvos(); }, []);
 
+  // Update sidebar conversation list when a new message arrives so the preview
+  // and unread badge stay current without a full page refresh.
+  useEffect(() => {
+    function onNewMessage(msg) {
+      const myId     = user?._id?.toString();
+      const senderId = typeof msg.sender === "object" ? msg.sender?._id?.toString() : msg.sender?.toString();
+      const otherId  = senderId === myId
+        ? (typeof msg.receiver === "object" ? msg.receiver?._id?.toString() : msg.receiver?.toString())
+        : senderId;
+      if (!otherId) return;
+
+      const isActiveThread = activeThread?.receiverId?.toString() === otherId;
+      const preview = msg.text || (msg.attachments?.length ? "📎 Attachment" : "");
+
+      setConvos((prev) =>
+        prev.map((c) => {
+          const cId = c.conversationWith?.toString() || c._id?.toString();
+          if (cId !== otherId) return c;
+          return {
+            ...c,
+            latestMessage: preview,
+            unreadCount: isActiveThread || senderId === myId
+              ? 0
+              : (c.unreadCount || 0) + 1,
+          };
+        })
+      );
+    }
+    socket.on("new_message", onNewMessage);
+    return () => socket.off("new_message", onNewMessage);
+  }, [user, activeThread]);
+
   // Auto-open support picker when arriving from the "Advertise on UMP" banner
   useEffect(() => {
     if (searchParams.get("advertise") === "1") setShowPicker(true);
@@ -807,7 +839,7 @@ function MsgThread({ convo, onBack }) {
     const draft = text.trim();
     const optimistic = {
       _id: `opt_${Date.now()}`,
-      content: draft,
+      text: draft,
       isOwn: true,
       isAdminMessage: iAmAdmin,
       createdAt: new Date().toISOString(),
