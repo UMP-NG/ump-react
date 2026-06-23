@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import Thumb from '../components/Thumb';
 import { apiFetch } from '../../utils/api';
+import ImageCropModal from '../../components/ImageCropModal';
 
 const STATUS_COLOR = { active: 'green', flagged: 'amber', removed: 'red', draft: 'gray' };
 const FILTERS = ['All', 'Active', 'Flagged', 'Removed'];
@@ -326,6 +328,9 @@ function CreateProductModal({ onClose, onSave }) {
   const [variantInput, setVariantInput] = useState({ label: '', price: '', stock: '' });
   const [images, setImages] = useState([]);
   const [previews, setPreviews] = useState([]);
+  const [mainImageIdx, setMainImageIdx] = useState(0);
+  const [cropSrc, setCropSrc] = useState(null);
+  const [cropQueue, setCropQueue] = useState([]);
   const [staged, setStaged] = useState([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -341,17 +346,36 @@ function CreateProductModal({ onClose, onSave }) {
 
   function handleImages(e) {
     const files = Array.from(e.target.files).slice(0, 4 - images.length);
-    setImages(prev => [...prev, ...files]);
-    files.forEach(file => {
+    if (!files.length) return;
+    const readers = files.map(file => new Promise(res => {
       const r = new FileReader();
-      r.onload = () => setPreviews(prev => [...prev, r.result]);
+      r.onload = () => res(r.result);
       r.readAsDataURL(file);
+    }));
+    Promise.all(readers).then(srcs => {
+      setCropQueue(srcs.slice(1));
+      setCropSrc(srcs[0]);
     });
+    e.target.value = '';
+  }
+
+  function handleCropConfirm(blob) {
+    const file = new File([blob], `product-${images.length + 1}.jpg`, { type: 'image/jpeg' });
+    const url = URL.createObjectURL(blob);
+    setImages(prev => [...prev, file]);
+    setPreviews(prev => [...prev, url]);
+    if (cropQueue.length > 0) {
+      setCropSrc(cropQueue[0]);
+      setCropQueue(q => q.slice(1));
+    } else {
+      setCropSrc(null);
+    }
   }
 
   const removeImage = (i) => {
     setImages(prev => prev.filter((_, idx) => idx !== i));
     setPreviews(prev => prev.filter((_, idx) => idx !== i));
+    setMainImageIdx(cur => cur === i ? 0 : cur > i ? cur - 1 : cur);
   };
 
   const addColor = () => { if (!colorInput.name.trim()) return; setColors(c => [...c, { ...colorInput }]); setColorInput({ name: '', code: '#e0e0e0' }); };
@@ -386,7 +410,7 @@ function CreateProductModal({ onClose, onSave }) {
     // Keep sellerId/sellerSearch and category — usually listing multiple products for the same seller
     setForm(f => ({ ...f, name: '', price: '', stock: '1', desc: '', condition: 'New' }));
     setColors([]); setSizes([]); setTypes([]); setVariants([]);
-    setImages([]); setPreviews([]);
+    setImages([]); setPreviews([]); setMainImageIdx(0);
     setColorInput({ name: '', code: '#e0e0e0' });
     setSizeInput(''); setTypeInput(''); setVariantInput({ label: '', price: '', stock: '' });
     if (fileRef.current) fileRef.current.value = '';
@@ -407,6 +431,7 @@ function CreateProductModal({ onClose, onSave }) {
     setVariants(item.variants || []);
     setImages(item.images || []);
     setPreviews(item.previews || []);
+    setMainImageIdx(item.mainImageIdx || 0);
     setVariantInput({ label: '', price: '', stock: '' });
     setError('');
     modalRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
@@ -420,7 +445,7 @@ function CreateProductModal({ onClose, onSave }) {
   function queueProduct() {
     setError('');
     if (!validate()) return;
-    setStaged(s => [...s, { form: { ...form }, images: [...images], previews: [...previews], colors: [...colors], sizes: [...sizes], types: [...types], variants: [...variants] }]);
+    setStaged(s => [...s, { form: { ...form }, images: [...images], previews: [...previews], mainImageIdx, colors: [...colors], sizes: [...sizes], types: [...types], variants: [...variants] }]);
     resetFields();
   }
 
@@ -440,7 +465,11 @@ function CreateProductModal({ onClose, onSave }) {
     fd.append('colors', JSON.stringify(item.colors));
     if (item.sizes.length) fd.append('sizes', JSON.stringify(item.sizes));
     if (item.types.length) fd.append('types', JSON.stringify(item.types));
-    item.images.forEach(f => fd.append('images', f));
+    const idx = item.mainImageIdx || 0;
+    const orderedImages = idx === 0
+      ? item.images
+      : [item.images[idx], ...item.images.filter((_, i) => i !== idx)];
+    orderedImages.forEach(f => fd.append('images', f));
     return fd;
   }
 
@@ -449,7 +478,7 @@ function CreateProductModal({ onClose, onSave }) {
     const allToSubmit = [...staged];
     if (form.name.trim() || images.length) {
       if (!validate()) return;
-      allToSubmit.push({ form: { ...form }, images: [...images], previews: [...previews], colors: [...colors], sizes: [...sizes], types: [...types], variants: [...variants] });
+      allToSubmit.push({ form: { ...form }, images: [...images], previews: [...previews], mainImageIdx, colors: [...colors], sizes: [...sizes], types: [...types], variants: [...variants] });
     }
     if (!allToSubmit.length) { showError('Please fill in at least one product.'); return; }
     setSaving(true);
@@ -472,7 +501,17 @@ function CreateProductModal({ onClose, onSave }) {
   const iSty = { width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink-1)', fontSize: '1.3rem', fontFamily: 'inherit', boxSizing: 'border-box' };
   const lSty = { fontSize: '1.15rem', fontWeight: 600, color: 'var(--ink-3)', marginBottom: 4, display: 'block' };
 
-  return (
+  return createPortal(
+    <>
+    {cropSrc && (
+      <ImageCropModal
+        src={cropSrc}
+        aspect={1}
+        title={`Crop image ${images.length + 1}`}
+        onConfirm={handleCropConfirm}
+        onCancel={() => { setCropSrc(null); setCropQueue([]); }}
+      />
+    )}
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.6)', zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }} onClick={handleClose}>
       <div ref={modalRef} style={{ background: 'var(--white)', borderRadius: 12, maxWidth: 580, width: '100%', maxHeight: '90vh', overflowY: 'auto', padding: 0 }} onClick={e => e.stopPropagation()}>
         <div style={{ padding: '18px 20px', borderBottom: '1px solid var(--line)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: 0, background: 'var(--white)', zIndex: 1 }}>
@@ -578,9 +617,14 @@ function CreateProductModal({ onClose, onSave }) {
             {previews.length > 0 && (
               <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
                 {previews.map((src, i) => (
-                  <div key={i} style={{ position: 'relative', width: 70, height: 70, borderRadius: 8, overflow: 'hidden' }}>
+                  <div key={i} onClick={() => setMainImageIdx(i)} title={i === mainImageIdx ? 'Cover photo' : 'Tap to set as cover'}
+                    style={{ position: 'relative', width: 70, height: 70, borderRadius: 8, overflow: 'hidden', cursor: 'pointer', outline: i === mainImageIdx ? '2.5px solid var(--accent)' : 'none', outlineOffset: 2 }}>
                     <img src={src} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    <button type="button" onClick={() => removeImage(i)} style={{ position: 'absolute', top: 2, right: 2, width: 18, height: 18, borderRadius: '50%', background: 'rgba(0,0,0,.65)', color: '#fff', border: 'none', cursor: 'pointer', fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}>
+                    {i === mainImageIdx && (
+                      <span style={{ position: 'absolute', bottom: 0, left: 0, right: 0, background: 'rgba(249,115,22,.85)', color: '#fff', fontSize: '0.75rem', fontWeight: 700, textAlign: 'center', padding: '1px 0' }}>Cover</span>
+                    )}
+                    <button type="button" onClick={e => { e.stopPropagation(); removeImage(i); }}
+                      style={{ position: 'absolute', top: 2, right: 2, width: 18, height: 18, borderRadius: '50%', background: 'rgba(0,0,0,.65)', color: '#fff', border: 'none', cursor: 'pointer', fontSize: '0.85rem', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}>
                       <i className="fa-solid fa-xmark"></i>
                     </button>
                   </div>
@@ -706,5 +750,7 @@ function CreateProductModal({ onClose, onSave }) {
         </div>
       </div>
     </div>
+    </>,
+    document.body
   );
 }
