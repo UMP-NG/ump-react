@@ -173,7 +173,7 @@ productSchema.pre("save", function (next) {
   // When variants exist, derive price/stock/isAvailable from them.
   if (this.variants?.length > 0) {
     const prices = this.variants.map((v) => v.price).filter((p) => typeof p === "number" && p >= 0);
-    if (prices.length) this.price = Math.min(...prices);
+    this.price = prices.length ? Math.min(...prices) : 0;
     const totalVariantStock = this.variants.reduce((s, v) => s + (v.stock || 0), 0);
     this.stock = totalVariantStock;
     this.isAvailable = totalVariantStock > 0;

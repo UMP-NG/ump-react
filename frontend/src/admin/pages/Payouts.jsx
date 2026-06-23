@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import Thumb from '../components/Thumb';
 import { MiniStat } from '../components/StatCard';
 import { apiFetch } from '../../utils/api';
@@ -6,18 +6,25 @@ import { useAppConfig } from '../../context/AppConfigContext';
 
 function CopyBtn({ text }) {
   const [copied, setCopied] = useState(false);
+  const timerRef = useRef(null);
   async function copy(e) {
     e.stopPropagation();
-    try { await navigator.clipboard.writeText(text); } catch { return; }
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1800);
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(() => setCopied(false), 1800);
+    } catch {
+      setCopied(false);
+    }
   }
+  useEffect(() => () => clearTimeout(timerRef.current), []);
   return (
     <button
       onClick={copy}
-      title="Copy account number"
+      title={copied ? 'Copied!' : 'Copy account number'}
       style={{
-        border: 'none', background: copied ? 'rgba(34,197,94,.15)' : 'var(--surface)',
+        background: copied ? 'rgba(34,197,94,.15)' : 'var(--surface)',
         color: copied ? '#16a34a' : 'var(--ink-3)', borderRadius: 4,
         padding: '2px 6px', cursor: 'pointer', fontSize: '1rem',
         display: 'inline-flex', alignItems: 'center', gap: 3,

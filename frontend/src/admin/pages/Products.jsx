@@ -394,9 +394,13 @@ function CreateProductModal({ onClose, onSave }) {
   }
 
   function editQueued(i) {
+    if ((form.name.trim() || images.length) &&
+      !window.confirm('You have unsaved fields in the form. Editing this queued item will overwrite them. Continue?')) return;
     const item = staged[i];
     setStaged(s => s.filter((_, idx) => idx !== i));
-    setForm(f => ({ ...f, name: item.form.name, price: item.form.price, stock: item.form.stock, desc: item.form.desc, condition: item.form.condition, category: item.form.category }));
+    setForm({ ...item.form });
+    const sellerObj = sellers.find(s => (s.userId || s._id) === item.form.sellerId);
+    setSellerSearch(sellerObj ? (sellerObj.storeName || sellerObj.name || '') : '');
     setColors(item.colors || []);
     setSizes(item.sizes || []);
     setTypes(item.types || []);
@@ -428,7 +432,7 @@ function CreateProductModal({ onClose, onSave }) {
       fd.append('variants', JSON.stringify(item.variants));
     } else {
       fd.append('price', Number(item.form.price));
-      fd.append('stock', Number(item.form.stock) || 1);
+      fd.append('stock', item.form.stock !== '' ? Number(item.form.stock) : 1);
     }
     if (item.form.desc) fd.append('desc', item.form.desc);
     fd.append('condition', item.form.condition);

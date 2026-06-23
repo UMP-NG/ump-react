@@ -78,8 +78,8 @@ export const bookShipbubbleDelivery = async (req, res) => {
     if (!isAdmin && order.seller?.toString() !== uid)
       return res.status(403).json({ message: "Not authorised" });
 
-    if (order.deliveryMethod !== "shipbubble")
-      return res.status(400).json({ message: "This order is not a Shipbubble delivery" });
+    if (order.deliveryMethod !== "delivery")
+      return res.status(400).json({ message: "This order uses pickup — no delivery booking needed" });
 
     if (order.paymentStatus !== "paid")
       return res.status(400).json({ message: "Cannot book dispatch — payment not confirmed" });
@@ -177,8 +177,8 @@ export const getTrackingInfo = async (req, res) => {
     const canView  = isAdmin || order.buyer?.toString() === uid || order.seller?.toString() === uid;
     if (!canView) return res.status(403).json({ message: "Not authorised" });
 
-    if (order.deliveryMethod !== "shipbubble" || !order.shipbubble?.shipmentId)
-      return res.status(400).json({ message: "No Shipbubble tracking for this order" });
+    if (!order.shipbubble?.shipmentId)
+      return res.status(400).json({ message: "No tracking info available for this order" });
 
     const tracking = await trackShipment(order.shipbubble.shipmentId);
     return res.json({ success: true, tracking, saved: order.shipbubble });

@@ -1186,7 +1186,8 @@ export const saveAddress = async (req, res) => {
       // Update existing by route param
       const addr = user.addresses.id(addressId);
       if (!addr) return res.status(404).json({ message: "Address not found" });
-      Object.assign(addr, { label, name, phone, address, building, area, city, state, landmark });
+      const updates = { label, name, phone, address, building, area, city, state, landmark };
+      Object.keys(updates).forEach((k) => { if (updates[k] !== undefined) addr[k] = updates[k]; });
       if (isDefault) user.addresses.forEach((a) => { a.isDefault = a._id.toString() === addressId; });
     } else {
       // Add new (POST /addresses)

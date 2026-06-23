@@ -820,6 +820,8 @@ function AddProductModal({ onClose, onSave, showToast }) {
   }
 
   function editQueued(i) {
+    if ((form.name.trim() || imageFiles.length) &&
+      !window.confirm('You have unsaved fields in the form. Editing this queued item will overwrite them. Continue?')) return;
     const item = staged[i];
     setStaged(s => s.filter((_, idx) => idx !== i));
     setForm({ ...item.form });
@@ -919,7 +921,7 @@ function AddProductModal({ onClose, onSave, showToast }) {
       fd.append("variants", JSON.stringify(item.form.variants));
     } else {
       fd.append("price", Number(item.form.price));
-      if (item.form.stock) fd.append("stock", Number(item.form.stock));
+      if (item.form.stock !== "" && item.form.stock !== undefined) fd.append("stock", Number(item.form.stock));
     }
     if (item.form.desc) fd.append("desc", item.form.desc);
     fd.append("condition", item.form.condition);

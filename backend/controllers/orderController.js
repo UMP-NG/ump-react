@@ -254,8 +254,6 @@ export const checkoutCart = async (req, res) => {
       const sel = deliverySelections[sid] || {};
       const requestedMethod = VALID_METHODS.includes(sel.method) ? sel.method : "pickup";
 
-      const sellerDoc = await Seller.findOne({ user: sid }).select("delivery storeName").lean();
-
       // For "delivery" method the fee is 0 — seller arranges delivery directly.
       const orderDeliveryFee = 0;
 
