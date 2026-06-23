@@ -6,19 +6,25 @@ export default function CreatorsSection() {
       name: "Ikechukwu",
       role: "Chief Executive Officer",
       img: "/images/guy.png",
-      about: "Lorem ipsum dolor sit amet consectetur.",
+      about: "Visionary behind UMP — building a trusted student-driven marketplace that empowers every UNILAG student to buy, sell, and thrive on campus.",
     },
     {
       name: "Joba",
       role: "Frontend Engineer",
       img: "/images/guy.png",
-      about: "Lorem ipsum dolor sit, amet consectetur.",
+      about: "Crafting the interfaces students interact with every day — turning designs into fast, intuitive, and accessible experiences across UMP.",
     },
     {
       name: "Oseni Matthew",
       role: "Fullstack Developer",
       img: "/images/techtide-icon.png",
       about: "Focused on Building Web And Mobile Applications.",
+    },
+    {
+      name: "Prisca",
+      role: "Chief Marketing Officer",
+      img: "/images/guy.png",
+      about: "Driving UMP's growth and visibility across campus — connecting students to the marketplace through strategic campaigns and community building.",
     },
   ];
 
