@@ -2299,8 +2299,6 @@ export default function SellerDashboard() {
             </div>
           )}
 
-          {quickEdit && <QuickEditModal product={quickEdit} onClose={() => setQuickEdit(null)} showToast={showToast} onSave={(updated) => { setProducts((p) => p.map((x) => x._id === updated._id ? { ...x, ...updated } : x)); setQuickEdit(null); }} />}
-          {addProductOpen && <AddProductModal onClose={() => setAddProductOpen(false)} showToast={showToast} onSave={(result) => { if (result) setProducts((p) => [...(Array.isArray(result) ? result : [result]), ...p]); setAddProductOpen(false); }} />}
 
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
             <h2 style={{ fontSize: "2rem", fontWeight: 800, margin: 0 }}>Products</h2>
@@ -2975,6 +2973,8 @@ export default function SellerDashboard() {
           onCancel={() => { setStoreCropSrc(null); setStoreCropTarget(null); }}
         />
       )}
+      {quickEdit && <QuickEditModal product={quickEdit} onClose={() => setQuickEdit(null)} showToast={showToast} onSave={(updated) => { setProducts((p) => p.map((x) => x._id === updated._id ? { ...x, ...updated } : x)); setQuickEdit(null); }} />}
+      {addProductOpen && <AddProductModal onClose={() => setAddProductOpen(false)} showToast={showToast} onSave={(result) => { if (result) setProducts((p) => [...(Array.isArray(result) ? result : [result]), ...p]); setAddProductOpen(false); }} />}
 
       <FloatingChat />
       <div className="seller-dash">
