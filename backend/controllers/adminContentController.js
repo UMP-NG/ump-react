@@ -142,6 +142,9 @@ export const adminCreateProduct = async (req, res) => {
       images,
     });
 
+    // Link the new product to the seller's products array so it appears in their store page
+    await Seller.findByIdAndUpdate(sellerProfile._id, { $addToSet: { products: product._id } });
+
     logger.info(`Admin ${req.user._id} created product ${product._id} on behalf of seller ${sellerId}`);
     res.status(201).json({ success: true, product });
   } catch (err) {

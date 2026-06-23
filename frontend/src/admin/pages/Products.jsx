@@ -281,6 +281,24 @@ function ProductDrawer({ product, onClose, onFlag, onRemove, onRestore }) {
             </span>
           </div>
 
+          {Array.isArray(product.variants) && product.variants.length > 0 && (
+            <>
+              <div className="adm-section-h">Variants</div>
+              <div style={{ border: '1px solid var(--line)', borderRadius: 8, overflow: 'hidden' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 100px 56px', padding: '6px 10px', background: 'var(--surface)', fontSize: '1.05rem', fontWeight: 700, color: 'var(--ink-3)', gap: 8 }}>
+                  <span>Label</span><span>Price</span><span>Stock</span>
+                </div>
+                {product.variants.map((v, i) => (
+                  <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 100px 56px', padding: '8px 10px', borderTop: '1px solid var(--line)', alignItems: 'center', gap: 8, fontSize: '1.3rem' }}>
+                    <span>{v.label}</span>
+                    <span>₦{(v.price || 0).toLocaleString()}</span>
+                    <span>{v.stock ?? 0}</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
           {product.desc && (
             <>
               <div className="adm-section-h">Description</div>
@@ -384,7 +402,7 @@ function CreateProductModal({ onClose, onSave }) {
   const addVariant = () => {
     if (!variantInput.label.trim() || !variantInput.price || Number(variantInput.price) <= 0) return;
     setVariants(vs => [...vs, { label: variantInput.label.trim(), price: Number(variantInput.price), stock: Math.max(0, Number(variantInput.stock) || 0) }]);
-    setVariantInput({ label: '', price: '', stock: '' });
+    setVariantInput({ label: '', price: '', stock: '1' });
   };
   const removeVariant = (i) => setVariants(vs => vs.filter((_, idx) => idx !== i));
 
@@ -412,7 +430,7 @@ function CreateProductModal({ onClose, onSave }) {
     setColors([]); setSizes([]); setTypes([]); setVariants([]);
     setImages([]); setPreviews([]); setMainImageIdx(0);
     setColorInput({ name: '', code: '#e0e0e0' });
-    setSizeInput(''); setTypeInput(''); setVariantInput({ label: '', price: '', stock: '' });
+    setSizeInput(''); setTypeInput(''); setVariantInput({ label: '', price: '', stock: '1' });
     if (fileRef.current) fileRef.current.value = '';
     setError('');
   }
@@ -432,7 +450,7 @@ function CreateProductModal({ onClose, onSave }) {
     setImages(item.images || []);
     setPreviews(item.previews || []);
     setMainImageIdx(item.mainImageIdx || 0);
-    setVariantInput({ label: '', price: '', stock: '' });
+    setVariantInput({ label: '', price: '', stock: '1' });
     setError('');
     modalRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
   }

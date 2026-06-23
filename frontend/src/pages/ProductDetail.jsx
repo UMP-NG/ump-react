@@ -50,9 +50,10 @@ export default function ProductDetail() {
   const [showReport, setShowReport] = useState(false);
   const [qty, setQty] = useState(1);
   const [thumb, setThumb] = useState(0);
-  const [selectedColor, setSelectedColor] = useState("");
-  const [selectedSize,  setSelectedSize]  = useState("");
-  const [selectedType,  setSelectedType]  = useState("");
+  const [selectedColor,   setSelectedColor]   = useState("");
+  const [selectedSize,    setSelectedSize]    = useState("");
+  const [selectedType,    setSelectedType]    = useState("");
+  const [selectedVariant, setSelectedVariant] = useState(null);
   const [loading, setLoading] = useState(true);
   const [cartLoading, setCartLoading] = useState(false);
   const [related, setRelated] = useState([]);
@@ -100,6 +101,7 @@ export default function ProductDetail() {
     setSelectedColor("");
     setSelectedSize("");
     setSelectedType("");
+    setSelectedVariant(null);
   }, [id]);
 
   useEffect(() => {
@@ -267,15 +269,17 @@ export default function ProductDetail() {
     const validColor = !product?.colors?.length || product.colors.some((c) => c.name === selectedColor);
     const validSize  = !product?.sizes?.length  || product.sizes.includes(selectedSize);
     const validType  = !product?.types?.length  || product.types.includes(selectedType);
-    const needsColor = product?.colors?.length > 0 && (!selectedColor || !validColor);
-    const needsSize  = product?.sizes?.length  > 0 && (!selectedSize  || !validSize);
-    const needsType  = product?.types?.length  > 0 && (!selectedType  || !validType);
-    if (needsColor) { showToast("Please select a colour"); return; }
-    if (needsSize)  { showToast("Please select a size");   return; }
-    if (needsType)  { showToast("Please select a type");   return; }
+    const needsColor   = product?.colors?.length   > 0 && (!selectedColor || !validColor);
+    const needsSize    = product?.sizes?.length    > 0 && (!selectedSize  || !validSize);
+    const needsType    = product?.types?.length    > 0 && (!selectedType  || !validType);
+    const needsVariant = hasVariants && !selectedVariant;
+    if (needsVariant) { showToast("Please select a variant"); return; }
+    if (needsColor)   { showToast("Please select a colour");  return; }
+    if (needsSize)    { showToast("Please select a size");    return; }
+    if (needsType)    { showToast("Please select a type");    return; }
     setCartLoading(true);
     try {
-      await addToCart(id, qty, { selectedColor, selectedSize, selectedType });
+      await addToCart(id, qty, { selectedColor, selectedSize, selectedType, selectedVariant: selectedVariant?.label || "" });
       navigate("/cart");
     } catch (err) {
       if (err?.status === 401) navigate("/login");
@@ -333,10 +337,16 @@ export default function ProductDetail() {
   );
   const hasSpecs = product.specs && Object.keys(product.specs).length > 0;
   const logoUrl = typeof seller?.logo === "string" ? seller.logo : seller?.logo?.url;
-  const variantStock = Array.isArray(product.variants) ? product.variants.reduce((s, v) => s + (v.stock || 0), 0) : 0;
-  const totalStock = (product.stock || 0) + variantStock;
-  const outOfStock = totalStock <= 0;
-  const lowStock = !outOfStock && totalStock <= 5;
+  const hasVariants = Array.isArray(product.variants) && product.variants.length > 0;
+  const displayPrice = selectedVariant ? selectedVariant.price : product.price;
+  const activeStock = selectedVariant
+    ? selectedVariant.stock
+    : hasVariants
+      ? product.variants.reduce((s, v) => s + (v.stock || 0), 0)
+      : product.stock || 0;
+  const totalStock = activeStock;
+  const outOfStock = selectedVariant ? selectedVariant.stock <= 0 : (!hasVariants && activeStock <= 0);
+  const lowStock = !outOfStock && activeStock > 0 && activeStock <= 5;
 
   const gallery = (
     <div>
@@ -398,7 +408,7 @@ export default function ProductDetail() {
       </div>
       <h1 style={{ fontSize: isDesktop ? "2.6rem" : "2.2rem", fontWeight: 800, letterSpacing: "-0.02em", margin: "0 0 8px", lineHeight: 1.2 }}>{product.name}</h1>
       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 16 }}>
-        {product.salePrice != null && product.salePrice < product.price ? (
+        {!selectedVariant && product.salePrice != null && product.salePrice < product.price ? (
           <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
             <div style={{ fontSize: "2.8rem", fontWeight: 800, color: "#ef4444", letterSpacing: "-0.02em" }}>{naira(product.salePrice)}</div>
             <div style={{ fontSize: "1.8rem", fontWeight: 600, color: "var(--ink-4)", textDecoration: "line-through" }}>{naira(product.price)}</div>
@@ -407,7 +417,10 @@ export default function ProductDetail() {
             </span>
           </div>
         ) : (
-          <div style={{ fontSize: "2.8rem", fontWeight: 800, color: "var(--accent)", letterSpacing: "-0.02em" }}>{naira(product.price)}</div>
+          <div style={{ fontSize: "2.8rem", fontWeight: 800, color: "var(--accent)", letterSpacing: "-0.02em" }}>
+            {naira(displayPrice)}
+            {hasVariants && !selectedVariant && <span style={{ fontSize: "1.4rem", fontWeight: 500, color: "var(--ink-3)", marginLeft: 8 }}>from</span>}
+          </div>
         )}
         {outOfStock && (
           <span style={{ padding: "4px 12px", borderRadius: "var(--r-pill)", background: "#f3f4f6", color: "#6b7280", fontSize: "1.2rem", fontWeight: 700 }}>Out of Stock</span>
@@ -473,7 +486,36 @@ export default function ProductDetail() {
         </div>
       )}
 
-      {/* Type/variant picker */}
+      {/* Named variant picker (e.g. "256GB Black ₦1.1M") */}
+      {hasVariants && (
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontSize: "1.2rem", fontWeight: 600, color: "var(--ink-3)", marginBottom: 8 }}>
+            Variant{selectedVariant
+              ? <span style={{ color: "var(--accent)", marginLeft: 6 }}>{selectedVariant.label}</span>
+              : <span style={{ color: "var(--ink-4)", fontWeight: 400 }}> — select one</span>}
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {product.variants.map((v, i) => {
+              const active = selectedVariant?.label === v.label;
+              const gone   = v.stock <= 0;
+              return (
+                <button key={i} type="button" onClick={() => setSelectedVariant(active ? null : v)} disabled={gone}
+                  style={{ display: "flex", justifyContent: "space-between", alignItems: "center",
+                    padding: "10px 14px", borderRadius: "var(--r-md)", textAlign: "left",
+                    background: active ? "rgba(249,115,22,.10)" : "var(--surface)",
+                    border: `2px solid ${active ? "var(--accent)" : "var(--line)"}`,
+                    cursor: gone ? "not-allowed" : "pointer", opacity: gone ? 0.5 : 1,
+                    fontFamily: "var(--font-sans)", fontSize: "1.3rem" }}>
+                  <span style={{ fontWeight: active ? 700 : 500 }}>{v.label}</span>
+                  <span style={{ fontWeight: 700, color: active ? "var(--accent)" : "var(--ink-1)" }}>{naira(v.price)}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Type picker */}
       {Array.isArray(product.types) && product.types.length > 0 && (
         <div style={{ marginBottom: 16 }}>
           <div style={{ fontSize: "1.2rem", fontWeight: 600, color: "var(--ink-3)", marginBottom: 8 }}>

@@ -801,7 +801,7 @@ function AddProductModal({ onClose, onSave, showToast }) {
   const [sizeInput, setSizeInput] = useState("");
   const [typeInput, setTypeInput] = useState("");
   const [specInput, setSpecInput] = useState({ k: "", v: "" });
-  const [variantInput, setVariantInput] = useState({ label: "", price: "", stock: "" });
+  const [variantInput, setVariantInput] = useState({ label: "", price: "", stock: "1" });
   const [cropQueue, setCropQueue] = useState([]);
   const [cropSrc, setCropSrc] = useState(null);
   const modalRef = useRef();
@@ -828,7 +828,7 @@ function AddProductModal({ onClose, onSave, showToast }) {
     setImageFiles(item.imageFiles || []);
     setImagePreviews(item.imagePreviews || []);
     setMainImageIdx(item.mainImageIdx || 0);
-    setVariantInput({ label: "", price: "", stock: "" });
+    setVariantInput({ label: "", price: "", stock: "1" });
     setAddError("");
     modalRef.current?.scrollTo({ top: 0, behavior: "smooth" });
   }
@@ -884,7 +884,7 @@ function AddProductModal({ onClose, onSave, showToast }) {
   const addVariant = () => {
     if (!variantInput.label.trim() || !variantInput.price || Number(variantInput.price) <= 0) return;
     setForm((f) => ({ ...f, variants: [...f.variants, { label: variantInput.label.trim(), price: Number(variantInput.price), stock: Math.max(0, Number(variantInput.stock) || 0) }] }));
-    setVariantInput({ label: "", price: "", stock: "" });
+    setVariantInput({ label: "", price: "", stock: "1" });
   };
   const removeVariant = (i) => setForm((f) => ({ ...f, variants: f.variants.filter((_, idx) => idx !== i) }));
 
@@ -903,7 +903,7 @@ function AddProductModal({ onClose, onSave, showToast }) {
     setImageFiles([]); setImagePreviews([]); setMainImageIdx(0);
     setColorInput({ name: "", code: "#e0e0e0" });
     setSizeInput(""); setTypeInput(""); setSpecInput({ k: "", v: "" });
-    setVariantInput({ label: "", price: "", stock: "" });
+    setVariantInput({ label: "", price: "", stock: "1" });
     setAddError("");
   }
 
@@ -1224,21 +1224,19 @@ function AddProductModal({ onClose, onSave, showToast }) {
           </div>
         )}
 
-        <div style={{ padding: "14px 20px", borderTop: "1px solid var(--line)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, position: "sticky", bottom: 0, background: "var(--card-bg)" }}>
-          <button className="btn btn-ghost" onClick={handleClose}>Cancel</button>
-          <div style={{ display: "flex", gap: 8 }}>
-            <button className="btn btn-ghost" onClick={queueProduct} disabled={saving} title="Save this product and clear the form to add another">
-              <i className="fas fa-layer-group" /> Queue &amp; Add Another
-            </button>
-            <button className="btn btn-primary" disabled={saving} onClick={handleSave}>
-              {saving
-                ? <i className="fas fa-spinner fa-spin" />
-                : staged.length
-                  ? <><i className="fas fa-check" /> Submit All ({staged.length + (form.name.trim() || imageFiles.length ? 1 : 0)})</>
-                  : <><i className="fas fa-plus" /> Create Product</>
-              }
-            </button>
-          </div>
+        <div style={{ padding: "14px 20px", borderTop: "1px solid var(--line)", display: "flex", flexWrap: "wrap", gap: 8, position: "sticky", bottom: 0, background: "var(--card-bg)" }}>
+          <button className="btn btn-ghost" onClick={handleClose} style={{ flex: "1 1 auto" }}>Cancel</button>
+          <button className="btn btn-ghost" onClick={queueProduct} disabled={saving} title="Save this product and clear the form to add another" style={{ flex: "1 1 auto" }}>
+            <i className="fas fa-layer-group" /> Queue &amp; Add Another
+          </button>
+          <button className="btn btn-primary" disabled={saving} onClick={handleSave} style={{ flex: "1 1 100%" }}>
+            {saving
+              ? <i className="fas fa-spinner fa-spin" />
+              : staged.length
+                ? <><i className="fas fa-check" /> Submit All ({staged.length + (form.name.trim() || imageFiles.length ? 1 : 0)})</>
+                : <><i className="fas fa-plus" /> Create Product</>
+            }
+          </button>
         </div>
       </div>
     </div>
