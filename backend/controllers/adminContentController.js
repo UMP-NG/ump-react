@@ -142,8 +142,13 @@ export const adminCreateProduct = async (req, res) => {
       images,
     });
 
-    // Link the new product to the seller's products array so it appears in their store page
-    await Seller.findByIdAndUpdate(sellerProfile._id, { $addToSet: { products: product._id } });
+    // Link the new product to the seller's products array so it appears in their store page.
+    // Best-effort: product is already created, so don't roll back on a link failure — just log it.
+    try {
+      await Seller.findByIdAndUpdate(sellerProfile._id, { $addToSet: { products: product._id } });
+    } catch (linkErr) {
+      logger.error(`adminCreateProduct: failed to link product ${product._id} to seller ${sellerProfile._id}:`, linkErr);
+    }
 
     logger.info(`Admin ${req.user._id} created product ${product._id} on behalf of seller ${sellerId}`);
     res.status(201).json({ success: true, product });

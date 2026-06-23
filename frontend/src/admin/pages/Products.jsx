@@ -343,7 +343,7 @@ function CreateProductModal({ onClose, onSave }) {
   const [colorInput, setColorInput] = useState({ name: '', code: '#e0e0e0' });
   const [sizeInput, setSizeInput] = useState('');
   const [typeInput, setTypeInput] = useState('');
-  const [variantInput, setVariantInput] = useState({ label: '', price: '', stock: '' });
+  const [variantInput, setVariantInput] = useState({ label: '', price: '', stock: '1' });
   const [images, setImages] = useState([]);
   const [previews, setPreviews] = useState([]);
   const [mainImageIdx, setMainImageIdx] = useState(0);

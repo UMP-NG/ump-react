@@ -340,12 +340,16 @@ export default function ProductDetail() {
   const hasVariants = Array.isArray(product.variants) && product.variants.length > 0;
   const displayPrice = selectedVariant ? selectedVariant.price : product.price;
   const activeStock = selectedVariant
-    ? selectedVariant.stock
+    ? (selectedVariant.stock ?? 0)
     : hasVariants
-      ? product.variants.reduce((s, v) => s + (v.stock || 0), 0)
+      ? product.variants.reduce((s, v) => s + (v.stock ?? 0), 0)
       : product.stock || 0;
   const totalStock = activeStock;
-  const outOfStock = selectedVariant ? selectedVariant.stock <= 0 : (!hasVariants && activeStock <= 0);
+  const outOfStock = selectedVariant
+    ? (selectedVariant.stock ?? 0) <= 0
+    : hasVariants
+      ? product.variants.every(v => (v.stock ?? 0) <= 0)
+      : activeStock <= 0;
   const lowStock = !outOfStock && activeStock > 0 && activeStock <= 5;
 
   const gallery = (
@@ -497,7 +501,7 @@ export default function ProductDetail() {
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {product.variants.map((v, i) => {
               const active = selectedVariant?.label === v.label;
-              const gone   = v.stock <= 0;
+              const gone   = (v.stock ?? 0) <= 0;
               return (
                 <button key={i} type="button" onClick={() => setSelectedVariant(active ? null : v)} disabled={gone}
                   style={{ display: "flex", justifyContent: "space-between", alignItems: "center",
