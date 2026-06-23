@@ -251,7 +251,7 @@ function QuickEditModal({ product, onClose, onSave, showToast }) {
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.55)", zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }} onClick={onClose}>
       <div className="card" style={{ maxWidth: 560, width: "100%", maxHeight: "90vh", overflowY: "auto", padding: 0 }} onClick={(e) => e.stopPropagation()}>
-        <div style={{ padding: "18px 20px", borderBottom: "1px solid var(--line)", display: "flex", justifyContent: "space-between", alignItems: "center", position: "sticky", top: 0, background: "var(--card)", zIndex: 1 }}>
+        <div style={{ padding: "18px 20px", borderBottom: "1px solid var(--line)", display: "flex", justifyContent: "space-between", alignItems: "center", position: "sticky", top: 0, background: "var(--card-bg)", zIndex: 1 }}>
           <div style={{ fontWeight: 800, fontSize: "1.8rem" }}>Quick Edit</div>
           <button onClick={onClose} style={{ border: "none", background: "none", cursor: "pointer", fontSize: "1.8rem", color: "var(--ink-3)" }}><i className="fas fa-xmark" /></button>
         </div>
@@ -411,7 +411,7 @@ function QuickEditModal({ product, onClose, onSave, showToast }) {
           </div>
         </div>
 
-        <div style={{ padding: "14px 20px", borderTop: "1px solid var(--line)", display: "flex", gap: 10, justifyContent: "flex-end", position: "sticky", bottom: 0, background: "var(--card)" }}>
+        <div style={{ padding: "14px 20px", borderTop: "1px solid var(--line)", display: "flex", gap: 10, justifyContent: "flex-end", position: "sticky", bottom: 0, background: "var(--card-bg)" }}>
           <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
           <button className="btn btn-primary" disabled={saving} onClick={handleSave}>
             {saving ? <i className="fas fa-spinner fa-spin" /> : <><i className="fas fa-check" /> Save Changes</>}
@@ -560,7 +560,7 @@ function ListingModal({ listing, onClose, onSave, showToast }) {
     )}
     <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.55)", zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }} onClick={onClose}>
       <div className="card" style={{ maxWidth: 560, width: "100%", maxHeight: "92vh", overflowY: "auto", padding: 0 }} onClick={(e) => e.stopPropagation()}>
-        <div style={{ padding: "18px 20px", borderBottom: "1px solid var(--line)", display: "flex", justifyContent: "space-between", alignItems: "center", position: "sticky", top: 0, background: "var(--card)", zIndex: 1 }}>
+        <div style={{ padding: "18px 20px", borderBottom: "1px solid var(--line)", display: "flex", justifyContent: "space-between", alignItems: "center", position: "sticky", top: 0, background: "var(--card-bg)", zIndex: 1 }}>
           <div style={{ fontWeight: 800, fontSize: "1.8rem" }}>{listing ? "Edit Listing" : "New Listing"}</div>
           <button onClick={onClose} style={{ border: "none", background: "none", cursor: "pointer", fontSize: "1.8rem", color: "var(--ink-3)" }}><i className="fas fa-xmark" /></button>
         </div>
@@ -775,7 +775,7 @@ function ListingModal({ listing, onClose, onSave, showToast }) {
           </div>
         </div>
 
-        <div style={{ padding: "14px 20px", borderTop: "1px solid var(--line)", display: "flex", gap: 10, justifyContent: "flex-end", position: "sticky", bottom: 0, background: "var(--card)" }}>
+        <div style={{ padding: "14px 20px", borderTop: "1px solid var(--line)", display: "flex", gap: 10, justifyContent: "flex-end", position: "sticky", bottom: 0, background: "var(--card-bg)" }}>
           <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
           <button className="btn btn-primary" disabled={saving} onClick={handleSave}>
             {saving ? <i className="fas fa-spinner fa-spin" /> : listing ? <><i className="fas fa-check" /> Save Changes</> : <><i className="fas fa-plus" /> Add Listing</>}
@@ -982,7 +982,7 @@ function AddProductModal({ onClose, onSave, showToast }) {
     )}
     <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.55)", zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }} onClick={handleClose}>
       <div ref={modalRef} className="card" style={{ maxWidth: 580, width: "100%", maxHeight: "92vh", overflowY: "auto", padding: 0 }} onClick={(e) => e.stopPropagation()}>
-        <div style={{ padding: "18px 20px", borderBottom: "1px solid var(--line)", display: "flex", justifyContent: "space-between", alignItems: "center", position: "sticky", top: 0, background: "var(--card)", zIndex: 1 }}>
+        <div style={{ padding: "18px 20px", borderBottom: "1px solid var(--line)", display: "flex", justifyContent: "space-between", alignItems: "center", position: "sticky", top: 0, background: "var(--card-bg)", zIndex: 1 }}>
           <div style={{ fontWeight: 800, fontSize: "1.8rem" }}>Add Product</div>
           <button onClick={handleClose} style={{ border: "none", background: "none", cursor: "pointer", fontSize: "1.8rem", color: "var(--ink-3)" }}><i className="fas fa-xmark" /></button>
         </div>
@@ -1224,7 +1224,7 @@ function AddProductModal({ onClose, onSave, showToast }) {
           </div>
         )}
 
-        <div style={{ padding: "14px 20px", borderTop: "1px solid var(--line)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, position: "sticky", bottom: 0, background: "var(--card)" }}>
+        <div style={{ padding: "14px 20px", borderTop: "1px solid var(--line)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, position: "sticky", bottom: 0, background: "var(--card-bg)" }}>
           <button className="btn btn-ghost" onClick={handleClose}>Cancel</button>
           <div style={{ display: "flex", gap: 8 }}>
             <button className="btn btn-ghost" onClick={queueProduct} disabled={saving} title="Save this product and clear the form to add another">

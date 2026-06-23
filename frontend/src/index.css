@@ -44,6 +44,7 @@
 
   --nav-h: 72px;
   --nav-h-mob: 64px;
+  --card-bg: var(--white);
 }
 
 [data-theme="dark"] {
@@ -56,6 +57,7 @@
   --ink-3: #94a3b8;
   --ink-4: #64748b;
   --white: #14203a;
+  --card-bg: var(--surface);
 }
 
 /* ── Dark mode: components that use hardcoded light colours ── */

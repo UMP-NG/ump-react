@@ -606,7 +606,7 @@ function SecurityTab({ user, showToast, onAccountDeleted }) {
       {showDeleteModal && (
         <>
           <div onClick={() => setShowDeleteModal(false)} style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.5)", zIndex: 200 }} />
-          <div style={{ position: "fixed", top: "50%", left: "50%", transform: "translate(-50%,-50%)", width: "min(90vw, 420px)", background: "var(--card)", borderRadius: "var(--r-xl)", padding: 24, zIndex: 201, boxShadow: "var(--shadow-deep)" }}>
+          <div style={{ position: "fixed", top: "50%", left: "50%", transform: "translate(-50%,-50%)", width: "min(90vw, 420px)", background: "var(--card-bg)", borderRadius: "var(--r-xl)", padding: 24, zIndex: 201, boxShadow: "var(--shadow-deep)" }}>
             <div style={{ width: 48, height: 48, borderRadius: "50%", background: "#fef2f2", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px" }}>
               <i className="fas fa-triangle-exclamation" style={{ color: "#dc2626", fontSize: "1.8rem" }} />
             </div>
