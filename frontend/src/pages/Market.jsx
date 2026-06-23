@@ -38,7 +38,7 @@ export default function Market() {
   const [pendingCondition, setPendingCondition] = useState(condition);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
-  const PAGE_SIZE = 50;
+  const PAGE_SIZE = 52;
   // Track previous filter values so we can detect changes and reset page atomically
   // within a single effect, avoiding a redundant fetch at the stale page number.
   const prevFilterRef = useRef({ cat, sort, condition });

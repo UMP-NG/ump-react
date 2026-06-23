@@ -180,6 +180,8 @@ function QuickEditModal({ product, onClose, onSave, showToast }) {
     salePrice: product.salePrice != null ? product.salePrice : "",
     saleEndsAt: product.saleEndsAt ? new Date(product.saleEndsAt).toISOString().slice(0, 16) : "",
   });
+  const [variants, setVariants] = useState(Array.isArray(product.variants) ? product.variants : []);
+  const [variantInput, setVariantInput] = useState({ label: "", price: "", stock: "1" });
   const [saving, setSaving] = useState(false);
   const [colorInput, setColorInput] = useState({ name: "", code: "#e0e0e0" });
   const [sizeInput, setSizeInput] = useState("");
@@ -206,11 +208,20 @@ function QuickEditModal({ product, onClose, onSave, showToast }) {
   };
   const removeSpec = (i) => setForm((f) => ({ ...f, specs: f.specs.filter((_, idx) => idx !== i) }));
 
+  const addVariant = () => {
+    if (!variantInput.label.trim() || !variantInput.price || Number(variantInput.price) <= 0) return;
+    setVariants((vs) => [...vs, { label: variantInput.label.trim(), price: Number(variantInput.price), stock: Math.max(0, Number(variantInput.stock) || 0) }]);
+    setVariantInput({ label: "", price: "", stock: "1" });
+  };
+  const removeVariant = (i) => setVariants((vs) => vs.filter((_, idx) => idx !== i));
+
   const markRemoveImage = (publicId) => setForm((f) => ({ ...f, removeImages: [...f.removeImages, publicId] }));
 
   async function handleSave() {
     if (!form.name.trim()) { showToast("Product name is required", "error"); return; }
-    if (!form.price || Number(form.price) <= 0) { showToast("Valid price is required", "error"); return; }
+    if (variants.length === 0 && (!form.price || Number(form.price) <= 0)) {
+      showToast("Valid price is required — or add priced variants", "error"); return;
+    }
     setSaving(true);
     try {
       const specsObj = {};
@@ -219,8 +230,9 @@ function QuickEditModal({ product, onClose, onSave, showToast }) {
         method: "PUT",
         body: {
           name: form.name.trim(),
-          price: Number(form.price),
-          stock: form.stock !== "" ? Number(form.stock) : undefined,
+          price: variants.length > 0 ? Math.min(...variants.map((v) => v.price)) : Number(form.price),
+          stock: variants.length > 0 ? variants.reduce((s, v) => s + (v.stock || 0), 0) : (form.stock !== "" ? Number(form.stock) : undefined),
+          variants,
           desc: form.desc,
           condition: form.condition,
           status: form.status,
@@ -264,12 +276,12 @@ function QuickEditModal({ product, onClose, onSave, showToast }) {
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 14 }}>
             <div>
-              <label style={lSty}>Price (₦)</label>
-              <input style={iSty} type="number" min="0" value={form.price} onChange={set("price")} />
+              <label style={lSty}>Price (₦) {variants.length > 0 && <span style={{ fontWeight: 400, color: "var(--ink-4)" }}>(auto)</span>}</label>
+              <input style={{ ...iSty, opacity: variants.length > 0 ? 0.45 : 1 }} type="number" min="0" value={variants.length > 0 ? Math.min(...variants.map((v) => v.price)) : form.price} onChange={set("price")} readOnly={variants.length > 0} />
             </div>
             <div>
-              <label style={lSty}>Stock</label>
-              <input style={iSty} type="number" min="0" value={form.stock} onChange={set("stock")} />
+              <label style={lSty}>Stock {variants.length > 0 && <span style={{ fontWeight: 400, color: "var(--ink-4)" }}>(auto)</span>}</label>
+              <input style={{ ...iSty, opacity: variants.length > 0 ? 0.45 : 1 }} type="number" min="0" value={variants.length > 0 ? variants.reduce((s, v) => s + (v.stock || 0), 0) : form.stock} onChange={set("stock")} readOnly={variants.length > 0} />
             </div>
             <div>
               <label style={lSty}>Condition</label>
@@ -386,6 +398,39 @@ function QuickEditModal({ product, onClose, onSave, showToast }) {
               <input style={{ ...iSty, flex: 1 }} placeholder="e.g. Eau de Parfum, 50ml, Red" value={typeInput} onChange={(e) => setTypeInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addType()} />
               <button className="btn btn-sm btn-ghost" onClick={addType} style={{ flexShrink: 0 }}>Add</button>
             </div>
+          </div>
+
+          {/* Priced Variants */}
+          <div style={{ borderTop: "1px solid var(--line)", paddingTop: 14, marginBottom: 14 }}>
+            <label style={lSty}>Priced Variants <span style={{ fontWeight: 400, color: "var(--ink-4)" }}>(optional — e.g. 256GB ₦1.3M vs 512GB ₦1.45M)</span></label>
+            {variants.length > 0 && (
+              <div style={{ border: "1px solid var(--line)", borderRadius: 8, overflow: "hidden", marginBottom: 8 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 100px 64px 32px", padding: "6px 10px", background: "var(--surface)", fontSize: "1.05rem", fontWeight: 700, color: "var(--ink-3)", borderBottom: "1px solid var(--line)", gap: 8 }}>
+                  <span>Label</span><span>Price (₦)</span><span>Stock</span><span />
+                </div>
+                {variants.map((v, i) => (
+                  <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 100px 64px 32px", padding: "8px 10px", borderBottom: i < variants.length - 1 ? "1px solid var(--line)" : "none", alignItems: "center", gap: 8 }}>
+                    <span style={{ fontSize: "1.2rem" }}>{v.label}</span>
+                    <span style={{ fontSize: "1.2rem" }}>₦{Number(v.price).toLocaleString()}</span>
+                    <span style={{ fontSize: "1.2rem" }}>{v.stock}</span>
+                    <button onClick={() => removeVariant(i)} style={{ border: "none", background: "none", cursor: "pointer", color: "var(--ink-3)", padding: 4 }}><i className="fas fa-xmark" /></button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 100px 64px auto", gap: 6, alignItems: "center" }}>
+              <input style={iSty} placeholder="Label (e.g. Black 256GB)" value={variantInput.label} onChange={(e) => setVariantInput((v) => ({ ...v, label: e.target.value }))} onKeyDown={(e) => e.key === "Enter" && addVariant()} />
+              <input style={iSty} type="number" placeholder="Price" min="0" value={variantInput.price} onChange={(e) => setVariantInput((v) => ({ ...v, price: e.target.value }))} />
+              <input style={iSty} type="number" placeholder="Stock" min="0" value={variantInput.stock} onChange={(e) => setVariantInput((v) => ({ ...v, stock: e.target.value }))} />
+              <button onClick={addVariant} style={{ padding: "8px 10px", borderRadius: 8, border: "none", background: "var(--accent)", color: "#fff", cursor: "pointer", fontSize: "1.3rem", whiteSpace: "nowrap" }}>
+                <i className="fas fa-plus" /> Add
+              </button>
+            </div>
+            {variants.length > 0 && (
+              <p style={{ margin: "6px 0 0", fontSize: "1.05rem", color: "var(--ink-3)" }}>
+                Price → ₦{Math.min(...variants.map((v) => v.price)).toLocaleString()} (min) · Stock → {variants.reduce((s, v) => s + (v.stock || 0), 0)} (total)
+              </p>
+            )}
           </div>
 
           {/* Specs */}

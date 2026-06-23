@@ -510,8 +510,8 @@ export default function ProductDetail() {
                     border: `2px solid ${active ? "var(--accent)" : "var(--line)"}`,
                     cursor: gone ? "not-allowed" : "pointer", opacity: gone ? 0.5 : 1,
                     fontFamily: "var(--font-sans)", fontSize: "1.3rem" }}>
-                  <span style={{ fontWeight: active ? 700 : 500 }}>{v.label}</span>
-                  <span style={{ fontWeight: 700, color: active ? "var(--accent)" : "var(--ink-1)" }}>{naira(v.price)}</span>
+                  <span style={{ fontWeight: active ? 700 : 500, color: active ? "var(--accent)" : "var(--ink-1)" }}>{v.label}</span>
+                  <span style={{ fontWeight: 700, color: active ? "var(--accent)" : "var(--ink-2)" }}>{naira(v.price)}</span>
                 </button>
               );
             })}

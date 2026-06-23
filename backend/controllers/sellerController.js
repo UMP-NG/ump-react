@@ -145,29 +145,30 @@ export const getAllSellers = async (req, res) => {
 
 export const getSellerById = async (req, res) => {
   try {
+    // Accept both Seller _id and User _id in the URL
     let seller =
-      (await Seller.findById(req.params.id)
-        .populate("user", "email role")
-        .populate(
-          "products",
-          "name price image images description category stock rating"
-        )) ||
-      (await Seller.findOne({ user: req.params.id })
-        .populate("user", "email role")
-        .populate(
-          "products",
-          "name price image images description category stock rating"
-        ));
+      (await Seller.findById(req.params.id).populate("user", "email role")) ||
+      (await Seller.findOne({ user: req.params.id }).populate("user", "email role"));
 
     if (!seller) return res.status(404).json({ message: "Seller not found" });
+
+    // Query products directly from the Product collection so admin-created products
+    // (and any product whose ID was never pushed into Seller.products[]) always appear.
+    const products = await Product.find({
+      seller: seller.user?._id || seller.user,
+      isRemoved: { $ne: true },
+    })
+      .select("name price images category stock rating variants isAvailable")
+      .sort({ createdAt: -1 })
+      .lean();
 
     const currentUserId = req.user?._id?.toString();
     const followersArr = seller.followers || [];
 
-    // Strip financial/sensitive fields before sending to any client
     const { bankDetails: _bd, paystackRecipientCode: _rc, ...sellerData } = seller.toObject();
     res.json({
       ...sellerData,
+      products,
       followersCount: followersArr.length,
       isFollowing: currentUserId ? followersArr.some((f) => f.toString() === currentUserId) : false,
     });
