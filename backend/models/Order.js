@@ -87,7 +87,7 @@ const orderSchema = new mongoose.Schema(
     },
     deliveryMethod: {
       type: String,
-      enum: ["pickup", "shipbubble"],
+      enum: ["pickup", "delivery"],
       default: "pickup",
     },
     shipbubble: {

@@ -319,15 +319,18 @@ function CreateProductModal({ onClose, onSave }) {
   const [colors, setColors] = useState([]);
   const [sizes, setSizes] = useState([]);
   const [types, setTypes] = useState([]);
+  const [variants, setVariants] = useState([]);
   const [colorInput, setColorInput] = useState({ name: '', code: '#e0e0e0' });
   const [sizeInput, setSizeInput] = useState('');
   const [typeInput, setTypeInput] = useState('');
+  const [variantInput, setVariantInput] = useState({ label: '', price: '', stock: '' });
   const [images, setImages] = useState([]);
   const [previews, setPreviews] = useState([]);
   const [staged, setStaged] = useState([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const fileRef = useRef();
+  const modalRef = useRef();
 
   useEffect(() => {
     apiFetch('/api/admins/sellers?limit=100').then(d => setSellers(d?.sellers || [])).catch(() => {});
@@ -354,34 +357,66 @@ function CreateProductModal({ onClose, onSave }) {
   const addColor = () => { if (!colorInput.name.trim()) return; setColors(c => [...c, { ...colorInput }]); setColorInput({ name: '', code: '#e0e0e0' }); };
   const addSize  = () => { const s = sizeInput.trim().toUpperCase(); if (!s) return; setSizes(arr => arr.includes(s) ? arr : [...arr, s]); setSizeInput(''); };
   const addType  = () => { const t = typeInput.trim(); if (!t) return; setTypes(arr => arr.includes(t) ? arr : [...arr, t]); setTypeInput(''); };
+  const addVariant = () => {
+    if (!variantInput.label.trim() || !variantInput.price || Number(variantInput.price) <= 0) return;
+    setVariants(vs => [...vs, { label: variantInput.label.trim(), price: Number(variantInput.price), stock: Math.max(0, Number(variantInput.stock) || 0) }]);
+    setVariantInput({ label: '', price: '', stock: '' });
+  };
+  const removeVariant = (i) => setVariants(vs => vs.filter((_, idx) => idx !== i));
 
   const filteredSellers = sellers.filter(s =>
     !sellerSearch || (s.storeName || s.name || '').toLowerCase().includes(sellerSearch.toLowerCase())
   );
 
+  function showError(msg) {
+    setError(msg);
+    // Scroll the modal to the bottom so the error banner is visible above the sticky footer
+    setTimeout(() => modalRef.current?.scrollTo({ top: modalRef.current.scrollHeight, behavior: 'smooth' }), 30);
+  }
+
   function validate() {
-    if (!form.sellerId) { setError('Please select a seller.'); return false; }
-    if (!form.name.trim()) { setError('Product name is required.'); return false; }
-    if (!form.price || Number(form.price) <= 0) { setError('A valid price is required.'); return false; }
-    if (!images.length) { setError('At least one product image is required.'); return false; }
+    if (!form.sellerId) { showError('Please select a seller.'); return false; }
+    if (!form.name.trim()) { showError('Product name is required.'); return false; }
+    if (variants.length === 0 && (!form.price || Number(form.price) <= 0)) { showError('A valid price is required — or add priced variants below.'); return false; }
+    if (!images.length) { showError('At least one product image is required.'); return false; }
     return true;
   }
 
   function resetFields() {
     // Keep sellerId/sellerSearch and category — usually listing multiple products for the same seller
     setForm(f => ({ ...f, name: '', price: '', stock: '1', desc: '', condition: 'New' }));
-    setColors([]); setSizes([]); setTypes([]);
+    setColors([]); setSizes([]); setTypes([]); setVariants([]);
     setImages([]); setPreviews([]);
     setColorInput({ name: '', code: '#e0e0e0' });
-    setSizeInput(''); setTypeInput('');
+    setSizeInput(''); setTypeInput(''); setVariantInput({ label: '', price: '', stock: '' });
     if (fileRef.current) fileRef.current.value = '';
     setError('');
+  }
+
+  function editQueued(i) {
+    const item = staged[i];
+    setStaged(s => s.filter((_, idx) => idx !== i));
+    setForm(f => ({ ...f, name: item.form.name, price: item.form.price, stock: item.form.stock, desc: item.form.desc, condition: item.form.condition, category: item.form.category }));
+    setColors(item.colors || []);
+    setSizes(item.sizes || []);
+    setTypes(item.types || []);
+    setVariants(item.variants || []);
+    setImages(item.images || []);
+    setPreviews(item.previews || []);
+    setVariantInput({ label: '', price: '', stock: '' });
+    setError('');
+    modalRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function handleClose() {
+    if (staged.length > 0 && !window.confirm(`You have ${staged.length} queued product${staged.length > 1 ? 's' : ''} that haven't been submitted yet. Close anyway? They will be lost.`)) return;
+    onClose();
   }
 
   function queueProduct() {
     setError('');
     if (!validate()) return;
-    setStaged(s => [...s, { form: { ...form }, images: [...images], previews: [...previews], colors: [...colors], sizes: [...sizes], types: [...types] }]);
+    setStaged(s => [...s, { form: { ...form }, images: [...images], previews: [...previews], colors: [...colors], sizes: [...sizes], types: [...types], variants: [...variants] }]);
     resetFields();
   }
 
@@ -389,8 +424,12 @@ function CreateProductModal({ onClose, onSave }) {
     const fd = new FormData();
     fd.append('sellerId', item.form.sellerId);
     fd.append('name', item.form.name.trim());
-    fd.append('price', Number(item.form.price));
-    fd.append('stock', Number(item.form.stock) || 1);
+    if (item.variants?.length > 0) {
+      fd.append('variants', JSON.stringify(item.variants));
+    } else {
+      fd.append('price', Number(item.form.price));
+      fd.append('stock', Number(item.form.stock) || 1);
+    }
     if (item.form.desc) fd.append('desc', item.form.desc);
     fd.append('condition', item.form.condition);
     if (item.form.category) fd.append('category', item.form.category);
@@ -406,9 +445,9 @@ function CreateProductModal({ onClose, onSave }) {
     const allToSubmit = [...staged];
     if (form.name.trim() || images.length) {
       if (!validate()) return;
-      allToSubmit.push({ form: { ...form }, images: [...images], previews: [...previews], colors: [...colors], sizes: [...sizes], types: [...types] });
+      allToSubmit.push({ form: { ...form }, images: [...images], previews: [...previews], colors: [...colors], sizes: [...sizes], types: [...types], variants: [...variants] });
     }
-    if (!allToSubmit.length) { setError('Please fill in at least one product.'); return; }
+    if (!allToSubmit.length) { showError('Please fill in at least one product.'); return; }
     setSaving(true);
     const results = await Promise.allSettled(
       allToSubmit.map(item => apiFetch('/api/admins/products', { method: 'POST', body: buildFormData(item) }))
@@ -419,11 +458,10 @@ function CreateProductModal({ onClose, onSave }) {
     if (failedIdxs.length === 0) {
       onSave();
     } else if (successCount > 0) {
-      // Re-stage only the failed items so a retry won't duplicate the successes
       setStaged(failedIdxs.map(i => allToSubmit[i]));
-      setError(`${successCount} product${successCount > 1 ? 's' : ''} created. ${failedIdxs.length} failed — review the queued items and resubmit.`);
+      showError(`${successCount} product${successCount > 1 ? 's' : ''} created. ${failedIdxs.length} failed — review the queued items and resubmit.`);
     } else {
-      setError(results[0]?.reason?.message || 'Failed to create product(s). Please try again.');
+      showError(results[0]?.reason?.message || 'Failed to create product(s). Please try again.');
     }
   }
 
@@ -431,11 +469,11 @@ function CreateProductModal({ onClose, onSave }) {
   const lSty = { fontSize: '1.15rem', fontWeight: 600, color: 'var(--ink-3)', marginBottom: 4, display: 'block' };
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.6)', zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }} onClick={onClose}>
-      <div style={{ background: 'var(--white)', borderRadius: 12, maxWidth: 580, width: '100%', maxHeight: '90vh', overflowY: 'auto', padding: 0 }} onClick={e => e.stopPropagation()}>
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.6)', zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }} onClick={handleClose}>
+      <div ref={modalRef} style={{ background: 'var(--white)', borderRadius: 12, maxWidth: 580, width: '100%', maxHeight: '90vh', overflowY: 'auto', padding: 0 }} onClick={e => e.stopPropagation()}>
         <div style={{ padding: '18px 20px', borderBottom: '1px solid var(--line)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: 0, background: 'var(--white)', zIndex: 1 }}>
           <div style={{ fontWeight: 800, fontSize: '1.8rem' }}>List Product for Seller</div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.6rem', color: 'var(--ink-3)' }}><i className="fa-solid fa-xmark"></i></button>
+          <button onClick={handleClose} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.6rem', color: 'var(--ink-3)' }}><i className="fa-solid fa-xmark"></i></button>
         </div>
 
         <div style={{ padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -444,16 +482,21 @@ function CreateProductModal({ onClose, onSave }) {
             <div style={{ background: 'var(--surface)', borderRadius: 8, padding: '10px 12px', border: '1px solid var(--line)' }}>
               <div style={{ fontSize: '1.1rem', fontWeight: 700, color: 'var(--ink-2)', marginBottom: 8 }}>
                 <i className="fa-solid fa-layer-group" style={{ marginRight: 6 }}></i>
-                Queued ({staged.length})
+                Queued ({staged.length}) — click <i className="fa-solid fa-pen-to-square" style={{ fontSize: '0.9em' }}></i> to edit or <i className="fa-solid fa-check" style={{ fontSize: '0.9em' }}></i> Submit All to save
               </div>
               {staged.map((item, i) => (
                 <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderBottom: i < staged.length - 1 ? '1px solid var(--line)' : 'none' }}>
                   {item.previews[0] && <img src={item.previews[0]} alt="" style={{ width: 36, height: 36, borderRadius: 6, objectFit: 'cover', flexShrink: 0 }} />}
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: '1.2rem', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.form.name}</div>
-                    <div style={{ fontSize: '1.1rem', color: 'var(--ink-3)' }}>₦{Number(item.form.price).toLocaleString()}</div>
+                    <div style={{ fontSize: '1.1rem', color: 'var(--ink-3)' }}>
+                      {item.variants?.length > 0 ? `${item.variants.length} variants · from ₦${Math.min(...item.variants.map(v => v.price)).toLocaleString()}` : `₦${Number(item.form.price).toLocaleString()}`}
+                    </div>
                   </div>
-                  <button onClick={() => setStaged(s => s.filter((_, idx) => idx !== i))} style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--ink-3)', padding: 4, flexShrink: 0 }}>
+                  <button onClick={() => editQueued(i)} title="Edit this queued product" style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--accent)', padding: 4, flexShrink: 0 }}>
+                    <i className="fa-solid fa-pen-to-square"></i>
+                  </button>
+                  <button onClick={() => setStaged(s => s.filter((_, idx) => idx !== i))} title="Remove from queue" style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--ink-3)', padding: 4, flexShrink: 0 }}>
                     <i className="fa-solid fa-xmark"></i>
                   </button>
                 </div>
@@ -485,15 +528,17 @@ function CreateProductModal({ onClose, onSave }) {
               <input style={iSty} value={form.name} onChange={set('name')} placeholder="Product name" />
             </div>
             <div>
-              <label style={lSty}>Price (₦) <span style={{ color: '#ef4444' }}>*</span></label>
-              <input style={iSty} type="number" min="0" value={form.price} onChange={set('price')} placeholder="0" />
+              <label style={lSty}>
+                Price (₦) {variants.length === 0 ? <span style={{ color: '#ef4444' }}>*</span> : <span style={{ fontWeight: 400, color: 'var(--ink-3)' }}>(auto)</span>}
+              </label>
+              <input style={{ ...iSty, opacity: variants.length > 0 ? 0.45 : 1 }} type="number" min="0" value={variants.length > 0 ? Math.min(...variants.map(v => v.price)) : form.price} onChange={set('price')} placeholder="0" readOnly={variants.length > 0} />
             </div>
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
             <div>
-              <label style={lSty}>Stock</label>
-              <input style={iSty} type="number" min="0" value={form.stock} onChange={set('stock')} placeholder="1" />
+              <label style={lSty}>Stock {variants.length > 0 ? <span style={{ fontWeight: 400, color: 'var(--ink-3)' }}>(auto)</span> : ''}</label>
+              <input style={{ ...iSty, opacity: variants.length > 0 ? 0.45 : 1 }} type="number" min="0" value={variants.length > 0 ? variants.reduce((s, v) => s + (v.stock || 0), 0) : form.stock} onChange={set('stock')} placeholder="1" readOnly={variants.length > 0} />
             </div>
             <div>
               <label style={lSty}>Condition</label>
@@ -578,7 +623,7 @@ function CreateProductModal({ onClose, onSave }) {
           </div>
 
           {/* Types */}
-          <div>
+          <div style={{ marginBottom: 14 }}>
             <label style={lSty}>Types / Variants <span style={{ fontWeight: 400, color: 'var(--ink-3)' }}>(optional)</span></label>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 6 }}>
               {types.map((t, i) => (
@@ -594,15 +639,53 @@ function CreateProductModal({ onClose, onSave }) {
             </div>
           </div>
 
-          {error && (
-            <div style={{ padding: '10px 14px', background: 'rgba(239,68,68,.08)', border: '1px solid rgba(239,68,68,.3)', borderRadius: 8, fontSize: '1.25rem', color: '#dc2626' }}>
-              {error}
+          {/* Priced Variants */}
+          <div style={{ borderTop: '1px solid var(--line)', paddingTop: 14 }}>
+            <label style={lSty}>Priced Variants <span style={{ fontWeight: 400, color: 'var(--ink-3)' }}>(optional — e.g. storage sizes, colour tiers with different prices)</span></label>
+            <p style={{ margin: '0 0 10px', fontSize: '1.1rem', color: 'var(--ink-3)', lineHeight: 1.5 }}>
+              Use this when the same product comes in options that have <strong>different prices</strong> — e.g. Samsung S26 Ultra 256GB ₦1.3M vs 512GB ₦1.45M, or iPhone 17 Black vs Lavender. Each variant gets its own price and stock.
+            </p>
+            {variants.length > 0 && (
+              <div style={{ border: '1px solid var(--line)', borderRadius: 8, overflow: 'hidden', marginBottom: 10 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 100px 64px 32px', padding: '6px 10px', background: 'var(--surface)', fontSize: '1.05rem', fontWeight: 700, color: 'var(--ink-3)', borderBottom: '1px solid var(--line)', gap: 8 }}>
+                  <span>Label</span><span>Price (₦)</span><span>Stock</span><span></span>
+                </div>
+                {variants.map((v, i) => (
+                  <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 100px 64px 32px', padding: '8px 10px', borderBottom: i < variants.length - 1 ? '1px solid var(--line)' : 'none', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: '1.2rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v.label}</span>
+                    <span style={{ fontSize: '1.2rem' }}>₦{Number(v.price).toLocaleString()}</span>
+                    <span style={{ fontSize: '1.2rem' }}>{v.stock}</span>
+                    <button onClick={() => removeVariant(i)} style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--ink-3)', padding: 4 }}><i className="fa-solid fa-xmark"></i></button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 100px 64px auto', gap: 6, alignItems: 'center' }}>
+              <input style={iSty} placeholder="Label (e.g. Black 256GB)" value={variantInput.label} onChange={e => setVariantInput(v => ({ ...v, label: e.target.value }))} onKeyDown={e => e.key === 'Enter' && addVariant()} />
+              <input style={iSty} type="number" placeholder="Price" min="0" value={variantInput.price} onChange={e => setVariantInput(v => ({ ...v, price: e.target.value }))} />
+              <input style={iSty} type="number" placeholder="Stock" min="0" value={variantInput.stock} onChange={e => setVariantInput(v => ({ ...v, stock: e.target.value }))} />
+              <button onClick={addVariant} style={{ padding: '8px 10px', borderRadius: 8, border: 'none', background: 'var(--accent)', color: '#fff', cursor: 'pointer', fontSize: '1.3rem', whiteSpace: 'nowrap' }}>
+                <i className="fa-solid fa-plus"></i> Add
+              </button>
             </div>
-          )}
+            {variants.length > 0 && (
+              <p style={{ margin: '6px 0 0', fontSize: '1.05rem', color: 'var(--ink-3)' }}>
+                Price will be ₦{Math.min(...variants.map(v => v.price)).toLocaleString()} (min) · Stock will be {variants.reduce((s, v) => s + (v.stock || 0), 0)} (total)
+              </p>
+            )}
+          </div>
+
         </div>
 
+        {error && (
+          <div style={{ margin: '0 20px 12px', padding: '10px 14px', background: 'rgba(239,68,68,.08)', border: '1px solid rgba(239,68,68,.3)', borderRadius: 8, fontSize: '1.25rem', color: '#dc2626', display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+            <i className="fa-solid fa-circle-exclamation" style={{ marginTop: 2, flexShrink: 0 }} />
+            <span>{error}</span>
+          </div>
+        )}
+
         <div style={{ padding: '14px 20px', borderTop: '1px solid var(--line)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, position: 'sticky', bottom: 0, background: 'var(--white)' }}>
-          <button className="abtn ghost" onClick={onClose} disabled={saving}>Cancel</button>
+          <button className="abtn ghost" onClick={handleClose} disabled={saving}>Cancel</button>
           <div style={{ display: 'flex', gap: 8 }}>
             <button className="abtn ghost" onClick={queueProduct} disabled={saving} title="Save this product and clear the form to add another">
               <i className="fa-solid fa-layer-group"></i> Queue &amp; Add Another

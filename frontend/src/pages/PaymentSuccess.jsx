@@ -237,6 +237,16 @@ export default function PaymentSuccess() {
                   </div>
                 )}
               </div>
+              {o.seller && (
+                <button
+                  className="btn btn-ghost"
+                  style={{ marginTop: 10, width: "100%", fontSize: "1.2rem", gap: 6 }}
+                  onClick={() => navigate(`/messages?with=${o.seller}&name=${encodeURIComponent(o.storeName || "Seller")}`)}
+                >
+                  <i className="fas fa-comment-dots" />
+                  {o.deliveryMethod === "pickup" ? "Message seller about pickup" : "Message seller about delivery"}
+                </button>
+              )}
             </div>
           ))}
 

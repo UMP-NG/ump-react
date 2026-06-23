@@ -31,10 +31,13 @@ export async function confirmAllOrders(payment) {
       notify(o.seller, {
         type: "order",
         title: "New order received",
-        message: `Payment confirmed for order #${shortId} — ₦${o.totalAmount.toLocaleString()}. Ready to fulfil.`,
+        message: `Payment confirmed for order #${shortId}. Product payment will be released when the buyer confirms delivery.`,
         link: "/seller-dashboard",
       });
-      await Seller.findOneAndUpdate({ user: o.seller }, { $inc: { totalOrders: 1 } });
+      await Seller.findOneAndUpdate(
+        { user: o.seller },
+        { $inc: { totalOrders: 1 } }
+      );
     }
   }
   // Clear the buyer's cart now that payment is confirmed — non-fatal if it fails

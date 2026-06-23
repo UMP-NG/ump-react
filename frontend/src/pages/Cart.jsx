@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import Navbar, { useTheme } from "../components/Navbar";
 import Footer from "../components/Footer";
@@ -29,20 +29,16 @@ export default function Cart() {
   const [couponLoading, setCouponLoading] = useState(false);
   const [provider, setProvider] = useState("flutterwave");
   const [showDeliveryConfirm, setShowDeliveryConfirm] = useState(false);
-  // { [sellerId]: { method:"pickup"|"shipbubble", fee:number, serviceCode:string } }
+  // { [sellerId]: { method:"pickup"|"delivery", fee:number } }
   const [deliverySelections, setDeliverySelections] = useState({});
-  // { [sellerId]: { storeName, delivery: { pickup, shipbubble } } }
+  // { [sellerId]: { storeName, delivery: { pickup } } }
   const [sellerDeliveryConfigs, setSellerDeliveryConfigs] = useState({});
-  // { [sellerId]: { rates:[], loading:bool, error:string } }
-  const [shipbubbleRates, setShipbubbleRates] = useState({});
-  const shipbubbleDebounce = useRef(null);
-  const [cartSbStates, setCartSbStates] = useState([]);
-  const [cartSbLocLoading, setCartSbLocLoading] = useState(false);
   const [linkLoading, setLinkLoading] = useState(false);
   const [payLink, setPayLink] = useState("");
   const [showLinkSheet, setShowLinkSheet] = useState(false);
   const [linkCopied, setLinkCopied] = useState(false);
   const [savedAddresses, setSavedAddresses] = useState([]);
+  const [saveAddr, setSaveAddr] = useState(true);
 
   useEffect(() => {
     apiFetch("/api/cart")
@@ -86,10 +82,8 @@ export default function Cart() {
       const defaults = {};
       results.forEach(({ sid, storeName, delivery, address, location }) => {
         configs[sid] = { storeName, delivery, address, location };
-        // Default to first enabled method
-        const method = delivery?.pickup?.enabled !== false ? "pickup"
-          : delivery?.shipbubble?.enabled ? "shipbubble"
-          : "pickup";
+        // Default to pickup
+        const method = delivery?.pickup?.enabled !== false ? "pickup" : "delivery";
         defaults[sid] = { method, fee: 0, serviceCode: "" };
       });
       setSellerDeliveryConfigs(configs);
@@ -97,70 +91,6 @@ export default function Cart() {
     });
   }, [step, items]);
 
-  // Fetch Shipbubble state list as soon as step 2 is entered — always, so the
-  // state/city fields always show dropdowns regardless of the sellers' delivery methods.
-  useEffect(() => {
-    if (step !== 2 || cartSbStates.length) return;
-    setCartSbLocLoading(true);
-    apiFetch("/api/delivery/locations")
-      .then((d) => setCartSbStates(d.data || []))
-      .catch(() => {})
-      .finally(() => setCartSbLocLoading(false));
-  }, [step]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Wipe stale service selections when the buyer changes their delivery city/state
-  useEffect(() => {
-    setDeliverySelections((prev) => {
-      const next = { ...prev };
-      let changed = false;
-      for (const sid of Object.keys(next)) {
-        if (next[sid]?.method === "shipbubble" && (next[sid].fee || next[sid].serviceCode)) {
-          next[sid] = { ...next[sid], fee: 0, serviceCode: "" };
-          changed = true;
-        }
-      }
-      return changed ? next : prev;
-    });
-    setShipbubbleRates({});
-  }, [delivery.city, delivery.state]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Debounced Shipbubble rate fetch — only fetches sellers that need rates
-  // (newly switched to Shipbubble, or address changed wiping existing rates)
-  useEffect(() => {
-    clearTimeout(shipbubbleDebounce.current);
-    if (!delivery.city || !delivery.state) return;
-    // Only fetch for sellers on shipbubble that don't already have rates loaded
-    const needsFetch = Object.entries(deliverySelections)
-      .filter(([sid, sel]) => {
-        if (sel.method !== "shipbubble") return false;
-        const existing = shipbubbleRates[sid];
-        return !existing || (!existing.loading && !existing.rates?.length && !existing.error);
-      })
-      .map(([sid]) => {
-        // Sum quantities for this seller so the backend can estimate a realistic weight
-        const totalQty = items
-          .filter((it) => {
-            const s = it.product?.seller;
-            return (typeof s === "object" ? s?._id : s)?.toString() === sid;
-          })
-          .reduce((sum, it) => sum + (it.quantity || 1), 0);
-        return { sid, itemCount: Math.max(1, totalQty) };
-      });
-    if (!needsFetch.length) return;
-
-    shipbubbleDebounce.current = setTimeout(() => {
-      needsFetch.forEach(({ sid, itemCount }) => {
-        setShipbubbleRates((prev) => ({ ...prev, [sid]: { ...prev[sid], loading: true, error: "" } }));
-        apiFetch(
-          `/api/delivery/quote?sellerId=${sid}&itemCount=${itemCount}&buyerName=${encodeURIComponent(delivery.name)}&buyerPhone=${encodeURIComponent(delivery.phone)}&buyerStreet=${encodeURIComponent(delivery.street)}&buyerCity=${encodeURIComponent(delivery.city)}&buyerState=${encodeURIComponent(delivery.state)}`
-        )
-          .then((d) => setShipbubbleRates((prev) => ({ ...prev, [sid]: { rates: d.rates || [], loading: false, error: "" } })))
-          .catch((err) => setShipbubbleRates((prev) => ({ ...prev, [sid]: { rates: [], loading: false, error: err?.message || "Failed to load rates" } })));
-      });
-    }, 900);
-
-    return () => clearTimeout(shipbubbleDebounce.current);
-  }, [deliverySelections, delivery.city, delivery.state, delivery.name, delivery.phone, delivery.street]); // eslint-disable-line
 
   const sub = items.reduce((s, i) => {
     const unitPrice = i.negotiatedPrice || i.product?.price || i.price || 0;
@@ -239,14 +169,6 @@ export default function Cart() {
     for (const sid of sellerIds) {
       const sel = deliverySelections[sid];
       if (!sel) { setStepError("Please select a delivery method for all stores."); return; }
-      if (sel.method === "shipbubble") {
-        const rateData = shipbubbleRates[sid];
-        if (!sel.serviceCode) {
-          if (rateData?.loading) { setStepError("Fetching courier rates — please wait a moment."); return; }
-          setStepError(`Please select a courier for ${sellerDeliveryConfigs[sid]?.storeName || "one of the stores"}.`);
-          return;
-        }
-      }
     }
 
     setStepError("");
@@ -298,6 +220,29 @@ export default function Cart() {
 
       // Track these so PaymentSuccess can cancel them if payment is abandoned
       sessionStorage.setItem("ump_pending_orders", JSON.stringify(orderIds));
+
+      // Auto-save address for future checkouts (fire-and-forget, skip if already saved)
+      if (saveAddr && delivery.name && delivery.street) {
+        const alreadySaved = savedAddresses.some(
+          (a) => a.address?.trim().toLowerCase() === delivery.street.trim().toLowerCase() && a.city?.toLowerCase() === delivery.city.toLowerCase()
+        );
+        if (!alreadySaved) {
+          apiFetch("/api/auth/addresses", {
+            method: "POST",
+            body: {
+              label: delivery.area || delivery.city,
+              name: delivery.name,
+              phone: delivery.phone,
+              address: delivery.street,
+              building: delivery.building,
+              area: delivery.area,
+              city: delivery.city,
+              state: delivery.state,
+              landmark: delivery.landmark,
+            },
+          }).then((d) => setSavedAddresses(d.addresses || savedAddresses)).catch(() => {});
+        }
+      }
 
       if (provider === "flutterwave") {
         const payRes = await apiFetch("/api/payments/flw/initialize", {
@@ -382,11 +327,21 @@ export default function Cart() {
                       const img = getImageUrl(p.images?.[0]);
                       return (
                         <div key={itemId} className="card" style={{ padding: 12, display: "flex", gap: 12, alignItems: "center" }}>
-                          <div style={{ width: 72, height: 72, borderRadius: 12, overflow: "hidden", flexShrink: 0 }}>
-                            {img ? <img src={img} alt={p.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <Ph kind={p.category?.name?.toLowerCase() || "default"} />}
-                          </div>
+                          <button
+                            type="button"
+                            onClick={() => productId && navigate(`/products/${productId}`)}
+                            style={{ width: 72, height: 72, borderRadius: 12, overflow: "hidden", flexShrink: 0, padding: 0, border: "none", cursor: productId ? "pointer" : "default", background: "none" }}
+                          >
+                            {img ? <img src={img} alt={p.name} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} /> : <Ph kind={p.category?.name?.toLowerCase() || "default"} />}
+                          </button>
                           <div style={{ flex: 1, minWidth: 0 }}>
-                            <div style={{ fontSize: "1.3rem", fontWeight: 600, lineHeight: 1.3 }}>{p.name}</div>
+                            <div
+                              role="button"
+                              tabIndex={0}
+                              onClick={() => productId && navigate(`/products/${productId}`)}
+                              onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && productId && navigate(`/products/${productId}`)}
+                              style={{ fontSize: "1.3rem", fontWeight: 600, lineHeight: 1.3, cursor: productId ? "pointer" : "default", display: "inline" }}
+                            >{p.name}</div>
                             {(it.selectedColor || it.selectedSize || it.selectedType) && (
                               <div style={{ fontSize: "1.1rem", color: "var(--ink-3)", marginTop: 2, display: "flex", flexWrap: "wrap", gap: 4 }}>
                                 {it.selectedColor && <span style={{ background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 20, padding: "1px 7px" }}>{it.selectedColor}</span>}
@@ -518,7 +473,7 @@ export default function Cart() {
                       <button
                         key={addr._id}
                         type="button"
-                        onClick={() => setDelivery((d) => ({ ...d, name: addr.name || d.name, phone: addr.phone || d.phone, street: addr.address || d.street, city: addr.city || d.city, state: addr.state || d.state }))}
+                        onClick={() => setDelivery((d) => ({ ...d, name: addr.name || d.name, phone: addr.phone || d.phone, street: addr.address || d.street, building: addr.building || d.building, area: addr.area || d.area, city: addr.city || d.city, state: addr.state || d.state, landmark: addr.landmark || d.landmark }))}
                         style={{ textAlign: "left", padding: "10px 12px", borderRadius: "var(--r-md)", border: "1px solid var(--line)", background: "var(--surface)", cursor: "pointer", fontFamily: "var(--font-sans)" }}
                       >
                         <div style={{ fontWeight: 700, fontSize: "1.2rem" }}>{addr.label || addr.name}</div>
@@ -547,13 +502,10 @@ export default function Cart() {
                 <div style={{ height: 12 }} />
                 <div style={{ display: "flex", gap: 10 }}>
                   <div style={{ flex: 1 }}>
-                    <div className="label">State {cartSbLocLoading && <i className="fas fa-circle-notch fa-spin" style={{ fontSize: "0.9rem", marginLeft: 4 }} />}</div>
-                    <select className="input" value={delivery.state}
-                      onChange={(e) => setDelivery({ ...delivery, state: e.target.value, city: "" })}
-                      disabled={cartSbLocLoading}>
-                      <option value="">{cartSbLocLoading ? "Loading states…" : "Select state"}</option>
-                      {cartSbStates.map((s) => <option key={s.code || s.state_code} value={s.name}>{s.name}</option>)}
-                    </select>
+                    <div className="label">State</div>
+                    <input className="input" value={delivery.state}
+                      onChange={(e) => setDelivery({ ...delivery, state: e.target.value })}
+                      placeholder="e.g. Lagos" />
                   </div>
                   <div style={{ flex: 1 }}>
                     <div className="label">City *</div>
@@ -568,6 +520,11 @@ export default function Cart() {
                 <div style={{ height: 12 }} />
                 <div className="label">Delivery note (optional)</div>
                 <textarea className="textarea" value={delivery.notes} onChange={(e) => setDelivery({ ...delivery, notes: e.target.value })} placeholder="Leave at the gate, call on arrival, etc." />
+                <div style={{ height: 12 }} />
+                <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", fontSize: "1.2rem", color: "var(--ink-2)" }}>
+                  <input type="checkbox" checked={saveAddr} onChange={(e) => setSaveAddr(e.target.checked)} style={{ width: 16, height: 16, accentColor: "var(--accent)", cursor: "pointer" }} />
+                  Save this address for faster checkout next time
+                </label>
               </div>
 
               {/* Per-seller delivery method selection */}
@@ -576,7 +533,7 @@ export default function Cart() {
                 const d   = cfg.delivery || {};
                 const opts = [
                   d.pickup?.enabled !== false && { value: "pickup", icon: "fa-person-walking", label: "Pickup", fee: 0, sub: "Collect from seller" },
-                  d.shipbubble?.enabled && { value: "shipbubble", icon: "fa-truck", label: "Courier", fee: sel.method === "shipbubble" && sel.fee ? sel.fee : null, sub: "Calculated by courier" },
+                  { value: "delivery", icon: "fa-truck", label: "Delivery", fee: null, sub: "Cost arranged with seller" },
                 ].filter(Boolean);
 
                 if (!opts.length) return null;
@@ -593,10 +550,7 @@ export default function Cart() {
                           key={opt.value}
                           type="button"
                           onClick={() => {
-                            setDeliverySelections((prev) => ({ ...prev, [sid]: { method: opt.value, fee: 0, serviceCode: "" } }));
-                            if (opt.value !== "shipbubble") {
-                              setShipbubbleRates((prev) => ({ ...prev, [sid]: { rates: [], loading: false, error: "" } }));
-                            }
+                            setDeliverySelections((prev) => ({ ...prev, [sid]: { method: opt.value, fee: 0 } }));
                           }}
                           style={{
                             flex: "1 1 120px", padding: "10px 10px", textAlign: "center", cursor: "pointer",
@@ -608,9 +562,7 @@ export default function Cart() {
                           <i className={`fas ${opt.icon}`} style={{ fontSize: "1.4rem", color: sel.method === opt.value ? "var(--accent)" : "var(--ink-3)", marginBottom: 4, display: "block" }} />
                           <div style={{ fontWeight: 700, fontSize: "1.2rem" }}>{opt.label}</div>
                           <div style={{ fontSize: "1.1rem", color: "var(--ink-3)", marginTop: 2 }}>
-                            {opt.value === "shipbubble" && sel.method === "shipbubble" && sel.fee
-                              ? naira(sel.fee)
-                              : opt.fee != null ? (opt.fee === 0 ? "Free" : naira(opt.fee)) : opt.sub}
+                            {opt.fee === null ? opt.sub : opt.fee === 0 ? "Free" : naira(opt.fee)}
                           </div>
                         </button>
                       ))}
@@ -623,69 +575,21 @@ export default function Cart() {
                         {d.pickup?.instructions
                           ? d.pickup.instructions
                           : (() => {
-                              const sb = cfg.delivery?.shipbubble?.pickupAddress;
-                              const sbAddr = sb ? [sb.street, sb.city, sb.state].filter(Boolean).join(", ") : "";
                               const storeAddr = cfg.address || cfg.location;
-                              const addr = sbAddr || storeAddr;
-                              return addr
-                                ? `Pickup location: ${addr}`
+                              return storeAddr
+                                ? `Pickup location: ${storeAddr}`
                                 : "Contact seller to arrange pickup location.";
                             })()}
                       </div>
                     )}
 
-                    {/* Shipbubble courier selection */}
-                    {sel.method === "shipbubble" && (() => {
-                      const rateData = shipbubbleRates[sid] || {};
-                      if (rateData.loading) return (
-                        <div style={{ marginTop: 10, textAlign: "center", color: "var(--ink-3)", fontSize: "1.2rem" }}>
-                          <i className="fas fa-spinner fa-spin" style={{ marginRight: 6 }} />Fetching courier rates…
-                        </div>
-                      );
-                      if (rateData.error) {
-                        const isAddressError = /city|state|address|location/i.test(rateData.error);
-                        return (
-                          <div style={{ marginTop: 10, padding: "10px 12px", background: "rgba(220,38,38,.1)", border: "1px solid rgba(220,38,38,.3)", borderRadius: "var(--r-md)", fontSize: "1.2rem", color: "#ef4444" }}>
-                            <i className="fas fa-circle-exclamation" style={{ marginRight: 6 }} />
-                            {rateData.error}
-                            {isAddressError && " — check your city & state above and retry"}
-                          </div>
-                        );
-                      }
-                      if (!rateData.rates?.length) return (
-                        <div style={{ marginTop: 10, padding: "10px 12px", background: "rgba(245,158,11,.08)", border: "1px solid rgba(245,158,11,.3)", borderRadius: "var(--r-md)", fontSize: "1.2rem", color: "var(--ink-2)" }}>
-                          <i className="fas fa-circle-info" style={{ color: "#f59e0b", marginRight: 6 }} />Enter your city &amp; state above to see courier rates
-                        </div>
-                      );
-                      return (
-                        <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 8 }}>
-                          {rateData.rates.map((r) => (
-                            <button
-                              key={r.serviceCode}
-                              type="button"
-                              onClick={() => setDeliverySelections((prev) => ({ ...prev, [sid]: { method: "shipbubble", fee: r.amount, serviceCode: r.serviceCode } }))}
-                              style={{
-                                display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", cursor: "pointer",
-                                border: `2px solid ${sel.serviceCode === r.serviceCode ? "var(--accent)" : "var(--line)"}`,
-                                borderRadius: "var(--r-md)", background: sel.serviceCode === r.serviceCode ? "rgba(249,115,22,.12)" : "transparent",
-                                color: "var(--ink-1)",
-                              }}
-                            >
-                              {r.logoUrl && (
-                                <div style={{ width: 32, height: 32, flexShrink: 0, borderRadius: 6, background: "white", display: "flex", alignItems: "center", justifyContent: "center", padding: 2 }}>
-                                  <img src={r.logoUrl} alt={r.courierName} style={{ width: 28, height: 28, objectFit: "contain" }} />
-                                </div>
-                              )}
-                              <div style={{ flex: 1, textAlign: "left" }}>
-                                <div style={{ fontWeight: 700, fontSize: "1.2rem", color: "var(--ink-1)" }}>{r.courierName}</div>
-                                {r.estimatedDays && <div style={{ fontSize: "1.1rem", color: "var(--ink-3)" }}>{r.estimatedDays}</div>}
-                              </div>
-                              <div style={{ fontWeight: 800, fontSize: "1.3rem", color: "var(--accent)", flexShrink: 0 }}>{naira(r.amount)}</div>
-                            </button>
-                          ))}
-                        </div>
-                      );
-                    })()}
+                    {/* Delivery info */}
+                    {sel.method === "delivery" && (
+                      <div style={{ marginTop: 10, padding: "10px 12px", background: "rgba(59,130,246,.06)", border: "1px solid rgba(59,130,246,.2)", borderRadius: "var(--r-md)", fontSize: "1.2rem", color: "var(--ink-2)" }}>
+                        <i className="fas fa-circle-info" style={{ color: "#3b82f6", marginRight: 6 }} />
+                        After payment, message the seller to agree on a delivery price and arrange logistics.
+                      </div>
+                    )}
                   </div>
                 );
               })}

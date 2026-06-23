@@ -13,7 +13,6 @@ import cloudinary from "../config/cloudinary.js";
 import { audit } from "../utils/auditLog.js";
 import { notify } from "../utils/notify.js";
 import logger from "../utils/logger.js";
-import { getRates } from "../utils/shipbubble.js";
 
 // Read platform fee settings from Config once per request (cached in local var)
 async function getFeeConfig() {
@@ -125,9 +124,9 @@ export const checkoutCart = async (req, res) => {
     }
 
     let { paymentMethod, shippingAddress, deliverySelections, creditToUse, couponId } = req.body;
-    // deliverySelections: { [sellerId]: { method: "pickup"|"shipbubble", fee: number } }
+    // deliverySelections: { [sellerId]: { method: "pickup"|"delivery", fee: number } }
     deliverySelections = deliverySelections || {};
-    const VALID_METHODS = ["pickup", "shipbubble"];
+    const VALID_METHODS = ["pickup", "delivery"];
     paymentMethod = paymentMethod?.toLowerCase().trim();
 
     const PAYMENT_MAP = {
@@ -257,49 +256,8 @@ export const checkoutCart = async (req, res) => {
 
       const sellerDoc = await Seller.findOne({ user: sid }).select("delivery storeName").lean();
 
-      // Shipbubble fee: never trust the client-sent amount.
-      // Re-fetch live rates from Shipbubble and match by serviceCode so the
-      // price is always what Shipbubble charged at the time of checkout.
-      // Never silently fall back to pickup — if buyer selected Shipbubble, charge it or error.
-      let orderDeliveryFee = 0;
-      if (requestedMethod === "shipbubble") {
-        if (!sel.serviceCode) {
-          return res.status(400).json({ message: "A courier service must be selected for Shipbubble delivery" });
-        }
-        const pickup = sellerDoc?.delivery?.shipbubble?.pickupAddress;
-        if (!pickup?.city || !pickup?.state) {
-          return res.status(400).json({ message: "Seller has not configured a courier pickup address — please choose pickup instead." });
-        }
-        let liveRates;
-        try {
-          liveRates = await getRates({
-            sender: {
-              name:   pickup.name   || sellerDoc?.storeName || "Seller",
-              email:  pickup.email  || "",
-              phone:  pickup.phone  || "",
-              street: pickup.street || "",
-              city:   pickup.city,
-              state:  pickup.state,
-            },
-            recipient: {
-              name:   shippingAddress?.name  || "Buyer",
-              phone:  shippingAddress?.phone || "",
-              street: shippingAddress?.address || shippingAddress?.street || "",
-              city:   shippingAddress?.city   || "",
-              state:  shippingAddress?.state  || "",
-            },
-            parcel: { weight: 0.5 },
-          });
-        } catch (rateErr) {
-          logger.error("checkoutCart getRates:", rateErr.message);
-          return res.status(502).json({ message: "Could not verify shipping rate — please try again." });
-        }
-        const matched = liveRates.find((r) => r.service_code === sel.serviceCode);
-        if (!matched) {
-          return res.status(400).json({ message: "The selected courier rate is no longer available. Please go back and choose a courier again." });
-        }
-        orderDeliveryFee = Math.round(matched.total || 0);
-      }
+      // For "delivery" method the fee is 0 — seller arranges delivery directly.
+      const orderDeliveryFee = 0;
 
       const order = new Order({
         buyer: userId,
@@ -315,7 +273,6 @@ export const checkoutCart = async (req, res) => {
         shippingAddress: shippingAddress || {},
         paymentMethod,
         deliveryMethod: requestedMethod,
-        shipbubble: requestedMethod === "shipbubble" ? { serviceCode: sel.serviceCode || null } : undefined,
         status: "pending",
         deliveryCode: generateDeliveryCode(),
       });
@@ -1147,48 +1104,7 @@ export const confirmTransfer = async (req, res) => {
         feeConfig
       );
 
-      // Shipbubble delivery fee — re-fetch live rates, never trust client amount
-      const sel = deliverySelections[sellerId] || {};
-      let orderDeliveryFee = 0;
-      if (sel.method === "shipbubble") {
-        if (!sel.serviceCode) {
-          return res.status(400).json({ success: false, message: "A courier service must be selected for Shipbubble delivery" });
-        }
-        const sellerDoc = await Seller.findOne({ user: sellerId }).select("delivery storeName").lean();
-        const pickup = sellerDoc?.delivery?.shipbubble?.pickupAddress;
-        if (!pickup?.city || !pickup?.state) {
-          return res.status(400).json({ success: false, message: "Seller has not configured a Shipbubble pickup address" });
-        }
-        let liveRates;
-        try {
-          liveRates = await getRates({
-            sender: {
-              name:   pickup.name   || sellerDoc.storeName || "Seller",
-              email:  pickup.email  || "",
-              phone:  pickup.phone  || "",
-              street: pickup.street || "",
-              city:   pickup.city,
-              state:  pickup.state,
-            },
-            recipient: {
-              name:   shippingAddress?.name  || "Buyer",
-              phone:  shippingAddress?.phone || "",
-              street: shippingAddress?.address || shippingAddress?.street || "",
-              city:   shippingAddress?.city   || "",
-              state:  shippingAddress?.state  || "",
-            },
-            parcel: { weight: 0.5 },
-          });
-        } catch (rateErr) {
-          logger.error("confirmTransfer getRates:", rateErr.message);
-          return res.status(502).json({ success: false, message: "Could not verify shipping rate — please try again." });
-        }
-        const matched = liveRates.find((r) => r.service_code === sel.serviceCode);
-        if (!matched) {
-          return res.status(400).json({ success: false, message: "The selected courier rate is no longer available. Please go back and choose a courier again." });
-        }
-        orderDeliveryFee = Math.round(matched.total || 0);
-      }
+      const orderDeliveryFee = 0;
 
       const totalAmount = subtotal + serviceCharge + orderDeliveryFee;
 

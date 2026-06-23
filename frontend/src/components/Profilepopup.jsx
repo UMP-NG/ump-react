@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useUser } from "../context/UserContext";
-import { apiFetch, clearToken } from "../utils/api";
+import { apiFetch, clearToken, clearAllCache } from "../utils/api";
 import { useTheme } from "./Navbar";
 
 export default function ProfilePopup({ onClose }) {
@@ -48,6 +48,7 @@ export default function ProfilePopup({ onClose }) {
 
     try { await apiFetch("/api/auth/logout", { method: "POST" }); } catch { /* ignore */ }
     clearToken();
+    clearAllCache();
     setUser(null);
     onClose();
     navigate("/login");

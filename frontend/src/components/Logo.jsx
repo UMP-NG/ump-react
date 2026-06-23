@@ -22,8 +22,10 @@ export default function Logo() {
         alt="UMP"
         style={{ height: 36, width: 36, borderRadius: 8, display: "block", objectFit: "cover" }}
         onError={(e) => {
-          if (e.currentTarget.src.endsWith("/images/ump-logo.png")) return; // already on fallback — stop
-          e.currentTarget.src = "/images/ump-logo.png";
+          const el = e.currentTarget;
+          if (el.dataset.fallback === "1") return; // all fallbacks exhausted
+          el.dataset.fallback = "1";
+          el.src = "/images/ump-logo.png";
         }}
       />
     </div>

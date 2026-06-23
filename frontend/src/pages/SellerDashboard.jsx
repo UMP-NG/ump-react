@@ -789,7 +789,7 @@ function ListingModal({ listing, onClose, onSave, showToast }) {
 
 // ─── Add Product Modal ────────────────────────────────────────────────────────
 function AddProductModal({ onClose, onSave, showToast }) {
-  const [form, setForm] = useState({ name: "", price: "", stock: "", desc: "", condition: "New", status: "active", category: "", colors: [], sizes: [], types: [], specs: [] });
+  const [form, setForm] = useState({ name: "", price: "", stock: "", desc: "", condition: "New", status: "active", category: "", colors: [], sizes: [], types: [], specs: [], variants: [] });
   const [imageFiles, setImageFiles] = useState([]);
   const [imagePreviews, setImagePreviews] = useState([]);
   const [mainImageIdx, setMainImageIdx] = useState(0);
@@ -801,8 +801,10 @@ function AddProductModal({ onClose, onSave, showToast }) {
   const [sizeInput, setSizeInput] = useState("");
   const [typeInput, setTypeInput] = useState("");
   const [specInput, setSpecInput] = useState({ k: "", v: "" });
+  const [variantInput, setVariantInput] = useState({ label: "", price: "", stock: "" });
   const [cropQueue, setCropQueue] = useState([]);
   const [cropSrc, setCropSrc] = useState(null);
+  const modalRef = useRef();
 
   useEffect(() => {
     apiFetch("/api/categories")
@@ -811,6 +813,28 @@ function AddProductModal({ onClose, onSave, showToast }) {
   }, []);
 
   const set = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.value }));
+
+  function showError(msg) {
+    setAddError(msg);
+    setTimeout(() => modalRef.current?.scrollTo({ top: modalRef.current.scrollHeight, behavior: "smooth" }), 30);
+  }
+
+  function editQueued(i) {
+    const item = staged[i];
+    setStaged(s => s.filter((_, idx) => idx !== i));
+    setForm({ ...item.form });
+    setImageFiles(item.imageFiles || []);
+    setImagePreviews(item.imagePreviews || []);
+    setMainImageIdx(item.mainImageIdx || 0);
+    setVariantInput({ label: "", price: "", stock: "" });
+    setAddError("");
+    modalRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function handleClose() {
+    if (staged.length > 0 && !window.confirm(`You have ${staged.length} queued product${staged.length > 1 ? "s" : ""} that haven't been submitted yet. Close anyway? They will be lost.`)) return;
+    onClose();
+  }
 
   function handleImages(e) {
     const files = Array.from(e.target.files).slice(0, 4 - imageFiles.length);
@@ -855,19 +879,29 @@ function AddProductModal({ onClose, onSave, showToast }) {
   const addSpec = () => { if (!specInput.k.trim()) return; setForm((f) => ({ ...f, specs: [...f.specs, { ...specInput }] })); setSpecInput({ k: "", v: "" }); };
   const removeSpec = (i) => setForm((f) => ({ ...f, specs: f.specs.filter((_, idx) => idx !== i) }));
 
+  const addVariant = () => {
+    if (!variantInput.label.trim() || !variantInput.price || Number(variantInput.price) <= 0) return;
+    setForm((f) => ({ ...f, variants: [...f.variants, { label: variantInput.label.trim(), price: Number(variantInput.price), stock: Math.max(0, Number(variantInput.stock) || 0) }] }));
+    setVariantInput({ label: "", price: "", stock: "" });
+  };
+  const removeVariant = (i) => setForm((f) => ({ ...f, variants: f.variants.filter((_, idx) => idx !== i) }));
+
   function validate() {
-    if (!form.name.trim()) { setAddError("Product name is required."); return false; }
-    if (!form.price || Number(form.price) <= 0) { setAddError("A valid price greater than ₦0 is required."); return false; }
-    if (!imageFiles.length) { setAddError("At least one product image is required."); return false; }
+    if (!form.name.trim()) { showError("Product name is required."); return false; }
+    if (form.variants.length === 0 && (!form.price || Number(form.price) <= 0)) {
+      showError("A valid price greater than ₦0 is required — or add product variants with individual prices below."); return false;
+    }
+    if (!imageFiles.length) { showError("At least one product image is required."); return false; }
     return true;
   }
 
   function resetFields() {
     // Keep condition, status, category — sellers usually list similar products back-to-back
-    setForm(f => ({ ...f, name: "", price: "", stock: "", desc: "", colors: [], sizes: [], types: [], specs: [] }));
+    setForm(f => ({ ...f, name: "", price: "", stock: "", desc: "", colors: [], sizes: [], types: [], specs: [], variants: [] }));
     setImageFiles([]); setImagePreviews([]); setMainImageIdx(0);
     setColorInput({ name: "", code: "#e0e0e0" });
     setSizeInput(""); setTypeInput(""); setSpecInput({ k: "", v: "" });
+    setVariantInput({ label: "", price: "", stock: "" });
     setAddError("");
   }
 
@@ -881,8 +915,12 @@ function AddProductModal({ onClose, onSave, showToast }) {
   function buildFormData(item) {
     const fd = new FormData();
     fd.append("name", item.form.name.trim());
-    fd.append("price", Number(item.form.price));
-    if (item.form.stock) fd.append("stock", Number(item.form.stock));
+    if (item.form.variants.length > 0) {
+      fd.append("variants", JSON.stringify(item.form.variants));
+    } else {
+      fd.append("price", Number(item.form.price));
+      if (item.form.stock) fd.append("stock", Number(item.form.stock));
+    }
     if (item.form.desc) fd.append("desc", item.form.desc);
     fd.append("condition", item.form.condition);
     fd.append("status", item.form.status);
@@ -905,7 +943,7 @@ function AddProductModal({ onClose, onSave, showToast }) {
       if (!validate()) return;
       allToSubmit.push({ form: { ...form }, imageFiles: [...imageFiles], imagePreviews: [...imagePreviews], mainImageIdx });
     }
-    if (!allToSubmit.length) { setAddError("Please fill in at least one product."); return; }
+    if (!allToSubmit.length) { showError("Please fill in at least one product."); return; }
     setSaving(true);
     const results = await Promise.allSettled(
       allToSubmit.map(item => apiFetch("/api/products/", { method: "POST", body: buildFormData(item) }))
@@ -918,12 +956,11 @@ function AddProductModal({ onClose, onSave, showToast }) {
       onSave(succeeded.length === 1 ? succeeded[0] : succeeded);
       onClose();
     } else if (succeeded.length > 0) {
-      // Re-stage only the failed items so a retry won't duplicate the successes
       setStaged(failedIdxs.map(i => allToSubmit[i]));
       onSave(succeeded.length === 1 ? succeeded[0] : succeeded);
-      setAddError(`${succeeded.length} product${succeeded.length > 1 ? "s" : ""} created. ${failedIdxs.length} failed — review the queued items and resubmit.`);
+      showError(`${succeeded.length} product${succeeded.length > 1 ? "s" : ""} created. ${failedIdxs.length} failed — review the queued items and resubmit.`);
     } else {
-      setAddError(results[0]?.reason?.message || "Failed to create product(s). Please try again.");
+      showError(results[0]?.reason?.message || "Failed to create product(s). Please try again.");
     }
   }
 
@@ -941,11 +978,11 @@ function AddProductModal({ onClose, onSave, showToast }) {
         onCancel={() => { setCropSrc(null); setCropQueue([]); }}
       />
     )}
-    <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.55)", zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }} onClick={onClose}>
-      <div className="card" style={{ maxWidth: 580, width: "100%", maxHeight: "92vh", overflowY: "auto", padding: 0 }} onClick={(e) => e.stopPropagation()}>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.55)", zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }} onClick={handleClose}>
+      <div ref={modalRef} className="card" style={{ maxWidth: 580, width: "100%", maxHeight: "92vh", overflowY: "auto", padding: 0 }} onClick={(e) => e.stopPropagation()}>
         <div style={{ padding: "18px 20px", borderBottom: "1px solid var(--line)", display: "flex", justifyContent: "space-between", alignItems: "center", position: "sticky", top: 0, background: "var(--card)", zIndex: 1 }}>
           <div style={{ fontWeight: 800, fontSize: "1.8rem" }}>Add Product</div>
-          <button onClick={onClose} style={{ border: "none", background: "none", cursor: "pointer", fontSize: "1.8rem", color: "var(--ink-3)" }}><i className="fas fa-xmark" /></button>
+          <button onClick={handleClose} style={{ border: "none", background: "none", cursor: "pointer", fontSize: "1.8rem", color: "var(--ink-3)" }}><i className="fas fa-xmark" /></button>
         </div>
 
         <div style={{ padding: 20 }}>
@@ -954,16 +991,21 @@ function AddProductModal({ onClose, onSave, showToast }) {
             <div style={{ background: "var(--surface)", borderRadius: "var(--r-md)", padding: "10px 12px", border: "1px solid var(--line)", marginBottom: 14 }}>
               <div style={{ fontSize: "1.1rem", fontWeight: 700, color: "var(--ink-2)", marginBottom: 8 }}>
                 <i className="fas fa-layer-group" style={{ marginRight: 6 }}></i>
-                Queued ({staged.length})
+                Queued ({staged.length}) — tap <i className="fas fa-pen-to-square" style={{ fontSize: "0.9em" }} /> to edit, then click Submit All to save
               </div>
               {staged.map((item, i) => (
                 <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 0", borderBottom: i < staged.length - 1 ? "1px solid var(--line)" : "none" }}>
                   {item.imagePreviews[0] && <img src={item.imagePreviews[0]} alt="" style={{ width: 36, height: 36, borderRadius: 6, objectFit: "cover", flexShrink: 0 }} />}
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: "1.2rem", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{item.form.name}</div>
-                    <div style={{ fontSize: "1.1rem", color: "var(--ink-3)" }}>₦{Number(item.form.price).toLocaleString()}</div>
+                    <div style={{ fontSize: "1.1rem", color: "var(--ink-3)" }}>
+                      {item.form.variants?.length > 0 ? `${item.form.variants.length} variants · from ₦${Math.min(...item.form.variants.map(v => v.price)).toLocaleString()}` : `₦${Number(item.form.price).toLocaleString()}`}
+                    </div>
                   </div>
-                  <button onClick={() => setStaged(s => s.filter((_, idx) => idx !== i))} style={{ border: "none", background: "none", cursor: "pointer", color: "var(--ink-3)", padding: 4, flexShrink: 0 }}>
+                  <button onClick={() => editQueued(i)} title="Edit this queued product" style={{ border: "none", background: "none", cursor: "pointer", color: "var(--accent)", padding: 4, flexShrink: 0 }}>
+                    <i className="fas fa-pen-to-square" />
+                  </button>
+                  <button onClick={() => setStaged(s => s.filter((_, idx) => idx !== i))} title="Remove from queue" style={{ border: "none", background: "none", cursor: "pointer", color: "var(--ink-3)", padding: 4, flexShrink: 0 }}>
                     <i className="fas fa-xmark" />
                   </button>
                 </div>
@@ -980,12 +1022,16 @@ function AddProductModal({ onClose, onSave, showToast }) {
           {/* Price / Stock / Condition */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 14 }}>
             <div>
-              <label style={lSty}>Price (₦) *</label>
-              <input style={iSty} type="number" min="0" value={form.price} onChange={set("price")} placeholder="0" />
+              <label style={lSty}>
+                Price (₦) {form.variants.length === 0 ? <span style={{ color: "#ef4444" }}>*</span> : <span style={{ fontWeight: 400, color: "var(--ink-4)" }}>(auto)</span>}
+              </label>
+              <input style={{ ...iSty, opacity: form.variants.length > 0 ? 0.45 : 1 }} type="number" min="0" value={form.variants.length > 0 ? Math.min(...form.variants.map(v => v.price)) : form.price} onChange={set("price")} placeholder="0" readOnly={form.variants.length > 0} />
             </div>
             <div>
-              <label style={lSty}>Stock</label>
-              <input style={iSty} type="number" min="0" value={form.stock} onChange={set("stock")} placeholder="0" />
+              <label style={lSty}>
+                Stock {form.variants.length > 0 ? <span style={{ fontWeight: 400, color: "var(--ink-4)" }}>(auto)</span> : ""}
+              </label>
+              <input style={{ ...iSty, opacity: form.variants.length > 0 ? 0.45 : 1 }} type="number" min="0" value={form.variants.length > 0 ? form.variants.reduce((s, v) => s + (v.stock || 0), 0) : form.stock} onChange={set("stock")} placeholder="0" readOnly={form.variants.length > 0} />
             </div>
             <div>
               <label style={lSty}>Condition</label>
@@ -1114,7 +1160,7 @@ function AddProductModal({ onClose, onSave, showToast }) {
           </div>
 
           {/* Specs */}
-          <div style={{ marginBottom: 4 }}>
+          <div style={{ marginBottom: 14 }}>
             <label style={lSty}>Specifications <span style={{ fontWeight: 400, color: "var(--ink-4)" }}>(optional)</span></label>
             {form.specs.length > 0 && (
               <div style={{ marginBottom: 8 }}>
@@ -1132,6 +1178,37 @@ function AddProductModal({ onClose, onSave, showToast }) {
               <button className="btn btn-sm btn-ghost" onClick={addSpec} style={{ flexShrink: 0 }}>Add</button>
             </div>
           </div>
+
+          {/* Priced Variants */}
+          <div style={{ marginBottom: 4, borderTop: "1px solid var(--line)", paddingTop: 14 }}>
+            <label style={lSty}>Priced Variants <span style={{ fontWeight: 400, color: "var(--ink-4)" }}>(optional — e.g. storage sizes, colour tiers)</span></label>
+            <p style={{ margin: "0 0 10px", fontSize: "1.1rem", color: "var(--ink-3)", lineHeight: 1.5 }}>
+              Use this when the same product comes in options that have <strong>different prices</strong> — like iPhone 17 Black ₦1.1M vs Lavender ₦1.15M, or 256GB vs 512GB. Each variant has its own price and stock.
+            </p>
+            {form.variants.length > 0 && (
+              <div style={{ border: "1px solid var(--line)", borderRadius: "var(--r-md)", overflow: "hidden", marginBottom: 10 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 100px 64px 32px", padding: "6px 10px", background: "var(--surface)", fontSize: "1.05rem", fontWeight: 700, color: "var(--ink-3)", borderBottom: "1px solid var(--line)", gap: 8 }}>
+                  <span>Label</span><span>Price (₦)</span><span>Stock</span><span></span>
+                </div>
+                {form.variants.map((v, i) => (
+                  <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 100px 64px 32px", padding: "8px 10px", borderBottom: i < form.variants.length - 1 ? "1px solid var(--line)" : "none", alignItems: "center", gap: 8 }}>
+                    <span style={{ fontSize: "1.2rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.label}</span>
+                    <span style={{ fontSize: "1.2rem" }}>₦{Number(v.price).toLocaleString()}</span>
+                    <span style={{ fontSize: "1.2rem" }}>{v.stock}</span>
+                    <button onClick={() => removeVariant(i)} style={{ border: "none", background: "none", cursor: "pointer", color: "var(--ink-3)", padding: 4 }}><i className="fas fa-xmark" /></button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 100px 64px auto", gap: 6, alignItems: "center" }}>
+              <input style={iSty} placeholder="Label (e.g. Black 256GB)" value={variantInput.label} onChange={(e) => setVariantInput(v => ({ ...v, label: e.target.value }))} onKeyDown={(e) => e.key === "Enter" && addVariant()} />
+              <input style={iSty} type="number" placeholder="Price" min="0" value={variantInput.price} onChange={(e) => setVariantInput(v => ({ ...v, price: e.target.value }))} />
+              <input style={iSty} type="number" placeholder="Stock" min="0" value={variantInput.stock} onChange={(e) => setVariantInput(v => ({ ...v, stock: e.target.value }))} />
+              <button onClick={addVariant} style={{ padding: "8px 12px", borderRadius: "var(--r-md)", border: "none", background: "var(--accent)", color: "#fff", cursor: "pointer", fontSize: "1.3rem", whiteSpace: "nowrap" }}>
+                <i className="fas fa-plus" /> Add
+              </button>
+            </div>
+          </div>
         </div>
 
         {addError && (
@@ -1146,7 +1223,7 @@ function AddProductModal({ onClose, onSave, showToast }) {
         )}
 
         <div style={{ padding: "14px 20px", borderTop: "1px solid var(--line)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, position: "sticky", bottom: 0, background: "var(--card)" }}>
-          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+          <button className="btn btn-ghost" onClick={handleClose}>Cancel</button>
           <div style={{ display: "flex", gap: 8 }}>
             <button className="btn btn-ghost" onClick={queueProduct} disabled={saving} title="Save this product and clear the form to add another">
               <i className="fas fa-layer-group" /> Queue &amp; Add Another

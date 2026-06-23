@@ -754,7 +754,9 @@ function MsgThread({ convo, onBack }) {
   const [text, setText]           = useState("");
   const [sending, setSending]     = useState(false);
   const [authError, setAuthError] = useState(false);
+  const [noticeDismissed, setNoticeDismissed] = useState(false);
   const bottomRef  = useRef(null);
+  const inputRef   = useRef(null);
 
   const other      = convo?.otherUser || {};
   const receiverId = convo?.receiverId || convo?.conversationWith || other._id;
@@ -878,128 +880,142 @@ function MsgThread({ convo, onBack }) {
     </div>
   );
 
+  const hasText = text.trim().length > 0;
+
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
 
-      {/* Thread header */}
-      <div style={{
-        padding: "10px 16px", display: "flex", alignItems: "center", gap: 12,
-        borderBottom: "1px solid var(--line)", flexShrink: 0,
-        background: otherIsAdmin ? "#1e293b" : "var(--paper)",
-      }}>
-        <button className="icon-btn mob-only" onClick={onBack} style={{ marginRight: 4, color: otherIsAdmin ? "#fff" : undefined }}>
-          <i className="fas fa-arrow-left" />
+      {/* ── Thread header ── */}
+      <div className={`msg-thread-header${otherIsAdmin ? "" : " light"}`}
+        style={{ background: otherIsAdmin ? "#0f172a" : "var(--paper)" }}>
+
+        {/* Back — mobile only */}
+        <button
+          className={`msg-back-btn mob-only${otherIsAdmin ? " dark" : " light"}`}
+          onClick={onBack}
+          aria-label="Back to conversations"
+        >
+          <i className="fas fa-chevron-left" style={{ fontSize: "1.15rem" }} />
         </button>
-        <div style={{ position: "relative" }}>
-          <Avatar avatar={other.avatar} name={other.name} size={40} />
+
+        {/* Avatar with admin dot */}
+        <div style={{ position: "relative", flexShrink: 0 }}>
+          <Avatar avatar={other.avatar} name={other.name} size={38} />
           {otherIsAdmin && (
             <span style={{
-              position: "absolute", bottom: -2, right: -2,
-              width: 16, height: 16, borderRadius: "50%",
-              background: "#f59e0b", display: "flex", alignItems: "center", justifyContent: "center",
-              border: "2px solid #1e293b",
+              position: "absolute", bottom: -1, right: -1,
+              width: 14, height: 14, borderRadius: "50%",
+              background: "#f59e0b",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              border: "2px solid #0f172a",
             }}>
-              <i className="fa-solid fa-shield-halved" style={{ fontSize: "0.65rem", color: "#1e293b" }}></i>
+              <i className="fa-solid fa-shield-halved" style={{ fontSize: "0.55rem", color: "#0f172a" }} />
             </span>
           )}
         </div>
+
+        {/* Name + subtitle */}
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <strong style={{ fontSize: "1.5rem", display: "block", color: otherIsAdmin ? "#fff" : "var(--ink-1)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 1 }}>
+            <strong style={{
+              fontSize: "1.45rem", lineHeight: 1.2,
+              color: otherIsAdmin ? "#f1f5f9" : "var(--ink-1)",
+              overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+            }}>
               {other.name || "User"}
             </strong>
-            {otherIsAdmin && <AdminBadge />}
+            {otherIsAdmin && (
+              <span style={{
+                background: "rgba(245,158,11,.2)", color: "#f59e0b",
+                borderRadius: 4, padding: "1px 5px",
+                fontSize: "0.95rem", fontWeight: 700, flexShrink: 0,
+                letterSpacing: "0.01em",
+              }}>Admin</span>
+            )}
           </div>
-          <span style={{ fontSize: "1.1rem", color: otherIsAdmin ? "#94a3b8" : "var(--ink-3)" }}>
-            {otherIsAdmin ? "Official UMP Support" : other.role || "Member"}
+          <span style={{ fontSize: "1.1rem", color: otherIsAdmin ? "#64748b" : "var(--ink-3)", lineHeight: 1 }}>
+            {otherIsAdmin ? "UMP Support" : "Seller"}
           </span>
         </div>
+
+        {/* Admin-mode chip — right side */}
         {iAmAdmin && (
-          <span style={{ fontSize: "1.1rem", color: "#f59e0b", display: "flex", alignItems: "center", gap: 4, fontWeight: 600 }}>
-            <i className="fa-solid fa-shield-halved"></i> Messaging as Admin
-          </span>
+          <div className="msg-admin-chip">
+            <i className="fa-solid fa-shield-halved" style={{ fontSize: "0.9rem" }} />
+            <span>Admin</span>
+          </div>
         )}
       </div>
 
-      {/* Admin conversation notice banner */}
-      {otherIsAdmin && (
-        <div style={{
-          padding: "8px 16px", background: "rgba(30,41,59,.06)",
-          borderBottom: "1px solid var(--line)", display: "flex", alignItems: "center", gap: 8,
-          fontSize: "1.2rem", color: "var(--ink-2)",
-        }}>
-          <i className="fa-solid fa-shield-halved" style={{ color: "#f59e0b" }}></i>
-          This is an official UMP support conversation. Messages are monitored for quality.
-        </div>
+      {/* ── Admin notice strip (dismissible) ── */}
+      {otherIsAdmin && !noticeDismissed && (
+        <button
+          className={`msg-notice-strip${otherIsAdmin ? " dark" : ""}`}
+          onClick={() => setNoticeDismissed(true)}
+          style={{ width: "100%", textAlign: "left", border: "none", font: "inherit" }}
+        >
+          <i className="fa-solid fa-shield-halved" style={{ color: "#f59e0b", flexShrink: 0 }} />
+          <span style={{ flex: 1, fontSize: "1.15rem" }}>
+            Official UMP support — messages are monitored for quality
+          </span>
+          <i className="fas fa-xmark" style={{ color: "var(--ink-4)", fontSize: "1rem", flexShrink: 0 }} />
+        </button>
       )}
 
-      {/* Messages area */}
-      <div style={{ flex: 1, overflowY: "auto", padding: "16px", display: "flex", flexDirection: "column", gap: 8, background: "var(--surface)" }}>
+      {/* ── Messages area ── */}
+      <div className="msg-bubble-area" style={{ background: "var(--surface)" }}>
         {loading ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 14, padding: "8px 0" }}>
-            {[1, 2, 3, 4, 5].map((i) => (
-              <div key={i} style={{ display: "flex", justifyContent: i % 2 === 0 ? "flex-end" : "flex-start" }}>
-                <Skel w={i % 3 === 0 ? 180 : i % 2 === 0 ? 220 : 160} h={38} r={18} />
+            {[80, 60, 90, 50, 70].map((w, i) => (
+              <div key={i} style={{ display: "flex", justifyContent: i % 2 === 0 ? "flex-start" : "flex-end" }}>
+                <Skel w={w * 2} h={36} r={18} />
               </div>
             ))}
           </div>
         ) : messages.length === 0 ? (
-          <div style={{ margin: "auto", textAlign: "center", color: "var(--ink-3)", fontSize: "1.3rem" }}>
-            <i className="fas fa-lock" style={{ fontSize: "2rem", marginBottom: 8, display: "block" }} />
-            Messages are end-to-end encrypted
+          <div style={{ margin: "auto", textAlign: "center", color: "var(--ink-3)", paddingTop: 40 }}>
+            <div style={{ width: 56, height: 56, borderRadius: "50%", background: "var(--line)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 12px", fontSize: "1.6rem" }}>
+              <i className="fas fa-comment-dots" />
+            </div>
+            <p style={{ fontSize: "1.3rem", margin: 0 }}>No messages yet</p>
+            <p style={{ fontSize: "1.15rem", color: "var(--ink-4)", marginTop: 4 }}>Say hello to start the conversation</p>
           </div>
         ) : null}
 
         {messages.map((msg, idx) => {
-          const isMe        = msg.isOwn;
-          const isAdminMsg  = msg.isAdminMessage;
+          const isMe          = msg.isOwn;
+          const isAdminMsg    = msg.isAdminMessage;
           const isNegotiation = msg.type === "negotiation" && msg.meta;
 
-          // Show a date separator whenever the calendar day changes between messages
           const prevMsg = messages[idx - 1];
           const showDateSep = !prevMsg || (
             msg.createdAt && prevMsg.createdAt &&
             new Date(msg.createdAt).toDateString() !== new Date(prevMsg.createdAt).toDateString()
           );
 
-          // For negotiation cards, the "seller" is the person receiving the initial offer
-          // iAmSeller = I am not the one who sent this particular message (the one offering)
-          // More precisely: on the initiating card (isResponse=false), the seller is msg.receiver
-          // We check: the current user is the seller (receiver of the initial offer) = !isMe when !meta.isResponse
           const iAmSellerOnThisCard = isNegotiation && (
             msg.meta.isResponse ? isMe : !isMe
           );
 
-          // Bubble styles
           let bubbleBg, bubbleColor, borderRadius;
           if (isNegotiation) {
-            bubbleBg    = "transparent";
-            bubbleColor = "var(--ink-1)";
-            borderRadius = 0;
-          } else if (isMe && isAdminMsg) {
-            bubbleBg    = "#1e293b";
-            bubbleColor = "#f1f5f9";
-            borderRadius = "18px 18px 4px 18px";
-          } else if (!isMe && isAdminMsg) {
-            bubbleBg    = "#1e293b";
-            bubbleColor = "#f1f5f9";
-            borderRadius = "18px 18px 18px 4px";
+            bubbleBg = "transparent"; bubbleColor = "var(--ink-1)"; borderRadius = 0;
+          } else if (isAdminMsg && isMe) {
+            bubbleBg = "#1e293b"; bubbleColor = "#f1f5f9"; borderRadius = "18px 18px 4px 18px";
+          } else if (isAdminMsg) {
+            bubbleBg = "#1e293b"; bubbleColor = "#f1f5f9"; borderRadius = "18px 18px 18px 4px";
           } else if (isMe) {
-            bubbleBg    = "var(--accent)";
-            bubbleColor = "#fff";
-            borderRadius = "18px 18px 4px 18px";
+            bubbleBg = "var(--accent)"; bubbleColor = "#fff"; borderRadius = "18px 18px 4px 18px";
           } else {
-            bubbleBg    = "var(--white)";
-            bubbleColor = "var(--ink-1)";
-            borderRadius = "18px 18px 18px 4px";
+            bubbleBg = "var(--white)"; bubbleColor = "var(--ink-1)"; borderRadius = "18px 18px 18px 4px";
           }
 
           return (
-            <div key={msg._id} style={{ display: "flex", flexDirection: "column", alignItems: isMe ? "flex-end" : "flex-start", gap: 3 }}>
+            <div key={msg._id} style={{ display: "flex", flexDirection: "column", alignItems: isMe ? "flex-end" : "flex-start", gap: 2 }}>
 
-              {/* Date separator between messages from different calendar days */}
+              {/* Date separator */}
               {showDateSep && msg.createdAt && (
-                <div style={{ alignSelf: "center", margin: "8px 0 4px", display: "flex", alignItems: "center", gap: 8, width: "100%" }}>
+                <div style={{ alignSelf: "center", margin: "10px 0 6px", display: "flex", alignItems: "center", gap: 8, width: "100%" }}>
                   <div style={{ flex: 1, height: 1, background: "var(--line)" }} />
                   <span style={{ fontSize: "1.05rem", color: "var(--ink-3)", whiteSpace: "nowrap", padding: "2px 10px", background: "var(--surface)", borderRadius: 20, border: "1px solid var(--line)" }}>
                     {formatDateSeparator(msg.createdAt)}
@@ -1008,11 +1024,11 @@ function MsgThread({ convo, onBack }) {
                 </div>
               )}
 
-              {/* Admin label above incoming admin message */}
+              {/* Label above incoming admin message */}
               {!isMe && isAdminMsg && (
-                <div style={{ display: "flex", alignItems: "center", gap: 5, paddingLeft: 4, marginBottom: 1 }}>
-                  <i className="fa-solid fa-shield-halved" style={{ fontSize: "1rem", color: "#f59e0b" }}></i>
-                  <span style={{ fontSize: "1.05rem", fontWeight: 700, color: "#1e293b", letterSpacing: "0.02em" }}>UMP Team</span>
+                <div style={{ display: "flex", alignItems: "center", gap: 4, paddingLeft: 4, marginBottom: 1 }}>
+                  <i className="fa-solid fa-shield-halved" style={{ fontSize: "0.9rem", color: "#f59e0b" }} />
+                  <span style={{ fontSize: "1.05rem", fontWeight: 700, color: "#1e293b" }}>UMP Team</span>
                 </div>
               )}
 
@@ -1027,16 +1043,14 @@ function MsgThread({ convo, onBack }) {
               )}
 
               <div style={{
-                background: bubbleBg,
-                color: bubbleColor,
+                background: bubbleBg, color: bubbleColor,
                 padding: isNegotiation ? 0 : "9px 14px",
                 borderRadius,
-                fontSize: "1.4rem",
-                lineHeight: 1.45,
-                maxWidth: isNegotiation ? 340 : "72%",
-                boxShadow: isAdminMsg ? "0 2px 8px rgba(30,41,59,.2)" : isNegotiation ? "none" : "0 1px 4px rgba(0,0,0,.07)",
+                fontSize: "1.4rem", lineHeight: 1.5,
+                maxWidth: isNegotiation ? "min(340px, 86vw)" : "78%",
+                boxShadow: isAdminMsg ? "0 2px 8px rgba(30,41,59,.18)" : isNegotiation ? "none" : "0 1px 3px rgba(0,0,0,.07)",
                 wordBreak: "break-word",
-                border: isAdminMsg ? "1px solid rgba(245,158,11,.15)" : "none",
+                border: isAdminMsg ? "1px solid rgba(245,158,11,.12)" : "none",
               }}>
                 {isNegotiation ? (
                   <NegotiationCard
@@ -1045,19 +1059,21 @@ function MsgThread({ convo, onBack }) {
                     onRespond={handleNegotiationRespond}
                     onApply={handleApplyPrice}
                   />
-                ) : (
-                  msg.content || msg.text
-                )}
+                ) : (msg.content || msg.text)}
               </div>
 
-              <div style={{ display: "flex", alignItems: "center", gap: 5, paddingLeft: isMe ? 0 : 4, paddingRight: isMe ? 4 : 0 }}>
-                <span style={{ fontSize: "1rem", color: "var(--ink-3)" }}>
+              {/* Timestamp + admin indicator */}
+              <div style={{ display: "flex", alignItems: "center", gap: 4, paddingLeft: isMe ? 0 : 4, paddingRight: isMe ? 4 : 0 }}>
+                <span style={{ fontSize: "1rem", color: "var(--ink-4)" }}>
                   {formatMessageTime(msg.createdAt)}
                 </span>
                 {isMe && isAdminMsg && (
-                  <span style={{ fontSize: "1rem", color: "#f59e0b", display: "flex", alignItems: "center", gap: 3, fontWeight: 600 }}>
-                    <i className="fa-solid fa-shield-halved" style={{ fontSize: "0.8rem" }}></i> Admin
+                  <span style={{ fontSize: "0.95rem", color: "#f59e0b", display: "flex", alignItems: "center", gap: 2, fontWeight: 600 }}>
+                    <i className="fa-solid fa-shield-halved" style={{ fontSize: "0.75rem" }} /> Admin
                   </span>
+                )}
+                {isMe && !isAdminMsg && (
+                  <i className="fas fa-check" style={{ fontSize: "0.85rem", color: "var(--ink-4)" }} />
                 )}
               </div>
             </div>
@@ -1066,31 +1082,28 @@ function MsgThread({ convo, onBack }) {
         <div ref={bottomRef} />
       </div>
 
-      {/* Input */}
-      <form onSubmit={send} style={{ padding: "10px 14px 16px", borderTop: "1px solid var(--line)", background: "var(--paper)", display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
-        {iAmAdmin && (
-          <span style={{ fontSize: "1rem", color: "#f59e0b", display: "flex", alignItems: "center", gap: 4, flexShrink: 0, fontWeight: 600 }}>
-            <i className="fa-solid fa-shield-halved"></i>
-          </span>
-        )}
-        <div style={{ flex: 1, background: "var(--surface)", borderRadius: "var(--r-pill)", padding: "9px 16px", display: "flex", alignItems: "center", border: `1px solid ${iAmAdmin ? "rgba(245,158,11,.4)" : "var(--line)"}`, transition: "border-color .15s" }}
-          onFocusCapture={(e) => e.currentTarget.style.borderColor = iAmAdmin ? "#f59e0b" : "var(--accent)"}
-          onBlurCapture={(e) => e.currentTarget.style.borderColor = iAmAdmin ? "rgba(245,158,11,.4)" : "var(--line)"}
-        >
+      {/* ── Input bar ── */}
+      <form onSubmit={send} className="msg-input-bar">
+        <div className={`msg-input-pill${iAmAdmin ? " admin" : ""}`}>
+          {iAmAdmin && (
+            <i className="fa-solid fa-shield-halved" style={{ color: "#f59e0b", fontSize: "1.1rem", marginRight: 8, flexShrink: 0 }} />
+          )}
           <input
-            style={{ flex: 1, border: "none", background: "transparent", outline: "none", fontSize: "1.4rem", fontFamily: "var(--font-sans)", color: "var(--ink-1)" }}
-            placeholder={iAmAdmin ? "Message as UMP Admin…" : "Message…"}
+            ref={inputRef}
+            placeholder={iAmAdmin ? "Message as UMP Admin…" : "Type a message…"}
             value={text}
             onChange={(e) => setText(e.target.value)}
           />
         </div>
         <button
           type="submit"
-          className="icon-btn"
-          style={{ background: text.trim() ? (iAmAdmin ? "#1e293b" : "var(--accent)") : "var(--surface)", color: text.trim() ? (iAmAdmin ? "#f59e0b" : "#fff") : "var(--ink-3)", width: 42, height: 42, borderRadius: "50%", transition: "background .15s, color .15s", flexShrink: 0 }}
-          disabled={!text.trim() || sending}
+          className={`msg-send-btn${hasText ? ` ready${iAmAdmin ? " admin" : ""}` : " idle"}`}
+          disabled={!hasText || sending}
+          aria-label="Send"
         >
-          {sending ? <i className="fas fa-spinner fa-spin" /> : <i className="fas fa-paper-plane" />}
+          {sending
+            ? <i className="fas fa-spinner fa-spin" />
+            : <i className="fas fa-paper-plane" style={{ marginLeft: hasText ? -1 : 0 }} />}
         </button>
       </form>
     </div>

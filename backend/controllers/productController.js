@@ -11,6 +11,17 @@ export const createProduct = async (req, res) => {
   try {
     const { name, desc, price, category, condition, colors, sizes, types, stock } = req.body;
 
+    // --- Parse Variants ---
+    let parsedVariants = [];
+    if (req.body.variants) {
+      try {
+        const raw = typeof req.body.variants === "string" ? JSON.parse(req.body.variants) : req.body.variants;
+        parsedVariants = (Array.isArray(raw) ? raw : [])
+          .filter((v) => v.label?.trim() && Number(v.price) >= 0)
+          .map((v) => ({ label: v.label.trim(), price: Number(v.price), stock: Math.max(0, Number(v.stock) || 0) }));
+      } catch { parsedVariants = []; }
+    }
+
     // --- 🎨 Parse Colors safely ---
     let parsedColors = [];
     if (colors) {
@@ -72,11 +83,19 @@ export const createProduct = async (req, res) => {
     if (!images.length)
       return res.status(400).json({ message: "At least one product image is required" });
 
+    // Derive price from variants when provided; fall back to the explicit price field
+    const effectivePrice = parsedVariants.length > 0
+      ? Math.min(...parsedVariants.map((v) => v.price))
+      : Number(price) || 0;
+
+    if (parsedVariants.length === 0 && (!price || Number(price) <= 0))
+      return res.status(400).json({ message: "A valid price is required (or add product variants with prices)" });
+
     // --- ✅ Create Product ---
     const product = await Product.create({
       name,
       desc,
-      price,
+      price: effectivePrice,
       category,
       condition,
       colors: parsedColors,
@@ -84,8 +103,11 @@ export const createProduct = async (req, res) => {
       types: parsedTypes,
       specs,
       images,
+      variants: parsedVariants,
       seller: req.user?._id,
-      stock: stock !== undefined && stock !== "" ? Math.max(0, Number(stock)) : 1,
+      stock: parsedVariants.length > 0
+        ? parsedVariants.reduce((s, v) => s + v.stock, 0)
+        : (stock !== undefined && stock !== "" ? Math.max(0, Number(stock)) : 1),
     });
 
     // --- ✅ Link product to seller's products array ---
@@ -496,6 +518,16 @@ export const updateProduct = async (req, res) => {
     const newTypes = parseSArray(req.body.types);
     if (newSizes !== null) product.sizes = newSizes;
     if (newTypes !== null) product.types = newTypes;
+
+    // --- Variants
+    if (req.body.variants !== undefined) {
+      try {
+        const raw = typeof req.body.variants === "string" ? JSON.parse(req.body.variants) : req.body.variants;
+        product.variants = (Array.isArray(raw) ? raw : [])
+          .filter((v) => v.label?.trim() && Number(v.price) >= 0)
+          .map((v) => ({ label: v.label.trim(), price: Number(v.price), stock: Math.max(0, Number(v.stock) || 0) }));
+      } catch { /* keep existing variants */ }
+    }
 
     // --- Handle images
     product.images = Array.isArray(product.images) ? product.images : [];

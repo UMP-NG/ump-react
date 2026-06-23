@@ -39,7 +39,7 @@ export const getDeliveryQuote = async (req, res) => {
         state:  pickup.state,
       },
       recipient: {
-        name:   buyerName  || "Buyer",
+        name:   buyerName  || "UMP Buyer",
         email:  "",
         phone:  buyerPhone || "",
         street: buyerStreet || "",
@@ -54,7 +54,7 @@ export const getDeliveryQuote = async (req, res) => {
       rates: rates.map((r) => ({
         serviceCode:   r.service_code,
         courierName:   r.courier_name,
-        amount:        r.total || 0,
+        amount:        Math.round(r.total || 0),
         estimatedDays: r.delivery_eta || "",
         logoUrl:       r.courier_image ? r.courier_image.replace(/^http:\/\//i, "https://") : null,
       })),
@@ -110,14 +110,18 @@ export const bookShipbubbleDelivery = async (req, res) => {
         state:  pickup.state,
       },
       recipient: {
-        name:   ship.name   || "Buyer",
+        name:   ship.name   || "UMP Buyer",
         email:  "",
         phone:  ship.phone  || "",
         street: ship.address || ship.street || "",
         city:   ship.city   || "",
         state:  ship.state  || "",
       },
-      parcel: { weight: 0.5, description: "Marketplace items" },
+      // Match the weight used at quote time so the service code remains valid
+      parcel: (() => {
+        const qty = order.items?.reduce((s, i) => s + (i.quantity || 1), 0) || 1;
+        return { weight: Math.min(qty * 1.5, 30), quantity: qty, description: "Marketplace items" };
+      })(),
       orderId: order._id,
     });
 

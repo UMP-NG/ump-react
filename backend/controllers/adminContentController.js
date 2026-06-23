@@ -84,7 +84,24 @@ export const adminCreateProduct = async (req, res) => {
     if (!sellerId || !mongoose.Types.ObjectId.isValid(sellerId))
       return res.status(400).json({ message: "Valid sellerId is required" });
     if (!name?.trim()) return res.status(400).json({ message: "Product name is required" });
-    if (!price || Number(price) <= 0) return res.status(400).json({ message: "A valid price is required" });
+
+    // Parse variants first — if variants are present, price is derived from them
+    let parsedVariants = [];
+    if (req.body.variants) {
+      try {
+        const raw = typeof req.body.variants === "string" ? JSON.parse(req.body.variants) : req.body.variants;
+        parsedVariants = (Array.isArray(raw) ? raw : [])
+          .filter((v) => v.label?.trim() && Number(v.price) >= 0)
+          .map((v) => ({ label: v.label.trim(), price: Number(v.price), stock: Math.max(0, Number(v.stock) || 0) }));
+      } catch { parsedVariants = []; }
+    }
+
+    const effectivePrice = parsedVariants.length > 0
+      ? Math.min(...parsedVariants.map((v) => v.price))
+      : Number(price) || 0;
+
+    if (parsedVariants.length === 0 && (!price || Number(price) <= 0))
+      return res.status(400).json({ message: "A valid price is required (or add product variants with prices)" });
 
     const sellerUser = await User.findById(sellerId).select("_id name").lean();
     if (!sellerUser) return res.status(404).json({ message: "Seller user not found" });
@@ -111,14 +128,17 @@ export const adminCreateProduct = async (req, res) => {
     const product = await Product.create({
       name: name.trim(),
       desc: desc || "",
-      price: Number(price),
+      price: effectivePrice,
       category: category && mongoose.Types.ObjectId.isValid(category) ? category : undefined,
       condition: condition || "New",
-      stock: stock ? Math.max(0, Number(stock)) : 1,
+      stock: parsedVariants.length > 0
+        ? parsedVariants.reduce((s, v) => s + v.stock, 0)
+        : (stock ? Math.max(0, Number(stock)) : 1),
       seller: sellerId,
       colors: parsedColors,
       sizes: parsedSizes,
       types: parsedTypes,
+      variants: parsedVariants,
       images,
     });
 

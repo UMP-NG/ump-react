@@ -4,6 +4,33 @@ import { MiniStat } from '../components/StatCard';
 import { apiFetch } from '../../utils/api';
 import { useAppConfig } from '../../context/AppConfigContext';
 
+function CopyBtn({ text }) {
+  const [copied, setCopied] = useState(false);
+  async function copy(e) {
+    e.stopPropagation();
+    try { await navigator.clipboard.writeText(text); } catch { return; }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1800);
+  }
+  return (
+    <button
+      onClick={copy}
+      title="Copy account number"
+      style={{
+        border: 'none', background: copied ? 'rgba(34,197,94,.15)' : 'var(--surface)',
+        color: copied ? '#16a34a' : 'var(--ink-3)', borderRadius: 4,
+        padding: '2px 6px', cursor: 'pointer', fontSize: '1rem',
+        display: 'inline-flex', alignItems: 'center', gap: 3,
+        transition: 'background .15s, color .15s', flexShrink: 0,
+        border: '1px solid var(--line)',
+      }}
+    >
+      <i className={`fa-solid ${copied ? 'fa-check' : 'fa-copy'}`} />
+      {copied ? 'Copied' : 'Copy'}
+    </button>
+  );
+}
+
 const TABS = [
   { label: 'Pending',    filter: 'pending' },
   { label: 'Processing', filter: 'processing' },
@@ -184,9 +211,14 @@ export default function Payouts() {
                       </div>
                     </td>
                     <td>
-                      <div style={{ fontSize: '1.25rem' }}>{p.bankName || '—'}</div>
-                      <div className="mono muted" style={{ fontSize: '1.1rem' }}>{p.accountNumber || '—'}</div>
-                      {p.accountName && <div style={{ fontSize: '1.1rem', color: 'var(--ink-3)' }}>{p.accountName}</div>}
+                      <div style={{ fontSize: '1.25rem', color: 'var(--ink-2)' }}>{p.bankName || '—'}</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
+                        <span className="mono" style={{ fontSize: '1.3rem', fontWeight: 700, color: 'var(--ink-1)', letterSpacing: '0.06em' }}>
+                          {p.accountNumber || '—'}
+                        </span>
+                        {p.accountNumber && <CopyBtn text={p.accountNumber} />}
+                      </div>
+                      {p.accountName && <div style={{ fontSize: '1.1rem', color: 'var(--ink-3)', marginTop: 1 }}>{p.accountName}</div>}
                     </td>
                     <td className="amount"><span className="naira"></span>{(p.availableBalance || 0).toLocaleString()}</td>
                     <td className="amount"><span className="naira"></span>{(p.requestedAmount || 0).toLocaleString()}</td>
@@ -279,7 +311,12 @@ function PayoutDrawer({ payout, onClose, onApprove, onMarkPaid, processing, mark
             <span className="k">Bank</span><span className="v">{payout.bankName || '—'}</span>
             <span className="k">Account name</span><span className="v">{payout.accountName || '—'}</span>
             <span className="k">Account no.</span>
-            <span className="v mono" style={{ userSelect: 'all', letterSpacing: '0.05em' }}>{payout.accountNumber || '—'}</span>
+            <span className="v" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span className="mono" style={{ fontWeight: 700, letterSpacing: '0.08em', userSelect: 'all', fontSize: '1.35rem' }}>
+                {payout.accountNumber || '—'}
+              </span>
+              {payout.accountNumber && <CopyBtn text={payout.accountNumber} />}
+            </span>
             <span className="k">Available bal.</span>
             <span className="v"><span className="naira"></span>{(payout.availableBalance || 0).toLocaleString()}</span>
           </div>
@@ -312,7 +349,10 @@ function PayoutDrawer({ payout, onClose, onApprove, onMarkPaid, processing, mark
               <div>Amount: <strong>₦{(payout.netAmount || payout.requestedAmount || 0).toLocaleString()}</strong></div>
               <div>Bank: <strong>{payout.bankName || '—'}</strong></div>
               <div>Account name: <strong>{payout.accountName || '—'}</strong></div>
-              <div>Account number: <strong style={{ letterSpacing: '0.08em', userSelect: 'all' }}>{payout.accountNumber || '—'}</strong></div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                Account number: <strong className="mono" style={{ letterSpacing: '0.08em', userSelect: 'all', fontSize: '1.3rem' }}>{payout.accountNumber || '—'}</strong>
+                {payout.accountNumber && <CopyBtn text={payout.accountNumber} />}
+              </div>
               <div style={{ marginTop: 6, color: 'var(--ink-3)' }}>Once the transfer is sent, click "Mark as Paid" to notify the seller and close this request.</div>
             </div>
             <button

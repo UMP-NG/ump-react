@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { apiFetch, bustCache } from "../utils/api";
 
-const DEFAULT_LOGO = "/images/ump-icon.svg";
+const DEFAULT_LOGO = "/images/ump-logo.png";
 const DEFAULT_FEES = {
   serviceChargeEnabled: true,
   serviceFee: 5.0,

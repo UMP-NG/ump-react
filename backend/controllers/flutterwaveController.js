@@ -212,8 +212,10 @@ export const verifyFlwPayment = async (req, res) => {
       const nameMap = Object.fromEntries(profiles.map((p) => [p.user.toString(), p.storeName || ""]));
       orderSummaries = confirmedOrders.map((o) => ({
         _id: o._id,
+        seller: o.seller,
         storeName: o.seller ? (nameMap[o.seller.toString()] || "") : "",
         totalAmount: o.totalAmount,
+        deliveryMethod: o.deliveryMethod,
       }));
     }
 

@@ -132,6 +132,20 @@ function _invalidate(prefix) {
 // Call this after a mutation to force-fresh the next GET (pages call fetchUsers() etc.)
 export function bustCache(prefix = "/api/admins") { _invalidate(prefix); }
 
+// Call this on logout to prevent the previous user's cached profile from bleeding
+// into the next login session (both in-memory and sessionStorage tiers).
+export function clearAllCache() {
+  _mem.clear();
+  try {
+    const toRemove = [];
+    for (let i = 0; i < sessionStorage.length; i++) {
+      const k = sessionStorage.key(i);
+      if (k?.startsWith("_ac:")) toRemove.push(k);
+    }
+    toRemove.forEach((k) => sessionStorage.removeItem(k));
+  } catch { /* ignore */ }
+}
+
 // ── Core network fetch (no cache) ────────────────────────────────────────────
 async function _doFetch(path, options = {}) {
   const headers = { ...(options.headers || {}) };
@@ -160,6 +174,7 @@ async function _doFetch(path, options = {}) {
   if (!res.ok) {
     if (res.status === 401) {
       clearToken();
+      clearAllCache();
       window.dispatchEvent(new CustomEvent("auth:logout"));
       const err = new Error("Session expired. Please log in again.");
       err.status = 401;

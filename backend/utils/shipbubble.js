@@ -64,7 +64,10 @@ async function validateAddress(api, addr) {
     .filter(Boolean)
     .join(", ");
 
-  const cacheKey = fullAddress.toLowerCase().trim().replace(/\s+/g, " ");
+  // Include name in cache key — Shipbubble ties address_codes to a contact record.
+  // Sharing a code across different names causes "provide a full name" errors.
+  const namePart = (addr.name || "").toLowerCase().trim();
+  const cacheKey = `${namePart}|${fullAddress.toLowerCase().trim()}`.replace(/\s+/g, " ");
   const hit = _addrCache.get(cacheKey);
   if (hit && Date.now() - hit.ts < ADDR_TTL) {
     return { address_code: hit.code };

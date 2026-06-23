@@ -136,6 +136,20 @@ const productSchema = new mongoose.Schema(
       priceAtSubscription: { type: Number, min: 0, required: true },
     }],
 
+    // Priced variants — each has its own label, price, and stock.
+    // When variants exist the top-level price/stock/isAvailable are
+    // derived from the variants array in the pre-save hook.
+    variants: {
+      type: [
+        {
+          label: { type: String, trim: true, required: true },
+          price: { type: Number, required: true, min: 0 },
+          stock: { type: Number, default: 0, min: 0 },
+        },
+      ],
+      default: [],
+    },
+
     // Soft-delete: set instead of destroying the document.
     // Orders referencing this product keep their product snapshot intact.
     deletedAt: { type: Date, default: null },
@@ -156,10 +170,16 @@ productSchema.pre("save", function (next) {
     this.slug = `${base}-${crypto.randomBytes(3).toString("hex")}`;
   }
 
-  // ✅ Auto-update availability
-  // variants support removed — compute availability from top-level stock only
-  const totalStock = this.stock || 0;
-  this.isAvailable = totalStock > 0;
+  // When variants exist, derive price/stock/isAvailable from them.
+  if (this.variants?.length > 0) {
+    const prices = this.variants.map((v) => v.price).filter((p) => typeof p === "number" && p >= 0);
+    if (prices.length) this.price = Math.min(...prices);
+    const totalVariantStock = this.variants.reduce((s, v) => s + (v.stock || 0), 0);
+    this.stock = totalVariantStock;
+    this.isAvailable = totalVariantStock > 0;
+  } else {
+    this.isAvailable = (this.stock || 0) > 0;
+  }
 
   next();
 });

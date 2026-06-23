@@ -534,6 +534,7 @@ export const logout = (req, res) => {
       secure: process.env.NODE_ENV === "production",
       sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
       expires: new Date(0),
+      path: "/",
     });
     res.status(200).json({ success: true, message: "Logged out successfully" });
   } catch (error) {
@@ -1171,7 +1172,7 @@ export const getAddresses = async (req, res) => {
 
 export const saveAddress = async (req, res) => {
   try {
-    const { label, name, phone, address, city, state, isDefault } = req.body;
+    const { label, name, phone, address, building, area, city, state, landmark, isDefault } = req.body;
     // Route param ID (PUT /addresses/:id) takes priority over legacy body _id
     const addressId = req.params.id || null;
 
@@ -1185,7 +1186,7 @@ export const saveAddress = async (req, res) => {
       // Update existing by route param
       const addr = user.addresses.id(addressId);
       if (!addr) return res.status(404).json({ message: "Address not found" });
-      Object.assign(addr, { label, name, phone, address, city, state });
+      Object.assign(addr, { label, name, phone, address, building, area, city, state, landmark });
       if (isDefault) user.addresses.forEach((a) => { a.isDefault = a._id.toString() === addressId; });
     } else {
       // Add new (POST /addresses)
@@ -1193,7 +1194,7 @@ export const saveAddress = async (req, res) => {
         return res.status(400).json({ message: "Maximum of 10 saved addresses allowed" });
       }
       if (isDefault) user.addresses.forEach((a) => { a.isDefault = false; });
-      user.addresses.push({ label, name, phone, address, city, state, isDefault: !!isDefault });
+      user.addresses.push({ label, name, phone, address, building, area, city, state, landmark, isDefault: !!isDefault });
     }
 
     await user.save();
