@@ -2,7 +2,6 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import Thumb from '../components/Thumb';
 import { MiniStat } from '../components/StatCard';
 import { apiFetch } from '../../utils/api';
-import { useAppConfig } from '../../context/AppConfigContext';
 
 function CopyBtn({ text }) {
   const [copied, setCopied] = useState(false);
@@ -48,8 +47,6 @@ const RISK_COLOR   = { Low: 'green', Medium: 'amber', High: 'red' };
 const STATUS_COLOR = { pending: 'amber', processing: 'blue', completed: 'green', failed: 'red' };
 
 export default function Payouts() {
-  const { fees } = useAppConfig();
-  const platformFeePct = parseFloat(fees?.platformFee ?? 3.2) / 100;
 
   const [tab, setTab]                 = useState(0);
   const [payouts, setPayouts]         = useState([]);
@@ -186,21 +183,20 @@ export default function Payouts() {
                   </th>
                 )}
                 <th>Seller</th><th>Bank account</th><th>Available bal.</th>
-                <th>Requested</th><th>Net (after {fees?.platformFee ?? 3.2}%)</th><th>Status</th><th>Requested at</th><th>Risk</th><th></th>
+                <th>Requested</th><th>Status</th><th>Requested at</th><th>Risk</th><th></th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={isPendingTab ? 10 : 9} style={{ textAlign: 'center', padding: 32, color: 'var(--ink-3)' }}>
+                <tr><td colSpan={isPendingTab ? 9 : 8} style={{ textAlign: 'center', padding: 32, color: 'var(--ink-3)' }}>
                   <i className="fa-solid fa-circle-notch fa-spin"></i>
                 </td></tr>
               ) : payouts.length === 0 ? (
-                <tr><td colSpan={isPendingTab ? 10 : 9}>
+                <tr><td colSpan={isPendingTab ? 9 : 8}>
                   <div className="adm-empty"><i className="fa-solid fa-money-bill-transfer"></i><p>No {TABS[tab].label.toLowerCase()} payouts</p></div>
                 </td></tr>
               ) : payouts.map(p => {
                 const risk = p.riskLevel || 'Low';
-                const net  = p.netAmount ?? (p.requestedAmount ? Math.floor(p.requestedAmount * (1 - platformFeePct)) : 0);
                 return (
                   <tr key={p._id} onClick={() => setDrawer(p)} style={{ cursor: 'pointer' }}>
                     {isPendingTab && (
@@ -229,7 +225,6 @@ export default function Payouts() {
                     </td>
                     <td className="amount"><span className="naira"></span>{(p.availableBalance || 0).toLocaleString()}</td>
                     <td className="amount"><span className="naira"></span>{(p.requestedAmount || 0).toLocaleString()}</td>
-                    <td className="amount"><span className="naira"></span>{(net || 0).toLocaleString()}</td>
                     <td><span className={`pill dot ${STATUS_COLOR[p.status] || 'gray'}`}>{p.status}</span></td>
                     <td className="muted">
                       {p.createdAt ? new Date(p.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—'}
@@ -297,10 +292,6 @@ function PayoutDrawer({ payout, onClose, onApprove, onMarkPaid, processing, mark
               <div className="v"><span className="naira"></span>{(payout.requestedAmount || 0).toLocaleString()}</div>
             </div>
             <div className="kpi">
-              <div className="l">Net amount</div>
-              <div className="v"><span className="naira"></span>{(payout.netAmount || 0).toLocaleString()}</div>
-            </div>
-            <div className="kpi">
               <div className="l">Risk</div>
               <div className="v">
                 <span className={`pill ${RISK_COLOR[payout.riskLevel || 'Low'] || 'gray'}`}>{payout.riskLevel || 'Low'}</span>
@@ -353,7 +344,7 @@ function PayoutDrawer({ payout, onClose, onApprove, onMarkPaid, processing, mark
           <div className="adm-drawer-foot" style={{ flexDirection: 'column', gap: 8 }}>
             <div style={{ fontSize: '1.2rem', color: 'var(--ink-2)', padding: '8px 10px', background: 'rgba(59,130,246,.08)', borderRadius: 8, border: '1px solid rgba(59,130,246,.2)' }}>
               <div style={{ fontWeight: 700, marginBottom: 4 }}>Manual bank transfer checklist</div>
-              <div>Amount: <strong>₦{(payout.netAmount || payout.requestedAmount || 0).toLocaleString()}</strong></div>
+              <div>Amount: <strong>₦{(payout.requestedAmount || 0).toLocaleString()}</strong></div>
               <div>Bank: <strong>{payout.bankName || '—'}</strong></div>
               <div>Account name: <strong>{payout.accountName || '—'}</strong></div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>

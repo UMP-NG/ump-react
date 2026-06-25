@@ -5,7 +5,6 @@ import logger from "../utils/logger.js";
 import { fmt, startOf } from "./adminHelpers.js";
 import { decrypt } from "../utils/fieldEncryption.js";
 
-const PAYOUT_FEE_RATE = 0.032; // 3.2% platform fee deducted from gross payout
 const RISK_HIGH_THRESHOLD   = 500_000;
 const RISK_MEDIUM_THRESHOLD = 100_000;
 
@@ -27,9 +26,10 @@ export const getAdminPayouts = async (req, res) => {
       const pa = p.accountDetails || {};
       const bd = sDoc?.bankDetails  || {};
       const acct = {
-        bankName:      pa.bankName      || bd.bankName      || "",
-        accountName:   pa.accountName   || bd.accountName   || "",
-        accountNumber: pa.accountNumber || bd.accountNumber || "",
+        bankName:    pa.bankName    || bd.bankName    || "",
+        accountName: pa.accountName || bd.accountName || "",
+        // Prefer Seller.bankDetails (encrypted) over Payout.accountDetails (masked at creation)
+        accountNumber: bd.accountNumber || pa.accountNumber || "",
       };
       return {
         _id: p._id,
@@ -41,7 +41,6 @@ export const getAdminPayouts = async (req, res) => {
           catch { return "—"; }
         })(),
         availableBalance: sDoc?.pendingPayout || 0, requestedAmount: p.amount,
-        netAmount: Math.floor(p.amount * (1 - PAYOUT_FEE_RATE)),
         status: p.status,
         riskLevel: p.amount > RISK_HIGH_THRESHOLD ? "High" : p.amount > RISK_MEDIUM_THRESHOLD ? "Medium" : "Low",
         createdAt: p.createdAt,
