@@ -1376,8 +1376,8 @@ export default function SellerDashboard() {
   const [notifSaving, setNotifSaving] = useState(false);
   const [dashPolicy, setDashPolicy] = useState({ returnPolicy: "", fulfillmentTime: "" });
   const [policySaving, setPolicySaving] = useState(false);
-  const [closeStoreConfirm, setCloseStoreConfirm] = useState(false);
-  const [closeStoreBusy, setCloseStoreBusy] = useState(false);
+  const [deleteStoreConfirm, setDeleteStoreConfirm] = useState(false);
+  const [deleteStoreBusy, setDeleteStoreBusy] = useState(false);
   const [storeOpen, setStoreOpen] = useState(true);
   const [storeOpenBusy, setStoreOpenBusy] = useState(false);
   const DEFAULT_DELIVERY_CONFIG = {
@@ -1722,15 +1722,15 @@ export default function SellerDashboard() {
     }
   }
 
-  async function handleCloseStore() {
-    setCloseStoreBusy(true);
+  async function handleDeleteStore() {
+    setDeleteStoreBusy(true);
     try {
       await apiFetch("/api/sellers/me", { method: "DELETE" });
-      showToast("Store closed. Redirecting…", "success");
+      showToast("Store deleted. Redirecting…", "success");
       setTimeout(() => { window.location.href = "/"; }, 1500);
     } catch (err) {
-      showToast(err?.message || "Couldn't close store. Try again.", "error");
-      setCloseStoreBusy(false);
+      showToast(err?.message || "Couldn't delete store. Try again.", "error");
+      setDeleteStoreBusy(false);
     }
   }
 
@@ -1890,6 +1890,27 @@ export default function SellerDashboard() {
               <i className={`fas fa-rotate-right${refreshing ? " fa-spin" : ""}`} />
               {refreshing ? " Refreshing…" : " Refresh"}
             </button>
+          </div>
+
+          {/* Store Availability (vacation mode) */}
+          <div className="card" style={{ padding: 20, marginBottom: 20, border: storeOpen ? undefined : "1px solid rgba(217,119,6,.4)" }}>
+            <h3 style={{ margin: "0 0 8px", fontSize: "1.6rem", fontWeight: 700 }}>
+              <i className={`fas ${storeOpen ? "fa-store" : "fa-store-slash"}`} style={{ marginRight: 8, color: storeOpen ? "var(--accent)" : "#d97706" }} />Store Availability
+            </h3>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+              <div>
+                <div style={{ fontWeight: 600, fontSize: "1.3rem" }}>{storeOpen ? "Your store is open" : "Your store is temporarily closed"}</div>
+                <div style={{ fontSize: "1.15rem", color: "var(--ink-3)" }}>
+                  {storeOpen
+                    ? "Going away? Close your store temporarily — all your products become unavailable at once, and you can reopen anytime."
+                    : "Buyers currently see your products as unavailable and can't place orders. Flip the toggle to reopen."}
+                </div>
+              </div>
+              <label className="partner-toggle" style={{ flexShrink: 0, marginLeft: 16, opacity: storeOpenBusy ? 0.6 : 1 }}>
+                <input type="checkbox" checked={storeOpen} disabled={storeOpenBusy} onChange={handleToggleStoreOpen} />
+                <span className="partner-toggle-track" />
+              </label>
+            </div>
           </div>
 
           {loading ? (
@@ -2985,48 +3006,27 @@ export default function SellerDashboard() {
             </button>
           </div>
 
-          {/* Store Availability (vacation mode) */}
-          <div className="card" style={{ padding: 20, marginBottom: 16, border: storeOpen ? undefined : "1px solid rgba(217,119,6,.4)" }}>
-            <h3 style={{ margin: "0 0 8px", fontSize: "1.6rem", fontWeight: 700 }}>
-              <i className={`fas ${storeOpen ? "fa-store" : "fa-store-slash"}`} style={{ marginRight: 8, color: storeOpen ? "var(--accent)" : "#d97706" }} />Store Availability
-            </h3>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-              <div>
-                <div style={{ fontWeight: 600, fontSize: "1.3rem" }}>{storeOpen ? "Your store is open" : "Your store is temporarily closed"}</div>
-                <div style={{ fontSize: "1.15rem", color: "var(--ink-3)" }}>
-                  {storeOpen
-                    ? "Going away? Close your store temporarily — all your products become unavailable at once, and you can reopen anytime."
-                    : "Buyers currently see your products as unavailable and can't place orders. Flip the toggle to reopen."}
-                </div>
-              </div>
-              <label className="partner-toggle" style={{ flexShrink: 0, marginLeft: 16, opacity: storeOpenBusy ? 0.6 : 1 }}>
-                <input type="checkbox" checked={storeOpen} disabled={storeOpenBusy} onChange={handleToggleStoreOpen} />
-                <span className="partner-toggle-track" />
-              </label>
-            </div>
-          </div>
-
           {/* Danger Zone */}
           <div className="card" style={{ padding: 20, marginBottom: 16, border: "1px solid rgba(220,38,38,.3)" }}>
             <h3 style={{ margin: "0 0 8px", fontSize: "1.6rem", fontWeight: 700, color: "#dc2626" }}><i className="fas fa-triangle-exclamation" style={{ marginRight: 8 }} />Danger Zone</h3>
             <p style={{ margin: "0 0 16px", fontSize: "1.3rem", color: "var(--ink-2)" }}>
-              Closing your store removes your seller profile and hides all your listings from buyers. Your buyer account stays active. This cannot be undone.
+              Deleting your store removes your seller profile and all your listings for good. Your buyer account stays active. This cannot be undone — if you just need a break, use Store Availability above instead.
             </p>
-            {closeStoreConfirm ? (
+            {deleteStoreConfirm ? (
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                 <div style={{ padding: "10px 14px", background: "rgba(220,38,38,.07)", border: "1px solid rgba(220,38,38,.3)", borderRadius: "var(--r-md)", fontSize: "1.2rem", color: "#dc2626", fontWeight: 600 }}>
-                  <i className="fas fa-circle-exclamation" style={{ marginRight: 6 }} />Are you sure? Your store profile will be removed and all listings hidden from buyers.
+                  <i className="fas fa-circle-exclamation" style={{ marginRight: 6 }} />Are you sure? Your store profile and all listings will be permanently deleted.
                 </div>
                 <div style={{ display: "flex", gap: 10 }}>
-                  <button className="btn btn-sm btn-ghost" style={{ flex: 1 }} onClick={() => setCloseStoreConfirm(false)} disabled={closeStoreBusy}>Cancel</button>
-                  <button className="btn btn-sm" style={{ flex: 1, background: "#dc2626", color: "#fff", border: "none" }} disabled={closeStoreBusy} onClick={handleCloseStore}>
-                    {closeStoreBusy ? <i className="fas fa-spinner fa-spin" /> : <><i className="fas fa-trash" /> Yes, close my store</>}
+                  <button className="btn btn-sm btn-ghost" style={{ flex: 1 }} onClick={() => setDeleteStoreConfirm(false)} disabled={deleteStoreBusy}>Cancel</button>
+                  <button className="btn btn-sm" style={{ flex: 1, background: "#dc2626", color: "#fff", border: "none" }} disabled={deleteStoreBusy} onClick={handleDeleteStore}>
+                    {deleteStoreBusy ? <i className="fas fa-spinner fa-spin" /> : <><i className="fas fa-trash" /> Yes, delete my store</>}
                   </button>
                 </div>
               </div>
             ) : (
-              <button className="btn btn-sm" style={{ color: "#dc2626", border: "1px solid #dc2626", background: "transparent" }} onClick={() => setCloseStoreConfirm(true)}>
-                <i className="fas fa-store-slash" /> Close Store
+              <button className="btn btn-sm" style={{ color: "#dc2626", border: "1px solid #dc2626", background: "transparent" }} onClick={() => setDeleteStoreConfirm(true)}>
+                <i className="fas fa-trash" /> Delete Store
               </button>
             )}
           </div>
