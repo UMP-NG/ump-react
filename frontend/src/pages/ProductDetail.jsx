@@ -345,11 +345,12 @@ export default function ProductDetail() {
       ? product.variants.reduce((s, v) => s + (v.stock ?? 0), 0)
       : product.stock || 0;
   const totalStock = activeStock;
-  const outOfStock = selectedVariant
+  // isAvailable === false also covers a temporarily closed store (stock may still be > 0)
+  const outOfStock = product.isAvailable === false || (selectedVariant
     ? (selectedVariant.stock ?? 0) <= 0
     : hasVariants
       ? product.variants.every(v => (v.stock ?? 0) <= 0)
-      : activeStock <= 0;
+      : activeStock <= 0);
   const lowStock = !outOfStock && activeStock > 0 && activeStock <= 5;
 
   const gallery = (

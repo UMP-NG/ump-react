@@ -9,6 +9,7 @@ import {
   getSellerProfile,
   requestSellerVerification,
   closeStore,
+  setStoreStatus,
   saveDeliveryConfig,
 } from "../controllers/sellerController.js";
 import { protect, requireRole } from "../middleware/authMiddleware.js";
@@ -20,6 +21,7 @@ router.post("/profile",   protect, handleSellerUpload, becomeSeller);
 router.post("/request-verification", protect, requestSellerVerification);
 router.get("/me",         protect, requireRole("seller", "admin"), getSellerProfile);
 router.delete("/me",      protect, requireRole("seller"), closeStore);
+router.put("/me/store-status", protect, requireRole("seller"), setStoreStatus);
 router.put("/delivery",   protect, requireRole("seller"), saveDeliveryConfig);
 
 // ✅ List all sellers (public)

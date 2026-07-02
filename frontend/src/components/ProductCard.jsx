@@ -87,7 +87,8 @@ function ProductCard({ product, variant = "always", onAddToCart }) {
   }
 
   const totalStock = (product?.stock || 0) + (Array.isArray(product?.variants) ? product.variants.reduce((s, v) => s + (v.stock || 0), 0) : 0);
-  const outOfStock = totalStock <= 0;
+  // isAvailable === false also covers a temporarily closed store (stock may still be > 0)
+  const outOfStock = totalStock <= 0 || product?.isAvailable === false;
   const cls = `product-card${variant === "hover" ? " hover-reveal" : ""}`;
   const isActiveSale = product?.salePrice != null &&
     Number(product.salePrice) < Number(product.price) &&

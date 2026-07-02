@@ -35,6 +35,10 @@ const sellerSchema = new mongoose.Schema(
     description: { type: String, trim: true },
     location: { type: String, trim: true },
 
+    // ✅ Temporary open/close toggle (vacation mode) — store stays intact,
+    // products are shown as unavailable and purchases are blocked while closed.
+    isOpen: { type: Boolean, default: true },
+
     // ✅ Store Verification (school-mail auth — do NOT use for badge display)
     isVerified: { type: Boolean, default: false },
     verificationRequested: { type: Boolean, default: false },

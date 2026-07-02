@@ -461,7 +461,8 @@ export const forgotPassword = async (req, res) => {
     const user = await User.findOne({ email });
 
     if (!user) {
-      return res.status(404).json({ message: "No user found with that email" });
+      // Same response as the success path — prevents email enumeration
+      return res.status(200).json({ message: "If that email exists, a password reset link has been sent." });
     }
 
     const resetToken = crypto.randomBytes(20).toString("hex");
@@ -513,6 +514,10 @@ export const resetPassword = async (req, res) => {
 
     if (!user) {
       return res.status(400).json({ message: "Invalid or expired token" });
+    }
+
+    if (!req.body.password || req.body.password.length < 8) {
+      return res.status(400).json({ message: "Password must be at least 8 characters." });
     }
 
     user.password = req.body.password;

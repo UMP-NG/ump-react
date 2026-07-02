@@ -224,9 +224,9 @@ function ReviewModal({ order, onClose, onDone }) {
     if (!productId) { showToast("Cannot identify product to review", "error"); return; }
     setSubmitting(true);
     try {
-      await apiFetch(`/api/products/${productId}/reviews`, {
+      await apiFetch("/api/reviews", {
         method: "POST",
-        body: { rating, comment },
+        body: { refModel: "Product", refId: productId, rating, text: comment },
       });
       showToast("Review submitted — thank you!", "success");
       onDone();

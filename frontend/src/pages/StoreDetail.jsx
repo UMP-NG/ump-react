@@ -115,6 +115,16 @@ export default function StoreDetail() {
     <div className="page">
       <Navbar />
 
+      {/* Temporarily closed notice */}
+      {seller.isOpen === false && (
+        <div style={{ background: "rgba(217,119,6,.12)", borderBottom: "1px solid rgba(217,119,6,.35)", padding: "10px 16px", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+          <i className="fas fa-store-slash" style={{ color: "#d97706" }} />
+          <span style={{ fontSize: "1.3rem", fontWeight: 600, color: "#b45309" }}>
+            This store is temporarily closed — products can't be ordered right now. Check back soon!
+          </span>
+        </div>
+      )}
+
       {/* Banner */}
       <div style={{ position: "relative", height: 160, overflow: "hidden",
         background: banner ? undefined : "linear-gradient(135deg, var(--accent) 0%, #ea580c 40%, #7c2d12 100%)" }}>

@@ -1378,6 +1378,8 @@ export default function SellerDashboard() {
   const [policySaving, setPolicySaving] = useState(false);
   const [closeStoreConfirm, setCloseStoreConfirm] = useState(false);
   const [closeStoreBusy, setCloseStoreBusy] = useState(false);
+  const [storeOpen, setStoreOpen] = useState(true);
+  const [storeOpenBusy, setStoreOpenBusy] = useState(false);
   const DEFAULT_DELIVERY_CONFIG = {
     pickup:     { enabled: true,  instructions: "" },
     shipbubble: { enabled: false, pickupAddress: { name: "", phone: "", email: "", street: "", city: "", state: "" } },
@@ -1443,6 +1445,7 @@ export default function SellerDashboard() {
       setListingsFetched(true);
 
       if (dash?.profile) {
+        setStoreOpen(dash.profile.isOpen !== false);
         setDashStore({
           storeName: dash.profile.storeName || "",
           desc: dash.profile.description || dash.profile.desc || "",
@@ -1702,6 +1705,21 @@ export default function SellerDashboard() {
     } catch (err) {
       showToast(err?.message || "Failed to save delivery settings", "error");
     } finally { setDeliveryConfigSaving(false); }
+  }
+
+  async function handleToggleStoreOpen() {
+    const next = !storeOpen;
+    setStoreOpenBusy(true);
+    try {
+      const d = await apiFetch("/api/sellers/me/store-status", { method: "PUT", body: { open: next } });
+      setStoreOpen(next);
+      showToast(d?.message || (next ? "Store reopened" : "Store closed"), "success");
+      loadDashboard(false);
+    } catch (err) {
+      showToast(err?.message || "Couldn't update store status. Try again.", "error");
+    } finally {
+      setStoreOpenBusy(false);
+    }
   }
 
   async function handleCloseStore() {
@@ -2965,6 +2983,27 @@ export default function SellerDashboard() {
             <button className="btn btn-primary btn-sm" disabled={policySaving} onClick={savePolicies}>
               {policySaving ? <i className="fas fa-spinner fa-spin" /> : <><i className="fas fa-save" /> Save Policies</>}
             </button>
+          </div>
+
+          {/* Store Availability (vacation mode) */}
+          <div className="card" style={{ padding: 20, marginBottom: 16, border: storeOpen ? undefined : "1px solid rgba(217,119,6,.4)" }}>
+            <h3 style={{ margin: "0 0 8px", fontSize: "1.6rem", fontWeight: 700 }}>
+              <i className={`fas ${storeOpen ? "fa-store" : "fa-store-slash"}`} style={{ marginRight: 8, color: storeOpen ? "var(--accent)" : "#d97706" }} />Store Availability
+            </h3>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+              <div>
+                <div style={{ fontWeight: 600, fontSize: "1.3rem" }}>{storeOpen ? "Your store is open" : "Your store is temporarily closed"}</div>
+                <div style={{ fontSize: "1.15rem", color: "var(--ink-3)" }}>
+                  {storeOpen
+                    ? "Going away? Close your store temporarily — all your products become unavailable at once, and you can reopen anytime."
+                    : "Buyers currently see your products as unavailable and can't place orders. Flip the toggle to reopen."}
+                </div>
+              </div>
+              <label className="partner-toggle" style={{ flexShrink: 0, marginLeft: 16, opacity: storeOpenBusy ? 0.6 : 1 }}>
+                <input type="checkbox" checked={storeOpen} disabled={storeOpenBusy} onChange={handleToggleStoreOpen} />
+                <span className="partner-toggle-track" />
+              </label>
+            </div>
           </div>
 
           {/* Danger Zone */}

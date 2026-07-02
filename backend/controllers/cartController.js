@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import Cart from "../models/Cart.js";
 import Order from "../models/Order.js";
 import Product from "../models/Product.js";
+import Seller from "../models/Seller.js";
 import logger from "../utils/logger.js";
 
 // ✅ Get current user's cart
@@ -70,6 +71,12 @@ export const addToCart = async (req, res) => {
     // Prevent seller from buying their own products
     if (product.seller?.toString() === userId.toString()) {
       return res.status(400).json({ message: "You cannot add your own products to your cart" });
+    }
+
+    // Block items from a temporarily closed store
+    const sellerStore = await Seller.findOne({ user: product.seller }).select("isOpen storeName").lean();
+    if (sellerStore && sellerStore.isOpen === false) {
+      return res.status(400).json({ message: `${sellerStore.storeName || "This store"} is temporarily closed. Please check back later.` });
     }
 
     // Find or create user's cart

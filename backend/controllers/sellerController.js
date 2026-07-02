@@ -306,6 +306,54 @@ export const saveDeliveryConfig = async (req, res) => {
   }
 };
 
+// ─── Temporarily open/close store (vacation mode) ────────────────────────────
+// PUT /api/sellers/me/store-status  { open: boolean }
+// Unlike closeStore this is fully reversible: products keep their stock and are
+// only flagged unavailable while the store is closed.
+export const setStoreStatus = async (req, res) => {
+  try {
+    const open = req.body.open === true || req.body.open === "true";
+    const seller = await Seller.findOne({ user: req.user._id });
+    if (!seller) return res.status(404).json({ message: "Store not found" });
+
+    seller.isOpen = open;
+    await seller.save();
+
+    if (open) {
+      // Recompute availability from stock the same way the Product pre-save
+      // hook does: variant stock sum when variants exist, else top-level stock.
+      await Product.updateMany({ seller: req.user._id, deletedAt: null }, [
+        {
+          $set: {
+            isAvailable: {
+              $cond: [
+                { $gt: [{ $size: { $ifNull: ["$variants", []] } }, 0] },
+                { $gt: [{ $sum: "$variants.stock" }, 0] },
+                { $gt: [{ $ifNull: ["$stock", 0] }, 0] },
+              ],
+            },
+          },
+        },
+      ]);
+    } else {
+      await Product.updateMany(
+        { seller: req.user._id, deletedAt: null },
+        { $set: { isAvailable: false } }
+      );
+    }
+
+    res.json({
+      isOpen: open,
+      message: open
+        ? "Store reopened — your products are available to buyers again."
+        : "Store closed — your products are shown as unavailable until you reopen.",
+    });
+  } catch (err) {
+    logger.error("setStoreStatus:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
 export const closeStore = async (req, res) => {
   try {
     const userId = req.user._id;

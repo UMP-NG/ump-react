@@ -58,6 +58,7 @@ export const createOrder = async (req, res) => {
 
     // Process each item
     const processedItems = [];
+    const orderSellerIds = new Set();
     for (const item of items) {
       // Fix #12: validate quantity before using it in calculations
       const qty = Number(item.quantity);
@@ -70,6 +71,7 @@ export const createOrder = async (req, res) => {
         return res.status(404).json({ message: `Product not found: ${item.product}` });
       }
 
+      if (product.seller) orderSellerIds.add(product.seller.toString());
       subtotal += product.price * qty;
 
       processedItems.push({
@@ -78,6 +80,19 @@ export const createOrder = async (req, res) => {
         price: product.price,
         variant: item.variant || {},
       });
+    }
+
+    // Block orders that include items from a temporarily closed store
+    if (orderSellerIds.size > 0) {
+      const closedStore = await Seller.findOne({
+        user: { $in: [...orderSellerIds] },
+        isOpen: false,
+      }).select("storeName").lean();
+      if (closedStore) {
+        return res.status(400).json({
+          message: `${closedStore.storeName || "This store"} is temporarily closed. Please check back later.`,
+        });
+      }
     }
 
     const tax = 0;
@@ -159,6 +174,19 @@ export const checkoutCart = async (req, res) => {
 
     if (sellerGroups.size === 0)
       return res.status(400).json({ message: "No valid items to order" });
+
+    // Block checkout when any item belongs to a temporarily closed store
+    // (items may have been added to the cart before the store closed)
+    const closedStores = await Seller.find({
+      user: { $in: [...sellerGroups.keys()] },
+      isOpen: false,
+    }).select("storeName").lean();
+    if (closedStores.length > 0) {
+      const names = closedStores.map((s) => s.storeName).filter(Boolean).join(", ");
+      return res.status(400).json({
+        message: `${names || "A store"} in your cart is temporarily closed. Remove those items to continue.`,
+      });
+    }
 
     // ── Referral credit deduction ─────────────────────────────────────────────
     const buyer      = await User.findById(userId).select("referralCredit").lean();
