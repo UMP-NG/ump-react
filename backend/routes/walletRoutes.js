@@ -9,6 +9,7 @@ import {
   creditWallet,
   debitWallet,
   giftCredits,
+  verifyBankDetails,
 } from "../controllers/walletController.js";
 
 const router = express.Router();
@@ -24,5 +25,6 @@ router.get("/history", protect, getTransactionHistory);
 router.post("/credit", protect, requireRole("admin"), creditWallet);
 router.post("/debit", protect, requireRole("admin"), debitWallet);
 router.post("/gift", protect, requireRole("admin"), giftCredits); // Non-withdrawable gift credits
+router.post("/verify-bank/:userId", protect, requireRole("admin"), verifyBankDetails);
 
 export default router;

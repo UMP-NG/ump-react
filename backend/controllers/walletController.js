@@ -24,6 +24,56 @@ function maskedBankDetails(bankDetails) {
   return { ...(bankDetails.toObject ? bankDetails.toObject() : bankDetails), accountNumber: mask(bankDetails.accountNumber) };
 }
 
+// ─── Atomic balance mutation ────────────────────────────────────────────────
+// Moves `delta` on `balanceField` (and the mirrored `balance` total) in a
+// single conditional findOneAndUpdate, so concurrent requests can never both
+// read a stale balance and both succeed (the classic double-spend race).
+// - `requireAtLeast`: if set, the filter only matches when balanceField >= this
+//   amount, so an under-funded request atomically fails instead of racing.
+// - `idempotencyKey`: if set, the filter also requires that no existing
+//   transaction carries this key, so a retried request atomically no-ops
+//   instead of double-crediting/debiting.
+// Returns { wallet, alreadyProcessed, tx } — `wallet` is null when the op was
+// rejected for insufficient balance (as opposed to idempotent replay).
+async function atomicMutateBalance({ userId, balanceField, delta, requireAtLeast, idempotencyKey, tx, upsert = false }) {
+  const filter = { user: userId };
+  if (requireAtLeast != null) filter[balanceField] = { $gte: requireAtLeast };
+  if (idempotencyKey) filter["transactions.idempotencyKey"] = { $ne: idempotencyKey };
+
+  const reference = tx.reference || `${tx.type.toUpperCase()}_${crypto.randomBytes(6).toString("hex").toUpperCase()}`;
+  const update = {
+    $inc: { [balanceField]: delta, balance: delta },
+    $push: { transactions: { $each: [{ ...tx, reference }], $slice: -100 } },
+  };
+
+  const wallet = await Wallet.findOneAndUpdate(filter, update, { new: true, upsert });
+  if (wallet) {
+    // balanceAfter depends on the post-increment value, which we only know now —
+    // attach it in a follow-up update targeted at this transaction's unique
+    // reference. This second write never touches balances, so it carries no
+    // double-spend risk even if it races with other requests.
+    const balanceAfter = wallet[balanceField];
+    await Wallet.updateOne(
+      { user: userId, "transactions.reference": reference },
+      { $set: { "transactions.$.balanceAfter": balanceAfter } }
+    );
+    return { wallet, alreadyProcessed: false, reference, balanceAfter };
+  }
+
+  // No match — either insufficient balance or (if idempotencyKey given) a
+  // duplicate of an already-processed request. Disambiguate with a plain read.
+  if (idempotencyKey) {
+    const existing = await Wallet.findOne(
+      { user: userId, "transactions.idempotencyKey": idempotencyKey },
+      { "transactions.$": 1 }
+    );
+    if (existing?.transactions?.[0]) {
+      return { wallet: null, alreadyProcessed: true, tx: existing.transactions[0] };
+    }
+  }
+  return { wallet: null, alreadyProcessed: false };
+}
+
 // ─── Get user's wallet balance and recent transactions ────────────────────
 export const getWallet = async (req, res) => {
   try {
@@ -56,19 +106,25 @@ export const saveBankDetails = async (req, res) => {
     if (!bankName || !bankCode || !accountNumber || !accountName) {
       return res.status(400).json({ message: "All bank details are required" });
     }
+    if (!/^\d{6,12}$/.test(accountNumber)) {
+      return res.status(400).json({ message: "Account number must be 6-12 digits" });
+    }
 
     const wallet = await getOrCreateWallet(req.user._id);
 
+    // New/changed bank details always start unverified — verification is a
+    // separate admin action (see verifyBankDetails) required before withdrawal.
     wallet.bankDetails = {
       bankName,
       bankCode,
       accountNumber: encrypt(accountNumber), // encrypted at rest
       accountName,
-      verified: false, // Bank verification happens server-side in production
+      verified: false,
+      verifiedAt: undefined,
     };
     await wallet.save();
 
-    res.json({ success: true, message: "Bank details saved", bankDetails: maskedBankDetails(wallet.bankDetails) });
+    res.json({ success: true, message: "Bank details saved. They'll need to be verified before you can withdraw.", bankDetails: maskedBankDetails(wallet.bankDetails) });
   } catch (err) {
     logger.error("saveBankDetails error:", err);
     res.status(500).json({ message: "Failed to save bank details" });
@@ -95,52 +151,69 @@ export const transferFunds = async (req, res) => {
       return res.status(404).json({ message: "Recipient not found" });
     }
 
-    // Get sender's wallet
-    const senderWallet = await getOrCreateWallet(senderId);
-
-    // Can only transfer withdrawable funds
-    if (senderWallet.withdrawableBalance < amount) {
-      return res.status(400).json({ message: "Insufficient withdrawable balance. Gift credits cannot be transferred." });
-    }
-
-    // Get recipient's wallet
-    const recipientWallet = await getOrCreateWallet(recipientId);
-
-    // Execute transfer
     const transferId = `TXN_${crypto.randomBytes(6).toString("hex").toUpperCase()}`;
     const now = new Date();
 
-    // Debit sender (only from withdrawable balance)
-    senderWallet.withdrawableBalance -= amount;
-    senderWallet.balance -= amount;
-    senderWallet.transactions.push({
-      type: "transfer_out",
-      amount,
-      description: `Transfer to ${recipient.name}`,
-      reference: transferId,
-      balanceAfter: senderWallet.withdrawableBalance,
-      status: "completed",
-      relatedUser: recipientId,
-      withdrawable: true,
-      createdAt: now,
+    // Atomically debit sender — filter requires sufficient withdrawable
+    // balance, so a concurrent double-spend can never both pass.
+    const debit = await atomicMutateBalance({
+      userId: senderId,
+      balanceField: "withdrawableBalance",
+      delta: -amount,
+      requireAtLeast: amount,
+      tx: {
+        type: "transfer_out",
+        amount,
+        description: note ? `Transfer to ${recipient.name}: ${note}` : `Transfer to ${recipient.name}`,
+        reference: transferId,
+        status: "completed",
+        relatedUser: recipientId,
+        withdrawable: true,
+        createdAt: now,
+      },
     });
-    await senderWallet.save();
 
-    // Credit recipient (as withdrawable funds)
-    recipientWallet.withdrawableBalance += amount;
-    recipientWallet.balance += amount;
-    recipientWallet.transactions.push({
-      type: "transfer_in",
-      amount,
-      description: `Transfer from ${req.user.name}`,
-      reference: transferId,
-      balanceAfter: recipientWallet.withdrawableBalance,
-      status: "completed",
-      relatedUser: senderId,
-      withdrawable: true,
-      createdAt: now,
-    });
-    await recipientWallet.save();
+    if (!debit.wallet) {
+      return res.status(400).json({ message: "Insufficient withdrawable balance. Gift credits cannot be transferred." });
+    }
+
+    // Credit recipient. If this somehow fails after the sender was already
+    // debited, refund the sender so funds are never silently lost.
+    try {
+      await atomicMutateBalance({
+        userId: recipientId,
+        balanceField: "withdrawableBalance",
+        delta: amount,
+        tx: {
+          type: "transfer_in",
+          amount,
+          description: `Transfer from ${req.user.name}`,
+          reference: `${transferId}_IN`,
+          status: "completed",
+          relatedUser: senderId,
+          withdrawable: true,
+          createdAt: now,
+        },
+        upsert: true,
+      });
+    } catch (creditErr) {
+      logger.error(`transferFunds: recipient credit failed after sender debit, refunding sender. ref=${transferId}`, creditErr);
+      await atomicMutateBalance({
+        userId: senderId,
+        balanceField: "withdrawableBalance",
+        delta: amount,
+        tx: {
+          type: "refund",
+          amount,
+          description: `Refund: transfer to ${recipient.name} failed`,
+          reference: `${transferId}_REFUND`,
+          status: "completed",
+          withdrawable: true,
+          createdAt: new Date(),
+        },
+      });
+      return res.status(500).json({ message: "Transfer failed and was reversed. Please try again." });
+    }
 
     // Notify recipient
     notify(recipientId, {
@@ -154,7 +227,7 @@ export const transferFunds = async (req, res) => {
       success: true,
       message: "Transfer successful",
       transferId,
-      newBalance: senderWallet.withdrawableBalance,
+      newBalance: debit.balanceAfter,
     });
   } catch (err) {
     logger.error("transferFunds error:", err);
@@ -172,76 +245,85 @@ export const requestWithdrawal = async (req, res) => {
       return res.status(400).json({ message: "Invalid amount" });
     }
 
-    // Get wallet
     const wallet = await getOrCreateWallet(userId);
-
-    // Check withdrawable balance only (gift credits cannot be withdrawn)
-    if (wallet.withdrawableBalance < amount) {
-      return res.status(400).json({
-        message: "Insufficient withdrawable balance. Gift credits (site-only funds) cannot be withdrawn to your bank account.",
-        withdrawableBalance: wallet.withdrawableBalance,
-        giftCredits: wallet.giftCredits,
-      });
-    }
 
     // Check bank details
     if (!wallet.bankDetails?.accountNumber) {
       return res.status(400).json({ message: "Please add bank details first" });
     }
+    if (!wallet.bankDetails.verified) {
+      return res.status(400).json({ message: "Your bank account is pending verification. We'll notify you once it's approved." });
+    }
 
-    // Reset daily/monthly limits if needed
+    // Reset daily/monthly limit counters if a new day/month has started.
+    // This reset is best-effort (not part of the atomic decrement below) —
+    // fund safety never depends on it, since the withdrawableBalance filter
+    // always prevents the balance itself from going negative.
     const now = new Date();
     const lastReset = wallet.lastWithdrawalReset ? new Date(wallet.lastWithdrawalReset) : null;
-
-    if (!lastReset || lastReset.toDateString() !== now.toDateString()) {
-      wallet.totalWithdrawnToday = 0;
+    const newDay = !lastReset || lastReset.toDateString() !== now.toDateString();
+    const newMonth = !lastReset || lastReset.getMonth() !== now.getMonth() || lastReset.getFullYear() !== now.getFullYear();
+    if (newDay || newMonth) {
+      await Wallet.updateOne(
+        { user: userId },
+        {
+          $set: {
+            ...(newDay ? { totalWithdrawnToday: 0 } : {}),
+            ...(newMonth ? { totalWithdrawnThisMonth: 0 } : {}),
+            lastWithdrawalReset: now,
+          },
+        }
+      );
     }
 
-    if (!lastReset || lastReset.getMonth() !== now.getMonth() || lastReset.getFullYear() !== now.getFullYear()) {
-      wallet.totalWithdrawnThisMonth = 0;
-    }
-
-    // Check daily limit
-    if (wallet.totalWithdrawnToday + amount > wallet.dailyWithdrawalLimit) {
+    // Re-read post-reset limits for the pre-checks below (informational —
+    // the withdrawableBalance $gte filter is what actually prevents overdraw).
+    const fresh = await Wallet.findOne({ user: userId }).select("totalWithdrawnToday totalWithdrawnThisMonth dailyWithdrawalLimit monthlyWithdrawalLimit");
+    if (fresh.totalWithdrawnToday + amount > fresh.dailyWithdrawalLimit) {
       return res.status(400).json({
-        message: `Daily withdrawal limit (₦${wallet.dailyWithdrawalLimit.toLocaleString()}) exceeded. You've already withdrawn ₦${wallet.totalWithdrawnToday.toLocaleString()} today.`,
+        message: `Daily withdrawal limit (₦${fresh.dailyWithdrawalLimit.toLocaleString()}) exceeded. You've already withdrawn ₦${fresh.totalWithdrawnToday.toLocaleString()} today.`,
+      });
+    }
+    if (fresh.totalWithdrawnThisMonth + amount > fresh.monthlyWithdrawalLimit) {
+      return res.status(400).json({
+        message: `Monthly withdrawal limit (₦${fresh.monthlyWithdrawalLimit.toLocaleString()}) exceeded. You've already withdrawn ₦${fresh.totalWithdrawnThisMonth.toLocaleString()} this month.`,
       });
     }
 
-    // Check monthly limit
-    if (wallet.totalWithdrawnThisMonth + amount > wallet.monthlyWithdrawalLimit) {
-      return res.status(400).json({
-        message: `Monthly withdrawal limit (₦${wallet.monthlyWithdrawalLimit.toLocaleString()}) exceeded. You've already withdrawn ₦${wallet.totalWithdrawnThisMonth.toLocaleString()} this month.`,
-      });
-    }
-
-    // Create withdrawal transaction (only from withdrawable balance)
     const withdrawalId = `WD_${crypto.randomBytes(6).toString("hex").toUpperCase()}`;
 
-    wallet.withdrawableBalance -= amount;
-    wallet.balance -= amount;
-    wallet.totalWithdrawnToday += amount;
-    wallet.totalWithdrawnThisMonth += amount;
-    wallet.lastWithdrawalReset = now;
-
-    wallet.transactions.push({
-      type: "withdrawal",
-      amount,
-      description: `Withdrawal to ${wallet.bankDetails.bankName} (${mask(wallet.bankDetails.accountNumber)})`,
-      reference: withdrawalId,
-      balanceAfter: wallet.withdrawableBalance,
-      status: "pending", // Will be marked "completed" by admin/webhook
-      withdrawable: true,
-      createdAt: now,
+    const result = await atomicMutateBalance({
+      userId,
+      balanceField: "withdrawableBalance",
+      delta: -amount,
+      requireAtLeast: amount,
+      tx: {
+        type: "withdrawal",
+        amount,
+        description: `Withdrawal to ${wallet.bankDetails.bankName} (${mask(wallet.bankDetails.accountNumber)})`,
+        reference: withdrawalId,
+        status: "pending", // Will be marked "completed" by admin/webhook
+        withdrawable: true,
+        createdAt: now,
+      },
     });
-    await wallet.save();
+
+    if (!result.wallet) {
+      return res.status(400).json({
+        message: "Insufficient withdrawable balance. Gift credits (site-only funds) cannot be withdrawn to your bank account.",
+      });
+    }
+
+    await Wallet.updateOne(
+      { user: userId },
+      { $inc: { totalWithdrawnToday: amount, totalWithdrawnThisMonth: amount } }
+    );
 
     res.json({
       success: true,
       message: "Withdrawal request submitted. Transfer will process within 24-48 hours.",
       withdrawalId,
-      newWithdrawableBalance: wallet.withdrawableBalance,
-      remainingGiftCredits: wallet.giftCredits,
+      newWithdrawableBalance: result.balanceAfter,
     });
   } catch (err) {
     logger.error("requestWithdrawal error:", err);
@@ -287,44 +369,39 @@ export const creditWallet = async (req, res) => {
       return res.status(400).json({ message: "Invalid userId or amount" });
     }
 
-    const wallet = await getOrCreateWallet(userId);
-
-    // Idempotency: check if this key was already processed
-    if (idempotencyKey) {
-      const existingTx = wallet.transactions.find((t) => t.idempotencyKey === idempotencyKey);
-      if (existingTx) {
-        return res.json({
-          success: true,
-          message: "Credit already processed (idempotent)",
-          balanceAfter: existingTx.balanceAfter,
-        });
-      }
+    const targetUser = await User.findById(userId).select("_id");
+    if (!targetUser) {
+      return res.status(404).json({ message: "Target user not found" });
     }
 
-    const oldWithdrawableBalance = wallet.withdrawableBalance;
-    wallet.balance += amount;
-    wallet.withdrawableBalance += amount; // Regular credits are withdrawable
-
-    wallet.transactions.push({
-      type,
-      amount,
-      description: description || "Wallet credit",
-      reference,
-      balanceAfter: wallet.withdrawableBalance,
-      status: "completed",
-      withdrawable: true,
+    const result = await atomicMutateBalance({
+      userId,
+      balanceField: "withdrawableBalance",
+      delta: amount,
       idempotencyKey,
-      createdAt: new Date(),
+      upsert: true,
+      tx: {
+        type,
+        amount,
+        description: description || "Wallet credit",
+        reference,
+        status: "completed",
+        withdrawable: true,
+        idempotencyKey,
+        createdAt: new Date(),
+      },
     });
-    await wallet.save();
 
-    logger.info(`💰 Wallet credited: userId=${userId}, amount=₦${amount}, newBalance=₦${wallet.withdrawableBalance}`);
+    if (result.alreadyProcessed) {
+      return res.json({ success: true, message: "Credit already processed (idempotent)", balanceAfter: result.tx.balanceAfter });
+    }
+
+    logger.info(`💰 Wallet credited: userId=${userId}, amount=₦${amount}, newBalance=₦${result.balanceAfter}`);
 
     res.json({
       success: true,
       message: "Wallet credited successfully",
-      oldWithdrawableBalance,
-      newWithdrawableBalance: wallet.withdrawableBalance,
+      newWithdrawableBalance: result.balanceAfter,
     });
   } catch (err) {
     logger.error("creditWallet error:", err);
@@ -341,36 +418,32 @@ export const giftCredits = async (req, res) => {
       return res.status(400).json({ message: "Invalid userId or amount" });
     }
 
-    const wallet = await getOrCreateWallet(userId);
-
-    // Idempotency: check if this key was already processed
-    if (idempotencyKey) {
-      const existingTx = wallet.transactions.find((t) => t.idempotencyKey === idempotencyKey);
-      if (existingTx) {
-        return res.json({
-          success: true,
-          message: "Gift already issued (idempotent)",
-          balanceAfter: existingTx.balanceAfter,
-        });
-      }
+    const targetUser = await User.findById(userId).select("_id");
+    if (!targetUser) {
+      return res.status(404).json({ message: "Target user not found" });
     }
 
-    const oldGiftCredits = wallet.giftCredits;
-    wallet.balance += amount;
-    wallet.giftCredits += amount; // Non-withdrawable gift credits
-
-    wallet.transactions.push({
-      type: "gift_credit",
-      amount,
-      description: description || `Gift credits - ${reason || "UMP reward"}`,
-      reference,
-      balanceAfter: wallet.giftCredits,
-      status: "completed",
-      withdrawable: false, // CANNOT be withdrawn
+    const result = await atomicMutateBalance({
+      userId,
+      balanceField: "giftCredits",
+      delta: amount,
       idempotencyKey,
-      createdAt: new Date(),
+      upsert: true,
+      tx: {
+        type: "gift_credit",
+        amount,
+        description: description || `Gift credits - ${reason || "UMP reward"}`,
+        reference,
+        status: "completed",
+        withdrawable: false, // CANNOT be withdrawn
+        idempotencyKey,
+        createdAt: new Date(),
+      },
     });
-    await wallet.save();
+
+    if (result.alreadyProcessed) {
+      return res.json({ success: true, message: "Gift already issued (idempotent)", balanceAfter: result.tx.balanceAfter });
+    }
 
     // Notify user
     notify(userId, {
@@ -385,8 +458,7 @@ export const giftCredits = async (req, res) => {
     res.json({
       success: true,
       message: "Gift credits issued successfully",
-      oldGiftCredits,
-      newGiftCredits: wallet.giftCredits,
+      newGiftCredits: result.balanceAfter,
     });
   } catch (err) {
     logger.error("giftCredits error:", err);
@@ -403,52 +475,73 @@ export const debitWallet = async (req, res) => {
       return res.status(400).json({ message: "Invalid userId or amount" });
     }
 
-    const wallet = await getOrCreateWallet(userId);
-
-    // Idempotency: check if this key was already processed
-    if (idempotencyKey) {
-      const existingTx = wallet.transactions.find((t) => t.idempotencyKey === idempotencyKey);
-      if (existingTx) {
-        return res.json({
-          success: true,
-          message: "Debit already processed (idempotent)",
-          balanceAfter: existingTx.balanceAfter,
-        });
-      }
+    const targetUser = await User.findById(userId).select("_id");
+    if (!targetUser) {
+      return res.status(404).json({ message: "Target user not found" });
     }
 
-    // MUST debit from withdrawable balance to maintain invariant
-    if (wallet.withdrawableBalance < amount) {
+    const result = await atomicMutateBalance({
+      userId,
+      balanceField: "withdrawableBalance",
+      delta: -amount,
+      requireAtLeast: amount,
+      idempotencyKey,
+      tx: {
+        type: "debit",
+        amount,
+        description: description || "Wallet debit",
+        reference,
+        status: "completed",
+        withdrawable: true,
+        idempotencyKey,
+        createdAt: new Date(),
+      },
+    });
+
+    if (result.alreadyProcessed) {
+      return res.json({ success: true, message: "Debit already processed (idempotent)", balanceAfter: result.tx.balanceAfter });
+    }
+    if (!result.wallet) {
       return res.status(400).json({ message: "Insufficient withdrawable balance" });
     }
 
-    const oldBalance = wallet.balance;
-    wallet.balance -= amount;
-    wallet.withdrawableBalance -= amount; // CRITICAL: maintain invariant
-
-    wallet.transactions.push({
-      type: "debit",
-      amount,
-      description: description || "Wallet debit",
-      reference,
-      balanceAfter: wallet.withdrawableBalance,
-      status: "completed",
-      withdrawable: true,
-      idempotencyKey,
-      createdAt: new Date(),
-    });
-    await wallet.save();
-
-    logger.info(`💳 Wallet debited: userId=${userId}, amount=₦${amount}, newBalance=₦${wallet.withdrawableBalance}`);
+    logger.info(`💳 Wallet debited: userId=${userId}, amount=₦${amount}, newBalance=₦${result.balanceAfter}`);
 
     res.json({
       success: true,
       message: "Wallet debited successfully",
-      oldBalance,
-      newBalance: wallet.withdrawableBalance,
+      newBalance: result.balanceAfter,
     });
   } catch (err) {
     logger.error("debitWallet error:", err);
     res.status(500).json({ message: "Failed to debit wallet" });
+  }
+};
+
+// ─── Verify a user's bank details (admin only) — required before withdrawal ─
+export const verifyBankDetails = async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    const wallet = await Wallet.findOne({ user: userId });
+    if (!wallet?.bankDetails?.accountNumber) {
+      return res.status(404).json({ message: "This user has no bank details on file" });
+    }
+
+    wallet.bankDetails.verified = true;
+    wallet.bankDetails.verifiedAt = new Date();
+    await wallet.save();
+
+    notify(userId, {
+      type: "wallet",
+      title: "Bank account verified",
+      message: "Your bank account has been verified. You can now withdraw from your wallet.",
+      link: "/wallet",
+    }).catch(() => {});
+
+    res.json({ success: true, message: "Bank details verified" });
+  } catch (err) {
+    logger.error("verifyBankDetails error:", err);
+    res.status(500).json({ message: "Failed to verify bank details" });
   }
 };

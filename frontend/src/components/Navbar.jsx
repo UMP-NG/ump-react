@@ -22,6 +22,47 @@ export function useTheme() {
   return [dark, toggle];
 }
 
+// One suggestion row, shared between the desktop dropdown and the mobile
+// full-width list so both stay in sync and get bug fixes for free.
+function SuggestionItem({ s, onClick, showBorder }) {
+  const [hovered, setHovered] = useState(false);
+  const TYPE_LABEL = { product: "Product", service: "Service", seller: "Seller", category: "Category" };
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        width: "100%", padding: "12px 14px", display: "flex", alignItems: "center", gap: 12, border: "none",
+        background: hovered ? "rgba(59,130,246,.08)" : "transparent", cursor: "pointer", textAlign: "left",
+        borderBottom: showBorder ? "1px solid rgba(0,0,0,.05)" : "none",
+        color: "var(--ink-1)", fontSize: "1.3rem", transition: "background .15s",
+      }}
+    >
+      {s.image ? (
+        <img src={s.image} alt={s.name} style={{ width: 44, height: 44, borderRadius: "var(--r-md)", objectFit: "cover", flexShrink: 0 }} />
+      ) : (
+        <div style={{ width: 44, height: 44, borderRadius: "var(--r-md)", background: "rgba(59,130,246,.1)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, color: "var(--accent)" }}>
+          <i className={`fas fa-${s.icon}`} style={{ fontSize: "1.6rem" }} />
+        </div>
+      )}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontWeight: 600, fontSize: "1.3rem", marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {s.name}
+        </div>
+        {s.desc && (
+          <div style={{ fontSize: "0.95rem", color: "var(--ink-3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {s.desc.slice(0, 50)}
+          </div>
+        )}
+        <div style={{ fontSize: "0.85rem", color: "var(--ink-3)", marginTop: 2 }}>{TYPE_LABEL[s.type] || s.type}</div>
+      </div>
+      <i className="fas fa-chevron-right" style={{ color: "var(--ink-3)", flexShrink: 0 }} />
+    </button>
+  );
+}
+
 const NAV_LINKS = [
   { path: "/",         label: "Home" },
   { path: "/market",   label: "Marketplace" },
@@ -46,6 +87,7 @@ export default function Navbar({ frosted = false, dark = false }) {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const suggestionsRef = useRef(null);
   const suggestionsTimeoutRef = useRef(null);
+  const suggestionsReqIdRef = useRef(0); // guards against a stale response overwriting a newer one
 
   useEffect(() => {
     if (!user) { setNotifCount(0); setCartCount(0); return; }
@@ -91,12 +133,15 @@ export default function Navbar({ frosted = false, dark = false }) {
 
   // Fetch search suggestions with descriptions and categories
   function fetchSuggestions(q) {
-    if (q.length < 1) {
+    if (q.trim().length < 2) {
+      clearTimeout(suggestionsTimeoutRef.current);
+      suggestionsReqIdRef.current++; // invalidate any in-flight request
       setSuggestions([]);
       setShowSuggestions(false);
       return;
     }
     clearTimeout(suggestionsTimeoutRef.current);
+    const reqId = ++suggestionsReqIdRef.current;
     suggestionsTimeoutRef.current = setTimeout(() => {
       Promise.allSettled([
         apiFetch(`/api/products?search=${encodeURIComponent(q)}&limit=5`),
@@ -104,6 +149,9 @@ export default function Navbar({ frosted = false, dark = false }) {
         apiFetch(`/api/sellers?search=${encodeURIComponent(q)}&limit=3`),
         apiFetch(`/api/categories?search=${encodeURIComponent(q)}&limit=3`),
       ]).then(([pr, sr, slr, cr]) => {
+        // A newer keystroke already fired a request — discard this stale response
+        if (reqId !== suggestionsReqIdRef.current) return;
+
         const prods = pr.status === "fulfilled" ? (pr.value?.products || pr.value || []).slice(0, 5) : [];
         const servs = sr.status === "fulfilled" ? (sr.value?.services || sr.value || []).slice(0, 5) : [];
         const sells = slr.status === "fulfilled" ? (Array.isArray(slr.value) ? slr.value : slr.value?.sellers || []).slice(0, 3) : [];
@@ -122,7 +170,7 @@ export default function Navbar({ frosted = false, dark = false }) {
         setSuggestions(all);
         setShowSuggestions(all.length > 0);
       });
-    }, 200);
+    }, 300);
   }
 
   function handleSearchChange(val) {
@@ -130,8 +178,14 @@ export default function Navbar({ frosted = false, dark = false }) {
     fetchSuggestions(val);
   }
 
+  function handleMobSearchChange(val) {
+    setMobQ(val);
+    fetchSuggestions(val);
+  }
+
   function handleSuggestionClick(suggestion) {
     setShowSuggestions(false);
+    if (mobSearch) closeMobSearch();
     if (suggestion.type === "product") {
       navigate(`/products/${suggestion._id}`);
     } else if (suggestion.type === "service") {
@@ -160,6 +214,10 @@ export default function Navbar({ frosted = false, dark = false }) {
   function closeMobSearch() {
     setMobSearch(false);
     setMobQ("");
+    suggestionsReqIdRef.current++;
+    clearTimeout(suggestionsTimeoutRef.current);
+    setSuggestions([]);
+    setShowSuggestions(false);
   }
 
   function submitMobSearch(e) {
@@ -183,7 +241,7 @@ export default function Navbar({ frosted = false, dark = false }) {
       <nav className={cls}>
         {mobSearch ? (
           /* ── Mobile search bar (replaces nav content) ── */
-          <form onSubmit={submitMobSearch} style={{ display: "flex", alignItems: "center", gap: 8, flex: 1 }}>
+          <form onSubmit={submitMobSearch} style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, position: "relative" }}>
             <button type="button" className="icon-btn" onClick={closeMobSearch} style={{ flexShrink: 0 }}>
               <i className="fas fa-arrow-left" />
             </button>
@@ -194,7 +252,7 @@ export default function Navbar({ frosted = false, dark = false }) {
                 className="input"
                 placeholder="Search products, services, stores…"
                 value={mobQ}
-                onChange={(e) => setMobQ(e.target.value)}
+                onChange={(e) => handleMobSearchChange(e.target.value)}
                 style={{ padding: "10px 14px 10px 40px", height: 42 }}
               />
             </div>
@@ -202,6 +260,24 @@ export default function Navbar({ frosted = false, dark = false }) {
               <button type="submit" className="icon-btn" style={{ background: "var(--accent)", color: "#fff", flexShrink: 0 }}>
                 <i className="fas fa-arrow-right" />
               </button>
+            )}
+
+            {/* Suggestions list — full-width, anchored below the whole search bar */}
+            {showSuggestions && suggestions.length > 0 && (
+              <div style={{
+                position: "absolute", top: "100%", left: 0, right: 0, marginTop: 4,
+                background: "var(--paper)", borderRadius: "var(--r-lg)", boxShadow: "var(--shadow-lg)",
+                zIndex: 100, maxHeight: "70vh", overflowY: "auto", border: "1px solid var(--line)",
+              }}>
+                {suggestions.map((s, i) => (
+                  <SuggestionItem
+                    key={`${s.type}-${s._id}`}
+                    s={s}
+                    showBorder={i < suggestions.length - 1}
+                    onClick={() => handleSuggestionClick(s)}
+                  />
+                ))}
+              </div>
             )}
           </form>
         ) : (
@@ -244,52 +320,22 @@ export default function Navbar({ frosted = false, dark = false }) {
                     style={{ padding: "10px 14px 10px 40px", height: 40 }}
                   />
                 </div>
-                {/* Suggestions dropdown - List format with descriptions */}
+                {/* Suggestions dropdown - List format with descriptions.
+                    Anchored via `right: 0` (not a hardcoded left offset) so a
+                    dropdown wider than the input never overflows the viewport. */}
                 {showSuggestions && suggestions.length > 0 && (
                   <div ref={suggestionsRef} style={{
-                    position: "absolute", top: 40, left: -50, width: 420, background: "var(--paper)", borderRadius: "var(--r-lg)", boxShadow: "var(--shadow-lg)", zIndex: 100, maxHeight: 400, overflowY: "auto", border: "1px solid var(--line)"
+                    position: "absolute", top: 40, right: 0, width: "min(420px, 92vw)",
+                    background: "var(--paper)", borderRadius: "var(--r-lg)", boxShadow: "var(--shadow-lg)",
+                    zIndex: 100, maxHeight: 400, overflowY: "auto", border: "1px solid var(--line)",
                   }}>
                     {suggestions.map((s, i) => (
-                      <button
+                      <SuggestionItem
                         key={`${s.type}-${s._id}`}
-                        type="button"
+                        s={s}
+                        showBorder={i < suggestions.length - 1}
                         onClick={() => handleSuggestionClick(s)}
-                        style={{
-                          width: "100%", padding: "12px 14px", display: "flex", alignItems: "center", gap: 12, border: "none", background: "transparent", cursor: "pointer", textAlign: "left", borderBottom: i < suggestions.length - 1 ? "1px solid rgba(0,0,0,.05)" : "none",
-                          color: "var(--ink-1)", fontSize: "1.3rem", transition: "background .15s",
-                        }}
-                        onMouseEnter={(e) => e.target.style.background = "rgba(59,130,246,.08)"}
-                        onMouseLeave={(e) => e.target.style.background = "transparent"}
-                      >
-                        {/* Image thumbnail for products */}
-                        {s.image ? (
-                          <img src={s.image} alt={s.name} style={{ width: 44, height: 44, borderRadius: "var(--r-md)", objectFit: "cover", flexShrink: 0 }} />
-                        ) : (
-                          <div style={{ width: 44, height: 44, borderRadius: "var(--r-md)", background: "rgba(59,130,246,.1)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, color: "var(--accent)" }}>
-                            <i className={`fas fa-${s.icon}`} style={{ fontSize: "1.6rem" }} />
-                          </div>
-                        )}
-
-                        {/* Text info */}
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontWeight: 600, fontSize: "1.3rem", marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                            {s.name}
-                          </div>
-                          {s.desc && (
-                            <div style={{ fontSize: "0.95rem", color: "var(--ink-3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                              {s.desc.slice(0, 50)}
-                            </div>
-                          )}
-                          <div style={{ fontSize: "0.85rem", color: "var(--ink-3)", marginTop: 2 }}>
-                            {s.type === "product" && "Product"}
-                            {s.type === "service" && "Service"}
-                            {s.type === "seller" && "Seller"}
-                            {s.type === "category" && "Category"}
-                          </div>
-                        </div>
-
-                        <i className="fas fa-chevron-right" style={{ color: "var(--ink-3)", flexShrink: 0 }} />
-                      </button>
+                      />
                     ))}
                   </div>
                 )}

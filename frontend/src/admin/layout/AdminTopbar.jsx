@@ -79,10 +79,12 @@ export default function AdminTopbar({ onMenuOpen }) {
     (notifStats.disputes        || 0)
   ) > 0;
 
-  function handleSearch(e) {
-    if (e.key === 'Enter' && query.trim()) {
-      navigate(`/admin/users?q=${encodeURIComponent(query.trim())}`);
-    }
+  function runSearch() {
+    if (query.trim()) navigate(`/admin/users?q=${encodeURIComponent(query.trim())}`);
+  }
+
+  function handleSearchKeyDown(e) {
+    if (e.key === 'Enter') runSearch();
   }
 
   return (
@@ -101,16 +103,18 @@ export default function AdminTopbar({ onMenuOpen }) {
         ))}
       </div>
 
-      <div className="adm-search">
-        <i className="fa-solid fa-magnifying-glass"></i>
+      <form className="adm-search" onSubmit={e => { e.preventDefault(); runSearch(); }}>
+        <button type="submit" className="adm-search-icon-btn" title="Search" style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>
+          <i className="fa-solid fa-magnifying-glass"></i>
+        </button>
         <input
           placeholder="Search users, orders, products…"
           value={query}
           onChange={e => setQuery(e.target.value)}
-          onKeyDown={handleSearch}
+          onKeyDown={handleSearchKeyDown}
         />
         <span className="kbd">⌘K</span>
-      </div>
+      </form>
 
       <div className="adm-top-spacer"></div>
 

@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { apiFetch } from '../../utils/api';
 
 const TABS = [
@@ -41,14 +42,19 @@ function downloadCSV(rows, filename) {
 }
 
 export default function Users() {
+  const [searchParams] = useSearchParams();
+  const initialQ = searchParams.get('q') || '';
+
   const [tab, setTab]           = useState(0);
   const [users, setUsers]       = useState([]);
   const [total, setTotal]       = useState(0);
   const [page, setPage]         = useState(1);
   const [loading, setLoading]   = useState(true);
   const [error, setError]       = useState('');
-  const [search, setSearch]     = useState('');
-  const [viewUser, setViewUser] = useState(null);
+  // Seeded from ?q= so arriving from the topbar search (Enter/⌘K) runs immediately
+  const [search, setSearch]         = useState(initialQ);
+  const [searchInput, setSearchInput] = useState(initialQ);
+  const [viewUser, setViewUser]     = useState(null);
 
   const fetchUsers = useCallback(() => {
     setLoading(true);
@@ -63,6 +69,12 @@ export default function Users() {
   }, [tab, page, search]);
 
   useEffect(() => { fetchUsers(); }, [fetchUsers]);
+
+  function submitSearch(e) {
+    e.preventDefault();
+    setPage(1);
+    setSearch(searchInput.trim());
+  }
 
   const initials = name => name ? name.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase() : 'U';
   const AV_COLORS = ['av-a', 'av-b', 'av-c', 'av-d', 'av-e', 'av-f', 'av-g'];
@@ -208,14 +220,28 @@ export default function Users() {
           ))}
         </div>
         <div style={{ flex: 1 }}></div>
-        <div className="adm-search" style={{ maxWidth: 280 }}>
-          <i className="fa-solid fa-magnifying-glass"></i>
+        <form className="adm-search" style={{ maxWidth: 280 }} onSubmit={submitSearch}>
+          <button type="submit" className="adm-search-icon-btn" title="Search" style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>
+            <i className="fa-solid fa-magnifying-glass"></i>
+          </button>
           <input
             placeholder="Search name, email, or referral code…"
-            value={search}
-            onChange={e => { setSearch(e.target.value); setPage(1); }}
+            value={searchInput}
+            onChange={e => setSearchInput(e.target.value)}
+            style={searchInput ? { paddingRight: 34 } : undefined}
           />
-        </div>
+          {searchInput && (
+            <button
+              type="button"
+              className="adm-search-clear-btn"
+              title="Clear"
+              onClick={() => { setSearchInput(''); setSearch(''); setPage(1); }}
+              style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', color: 'var(--ink-3)' }}
+            >
+              <i className="fa-solid fa-xmark"></i>
+            </button>
+          )}
+        </form>
       </div>
 
       {/* ── Table ────────────────────────────────────────────── */}

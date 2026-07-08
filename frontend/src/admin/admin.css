@@ -173,15 +173,27 @@
   outline: none;
 }
 .adm-search input:focus { background: #fff; border-color: var(--accent); }
-.adm-search > i {
+.adm-search > i,
+.adm-search-icon-btn {
   position: absolute;
   left: 14px;
   top: 50%;
   transform: translateY(-50%);
   color: var(--ink-3);
   font-size: 1.2rem;
-  pointer-events: none;
 }
+.adm-search > i { pointer-events: none; }
+.adm-search-icon-btn { z-index: 1; }
+.adm-search-icon-btn:hover { color: var(--accent); }
+.adm-search-clear-btn {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 1.2rem;
+  z-index: 1;
+}
+.adm-search-clear-btn:hover { color: var(--ink-1) !important; }
 .adm-search .kbd {
   position: absolute;
   right: 8px; top: 50%;
@@ -1095,7 +1107,9 @@
 
   /* Topbar */
   .adm-top   { padding: 0 16px; gap: 10px; }
-  .adm-search { display: none; }
+  /* Scoped to the topbar only — page-level search bars (e.g. Users page) reuse
+     the .adm-search class and must stay visible/usable on mobile. */
+  .adm-top .adm-search { display: none; }
   .adm-top-spacer { flex: 1; }
 
   /* Body */
