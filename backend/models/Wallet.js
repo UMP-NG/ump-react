@@ -94,8 +94,7 @@ walletSchema.pre("save", function (next) {
   next();
 });
 
-// Index for fast lookups
-walletSchema.index({ user: 1 });
+// Note: `user` is already indexed via `unique: true` above — no need to redeclare it here.
 walletSchema.index({ "transactions.createdAt": -1 });
 
 export default mongoose.model("Wallet", walletSchema);

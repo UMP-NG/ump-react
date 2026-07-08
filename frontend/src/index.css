@@ -489,6 +489,14 @@ body {
   position: absolute; left: 16px; top: 50%; transform: translateY(-50%);
   color: var(--ink-3); font-size: 1.5rem;
 }
+.search-wrap .search-clear-btn {
+  position: absolute; right: 10px; top: 50%; transform: translateY(-50%);
+  width: 24px; height: 24px; border: none; background: transparent; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--ink-3); border-radius: 50%; font-size: 1.3rem;
+}
+.search-wrap .search-clear-btn:hover { color: var(--ink-1); background: rgba(0,0,0,.06); }
+[data-theme="dark"] .search-wrap .search-clear-btn:hover { background: rgba(255,255,255,.1); }
 
 /* ── Steps ── */
 .steps { display: flex; align-items: center; gap: 8px; padding: 16px 20px; }

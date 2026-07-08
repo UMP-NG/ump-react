@@ -22,11 +22,12 @@ export function useTheme() {
   return [dark, toggle];
 }
 
+const SUGGESTION_TYPE_LABEL = { product: "Product", service: "Service", seller: "Seller", category: "Category" };
+
 // One suggestion row, shared between the desktop dropdown and the mobile
 // full-width list so both stay in sync and get bug fixes for free.
 function SuggestionItem({ s, onClick, showBorder }) {
   const [hovered, setHovered] = useState(false);
-  const TYPE_LABEL = { product: "Product", service: "Service", seller: "Seller", category: "Category" };
   return (
     <button
       type="button"
@@ -56,7 +57,7 @@ function SuggestionItem({ s, onClick, showBorder }) {
             {s.desc.slice(0, 50)}
           </div>
         )}
-        <div style={{ fontSize: "0.85rem", color: "var(--ink-3)", marginTop: 2 }}>{TYPE_LABEL[s.type] || s.type}</div>
+        <div style={{ fontSize: "0.85rem", color: "var(--ink-3)", marginTop: 2 }}>{SUGGESTION_TYPE_LABEL[s.type] || s.type}</div>
       </div>
       <i className="fas fa-chevron-right" style={{ color: "var(--ink-3)", flexShrink: 0 }} />
     </button>
@@ -88,6 +89,7 @@ export default function Navbar({ frosted = false, dark = false }) {
   const suggestionsRef = useRef(null);
   const suggestionsTimeoutRef = useRef(null);
   const suggestionsReqIdRef = useRef(0); // guards against a stale response overwriting a newer one
+  const searchInputRef = useRef(null);
 
   useEffect(() => {
     if (!user) { setNotifCount(0); setCartCount(0); return; }
@@ -183,6 +185,18 @@ export default function Navbar({ frosted = false, dark = false }) {
     fetchSuggestions(val);
   }
 
+  function clearSearch() {
+    setSearch("");
+    fetchSuggestions(""); // resets suggestions/showSuggestions too
+    searchInputRef.current?.focus();
+  }
+
+  function clearMobSearch() {
+    setMobQ("");
+    fetchSuggestions("");
+    mobInputRef.current?.focus();
+  }
+
   function handleSuggestionClick(suggestion) {
     setShowSuggestions(false);
     if (mobSearch) closeMobSearch();
@@ -253,8 +267,13 @@ export default function Navbar({ frosted = false, dark = false }) {
                 placeholder="Search products, services, stores…"
                 value={mobQ}
                 onChange={(e) => handleMobSearchChange(e.target.value)}
-                style={{ padding: "10px 14px 10px 40px", height: 42 }}
+                style={{ padding: "10px 34px 10px 40px", height: 42 }}
               />
+              {mobQ && (
+                <button type="button" className="search-clear-btn" title="Clear" onClick={clearMobSearch}>
+                  <i className="fas fa-circle-xmark" />
+                </button>
+              )}
             </div>
             {mobQ.trim() && (
               <button type="submit" className="icon-btn" style={{ background: "var(--accent)", color: "#fff", flexShrink: 0 }}>
@@ -312,13 +331,19 @@ export default function Navbar({ frosted = false, dark = false }) {
                 <div className="search-wrap" style={{ width: 220 }}>
                   <i className="fas fa-magnifying-glass search-icon" />
                   <input
+                    ref={searchInputRef}
                     className="input"
                     placeholder="Search…"
                     value={search}
                     onChange={(e) => handleSearchChange(e.target.value)}
                     onFocus={() => search.length >= 2 && setShowSuggestions(true)}
-                    style={{ padding: "10px 14px 10px 40px", height: 40 }}
+                    style={{ padding: "10px 34px 10px 40px", height: 40 }}
                   />
+                  {search && (
+                    <button type="button" className="search-clear-btn" title="Clear" onClick={clearSearch}>
+                      <i className="fas fa-circle-xmark" />
+                    </button>
+                  )}
                 </div>
                 {/* Suggestions dropdown - List format with descriptions.
                     Anchored via `right: 0` (not a hardcoded left offset) so a

@@ -1,6 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { apiFetch } from '../../utils/api';
+import { useToast } from '../../context/ToastContext';
+
+const naira = n => `₦${Number(n || 0).toLocaleString()}`;
 
 const TABS = [
   { label: 'All',       filter: '' },
@@ -43,7 +46,7 @@ function downloadCSV(rows, filename) {
 
 export default function Users() {
   const [searchParams] = useSearchParams();
-  const initialQ = searchParams.get('q') || '';
+  const showToast = useToast();
 
   const [tab, setTab]           = useState(0);
   const [users, setUsers]       = useState([]);
@@ -51,10 +54,16 @@ export default function Users() {
   const [page, setPage]         = useState(1);
   const [loading, setLoading]   = useState(true);
   const [error, setError]       = useState('');
-  // Seeded from ?q= so arriving from the topbar search (Enter/⌘K) runs immediately
-  const [search, setSearch]         = useState(initialQ);
-  const [searchInput, setSearchInput] = useState(initialQ);
+  const [search, setSearch]         = useState('');
+  const [searchInput, setSearchInput] = useState('');
   const [viewUser, setViewUser]     = useState(null);
+
+  // Wallet panel (inside the user drawer) — lazily loaded per user
+  const [wallet, setWallet]           = useState(null);
+  const [walletLoading, setWalletLoading] = useState(false);
+  const [giftAmount, setGiftAmount]   = useState('');
+  const [giftReason, setGiftReason]   = useState('');
+  const [gifting, setGifting]         = useState(false);
 
   const fetchUsers = useCallback(() => {
     setLoading(true);
@@ -70,10 +79,56 @@ export default function Users() {
 
   useEffect(() => { fetchUsers(); }, [fetchUsers]);
 
+  // Picks up ?q= both on first load and on later navigations from elsewhere
+  // (e.g. the topbar search) while this page is already mounted — a plain
+  // useState(initialQ) only runs once and misses the latter case.
+  useEffect(() => {
+    const q = searchParams.get('q') || '';
+    setSearch(q);
+    setSearchInput(q);
+    setPage(1);
+  }, [searchParams]);
+
   function submitSearch(e) {
     e.preventDefault();
     setPage(1);
     setSearch(searchInput.trim());
+  }
+
+  const loadWallet = useCallback((userId) => {
+    setWalletLoading(true);
+    apiFetch(`/api/wallet/admin/${userId}`)
+      .then(d => setWallet(d))
+      .catch(() => setWallet(null))
+      .finally(() => setWalletLoading(false));
+  }, []);
+
+  useEffect(() => {
+    if (!viewUser) { setWallet(null); setGiftAmount(''); setGiftReason(''); return; }
+    loadWallet(viewUser._id);
+  }, [viewUser, loadWallet]);
+
+  async function sendGift() {
+    const amount = Number(giftAmount);
+    if (!amount || amount <= 0) {
+      showToast('Enter a valid amount', 'error');
+      return;
+    }
+    setGifting(true);
+    try {
+      await apiFetch('/api/wallet/gift', {
+        method: 'POST',
+        body: { userId: viewUser._id, amount, reason: giftReason.trim() || undefined },
+      });
+      showToast(`${naira(amount)} gifted to ${viewUser.name || viewUser.email}`, 'success');
+      setGiftAmount('');
+      setGiftReason('');
+      loadWallet(viewUser._id);
+    } catch (err) {
+      showToast(err?.message || 'Failed to send gift', 'error');
+    } finally {
+      setGifting(false);
+    }
   }
 
   const initials = name => name ? name.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase() : 'U';
@@ -164,6 +219,57 @@ export default function Users() {
                 {viewUser.address && <><span className="k">Address</span><span className="v">{viewUser.address}</span></>}
                 <span className="k">Auth</span>
                 <span className="v">{viewUser.googleAccount ? 'Google OAuth' : 'Email & password'}</span>
+              </div>
+
+              {/* ── Wallet ── */}
+              <div style={{ marginTop: 24, paddingTop: 20, borderTop: '1px solid var(--line)' }}>
+                <h4 style={{ margin: '0 0 12px', fontSize: '1.4rem' }}>
+                  <i className="fa-solid fa-wallet" style={{ marginRight: 8, color: 'var(--accent)' }}></i>Wallet
+                </h4>
+
+                {walletLoading ? (
+                  <div style={{ color: 'var(--ink-3)', fontSize: '1.3rem' }}>
+                    <i className="fa-solid fa-circle-notch fa-spin"></i> Loading wallet…
+                  </div>
+                ) : (
+                  <>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 }}>
+                      <div style={{ padding: 12, borderRadius: 8, background: 'rgba(59,130,246,.08)' }}>
+                        <div style={{ fontSize: '1.1rem', color: 'var(--ink-3)' }}>Withdrawable</div>
+                        <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>{naira(wallet?.withdrawableBalance)}</div>
+                      </div>
+                      <div style={{ padding: 12, borderRadius: 8, background: 'rgba(16,185,129,.08)' }}>
+                        <div style={{ fontSize: '1.1rem', color: 'var(--ink-3)' }}>🎁 Gift credits</div>
+                        <div style={{ fontSize: '1.5rem', fontWeight: 700 }}>{naira(wallet?.giftCredits)}</div>
+                      </div>
+                    </div>
+
+                    <div style={{ fontSize: '1.2rem', fontWeight: 600, marginBottom: 8 }}>Send gift credits</div>
+                    <p style={{ margin: '0 0 10px', fontSize: '1.15rem', color: 'var(--ink-3)' }}>
+                      Site-only funds — can be used to buy on UMP but never transferred or withdrawn to a bank account.
+                    </p>
+                    <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+                      <input
+                        type="number"
+                        min="1"
+                        placeholder="Amount (₦)"
+                        value={giftAmount}
+                        onChange={e => setGiftAmount(e.target.value)}
+                        style={{ flex: 1, padding: '8px 10px', fontSize: '1.2rem', border: '1px solid #e3e5eb', borderRadius: 8 }}
+                      />
+                    </div>
+                    <input
+                      type="text"
+                      placeholder="Reason (optional, e.g. referral bonus)"
+                      value={giftReason}
+                      onChange={e => setGiftReason(e.target.value)}
+                      style={{ width: '100%', padding: '8px 10px', fontSize: '1.2rem', border: '1px solid #e3e5eb', borderRadius: 8, marginBottom: 10, boxSizing: 'border-box' }}
+                    />
+                    <button className="abtn sm" style={{ background: '#10b981', color: '#fff', border: 'none' }} disabled={gifting || !giftAmount} onClick={sendGift}>
+                      {gifting ? <i className="fa-solid fa-circle-notch fa-spin"></i> : <><i className="fa-solid fa-gift"></i> Send gift</>}
+                    </button>
+                  </>
+                )}
               </div>
             </div>
             <div className="adm-drawer-foot">

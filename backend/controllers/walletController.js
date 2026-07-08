@@ -1,5 +1,6 @@
 import Wallet from "../models/Wallet.js";
 import User from "../models/User.js";
+import WalletIdempotencyKey from "../models/WalletIdempotencyKey.js";
 import logger from "../utils/logger.js";
 import { notify } from "../utils/notify.js";
 import { encrypt, mask } from "../utils/fieldEncryption.js";
@@ -28,50 +29,76 @@ function maskedBankDetails(bankDetails) {
 // Moves `delta` on `balanceField` (and the mirrored `balance` total) in a
 // single conditional findOneAndUpdate, so concurrent requests can never both
 // read a stale balance and both succeed (the classic double-spend race).
+//
 // - `requireAtLeast`: if set, the filter only matches when balanceField >= this
 //   amount, so an under-funded request atomically fails instead of racing.
-// - `idempotencyKey`: if set, the filter also requires that no existing
-//   transaction carries this key, so a retried request atomically no-ops
-//   instead of double-crediting/debiting.
-// Returns { wallet, alreadyProcessed, tx } — `wallet` is null when the op was
-// rejected for insufficient balance (as opposed to idempotent replay).
-async function atomicMutateBalance({ userId, balanceField, delta, requireAtLeast, idempotencyKey, tx, upsert = false }) {
-  const filter = { user: userId };
+// - `extraFilter` / `extraInc`: merged into the same atomic filter/$inc, so
+//   callers can fold additional conditions (e.g. daily withdrawal limits)
+//   into the SAME atomic operation instead of checking them separately
+//   (which would reopen a TOCTOU race).
+// - `idempotencyKey`: claimed via a unique-indexed side collection *before*
+//   the balance mutation runs, so a retried request atomically no-ops instead
+//   of double-crediting/debiting. This is independent of the capped
+//   `transactions` array (which only keeps the last 100 entries), so an
+//   idempotency guarantee never silently expires as a wallet accumulates
+//   history — and because the wallet's own filter no longer references
+//   idempotencyKey at all, `upsert: true` callers can never hit the
+//   "$ne condition + upsert = phantom insert on an existing user" failure.
+//
+// Returns { wallet, alreadyProcessed, balanceAfter, reference }. `wallet` is
+// null when the op was rejected (insufficient balance / limit exceeded) or
+// when it was a no-op idempotent replay.
+async function atomicMutateBalance({ userId, balanceField, delta, requireAtLeast, extraFilter = {}, extraInc = {}, idempotencyKey, tx, upsert = false }) {
+  if (idempotencyKey) {
+    try {
+      await WalletIdempotencyKey.create({ user: userId, idempotencyKey });
+    } catch (err) {
+      if (err.code === 11000) {
+        // Someone already claimed this key. In the extremely rare case the
+        // original request hasn't finished writing its result yet,
+        // balanceAfter may briefly be null — the caller still gets an
+        // accurate "already processed" signal with no risk of a double-spend.
+        const existing = await WalletIdempotencyKey.findOne({ user: userId, idempotencyKey });
+        return { wallet: null, alreadyProcessed: true, balanceAfter: existing?.balanceAfter ?? null, reference: existing?.reference };
+      }
+      throw err;
+    }
+  }
+
+  const filter = { user: userId, ...extraFilter };
   if (requireAtLeast != null) filter[balanceField] = { $gte: requireAtLeast };
-  if (idempotencyKey) filter["transactions.idempotencyKey"] = { $ne: idempotencyKey };
 
   const reference = tx.reference || `${tx.type.toUpperCase()}_${crypto.randomBytes(6).toString("hex").toUpperCase()}`;
   const update = {
-    $inc: { [balanceField]: delta, balance: delta },
-    $push: { transactions: { $each: [{ ...tx, reference }], $slice: -100 } },
+    $inc: { [balanceField]: delta, balance: delta, ...extraInc },
+    $push: { transactions: { $each: [{ ...tx, reference, idempotencyKey }], $slice: -100 } },
   };
 
   const wallet = await Wallet.findOneAndUpdate(filter, update, { new: true, upsert });
-  if (wallet) {
-    // balanceAfter depends on the post-increment value, which we only know now —
-    // attach it in a follow-up update targeted at this transaction's unique
-    // reference. This second write never touches balances, so it carries no
-    // double-spend risk even if it races with other requests.
-    const balanceAfter = wallet[balanceField];
-    await Wallet.updateOne(
-      { user: userId, "transactions.reference": reference },
-      { $set: { "transactions.$.balanceAfter": balanceAfter } }
-    );
-    return { wallet, alreadyProcessed: false, reference, balanceAfter };
+
+  if (!wallet) {
+    // Genuine rejection (insufficient balance / limit exceeded), not a
+    // replay. Release the idempotency claim so a legitimate retry — e.g.
+    // after the user tops up — isn't permanently blocked by this failed
+    // attempt.
+    if (idempotencyKey) await WalletIdempotencyKey.deleteOne({ user: userId, idempotencyKey }).catch(() => {});
+    return { wallet: null, alreadyProcessed: false };
   }
 
-  // No match — either insufficient balance or (if idempotencyKey given) a
-  // duplicate of an already-processed request. Disambiguate with a plain read.
+  // balanceAfter depends on the post-increment value, which we only know now —
+  // attach it in a follow-up update targeted at this transaction's unique
+  // reference. This second write never touches balances, so it carries no
+  // double-spend risk even if it races with other requests.
+  const balanceAfter = wallet[balanceField];
+  await Wallet.updateOne(
+    { user: userId, "transactions.reference": reference },
+    { $set: { "transactions.$.balanceAfter": balanceAfter } }
+  );
   if (idempotencyKey) {
-    const existing = await Wallet.findOne(
-      { user: userId, "transactions.idempotencyKey": idempotencyKey },
-      { "transactions.$": 1 }
-    );
-    if (existing?.transactions?.[0]) {
-      return { wallet: null, alreadyProcessed: true, tx: existing.transactions[0] };
-    }
+    await WalletIdempotencyKey.updateOne({ user: userId, idempotencyKey }, { $set: { reference, balanceAfter } }).catch(() => {});
   }
-  return { wallet: null, alreadyProcessed: false };
+
+  return { wallet, alreadyProcessed: false, reference, balanceAfter };
 }
 
 // ─── Get user's wallet balance and recent transactions ────────────────────
@@ -94,6 +121,31 @@ export const getWallet = async (req, res) => {
     });
   } catch (err) {
     logger.error("getWallet error:", err);
+    res.status(500).json({ message: "Failed to fetch wallet" });
+  }
+};
+
+// ─── Get any user's wallet (admin only) — same shape as getWallet ──────────
+export const getWalletForAdmin = async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    const targetUser = await User.findById(userId).select("_id");
+    if (!targetUser) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const wallet = await getOrCreateWallet(userId);
+
+    res.json({
+      balance: wallet.balance,
+      withdrawableBalance: wallet.withdrawableBalance,
+      giftCredits: wallet.giftCredits,
+      bankDetails: maskedBankDetails(wallet.bankDetails),
+      transactions: wallet.transactions.slice(-10),
+    });
+  } catch (err) {
+    logger.error("getWalletForAdmin error:", err);
     res.status(500).json({ message: "Failed to fetch wallet" });
   }
 };
@@ -179,8 +231,9 @@ export const transferFunds = async (req, res) => {
 
     // Credit recipient. If this somehow fails after the sender was already
     // debited, refund the sender so funds are never silently lost.
+    let credit;
     try {
-      await atomicMutateBalance({
+      credit = await atomicMutateBalance({
         userId: recipientId,
         balanceField: "withdrawableBalance",
         delta: amount,
@@ -196,6 +249,7 @@ export const transferFunds = async (req, res) => {
         },
         upsert: true,
       });
+      if (!credit.wallet) throw new Error("Recipient credit returned no wallet");
     } catch (creditErr) {
       logger.error(`transferFunds: recipient credit failed after sender debit, refunding sender. ref=${transferId}`, creditErr);
       await atomicMutateBalance({
@@ -227,7 +281,7 @@ export const transferFunds = async (req, res) => {
       success: true,
       message: "Transfer successful",
       transferId,
-      newBalance: debit.balanceAfter,
+      balanceAfter: debit.balanceAfter,
     });
   } catch (err) {
     logger.error("transferFunds error:", err);
@@ -256,9 +310,11 @@ export const requestWithdrawal = async (req, res) => {
     }
 
     // Reset daily/monthly limit counters if a new day/month has started.
-    // This reset is best-effort (not part of the atomic decrement below) —
-    // fund safety never depends on it, since the withdrawableBalance filter
-    // always prevents the balance itself from going negative.
+    // This reset itself doesn't need to be race-free — worst case at an exact
+    // day/month boundary it runs redundantly, which is harmless (setting a
+    // counter to 0 twice is idempotent). The actual limit *enforcement*
+    // below is what must be atomic, and it is: it's folded into the same
+    // conditional findOneAndUpdate as the balance decrement.
     const now = new Date();
     const lastReset = wallet.lastWithdrawalReset ? new Date(wallet.lastWithdrawalReset) : null;
     const newDay = !lastReset || lastReset.toDateString() !== now.toDateString();
@@ -276,27 +332,25 @@ export const requestWithdrawal = async (req, res) => {
       );
     }
 
-    // Re-read post-reset limits for the pre-checks below (informational —
-    // the withdrawableBalance $gte filter is what actually prevents overdraw).
-    const fresh = await Wallet.findOne({ user: userId }).select("totalWithdrawnToday totalWithdrawnThisMonth dailyWithdrawalLimit monthlyWithdrawalLimit");
-    if (fresh.totalWithdrawnToday + amount > fresh.dailyWithdrawalLimit) {
-      return res.status(400).json({
-        message: `Daily withdrawal limit (₦${fresh.dailyWithdrawalLimit.toLocaleString()}) exceeded. You've already withdrawn ₦${fresh.totalWithdrawnToday.toLocaleString()} today.`,
-      });
-    }
-    if (fresh.totalWithdrawnThisMonth + amount > fresh.monthlyWithdrawalLimit) {
-      return res.status(400).json({
-        message: `Monthly withdrawal limit (₦${fresh.monthlyWithdrawalLimit.toLocaleString()}) exceeded. You've already withdrawn ₦${fresh.totalWithdrawnThisMonth.toLocaleString()} this month.`,
-      });
-    }
-
     const withdrawalId = `WD_${crypto.randomBytes(6).toString("hex").toUpperCase()}`;
 
+    // Balance sufficiency AND both withdrawal limits are enforced by this one
+    // atomic filter — no separate read-then-check step, so two concurrent
+    // withdrawals can never both slip past the same limit (TOCTOU-safe).
     const result = await atomicMutateBalance({
       userId,
       balanceField: "withdrawableBalance",
       delta: -amount,
       requireAtLeast: amount,
+      extraFilter: {
+        $expr: {
+          $and: [
+            { $lte: [{ $add: ["$totalWithdrawnToday", amount] }, "$dailyWithdrawalLimit"] },
+            { $lte: [{ $add: ["$totalWithdrawnThisMonth", amount] }, "$monthlyWithdrawalLimit"] },
+          ],
+        },
+      },
+      extraInc: { totalWithdrawnToday: amount, totalWithdrawnThisMonth: amount },
       tx: {
         type: "withdrawal",
         amount,
@@ -309,21 +363,29 @@ export const requestWithdrawal = async (req, res) => {
     });
 
     if (!result.wallet) {
+      // The atomic filter rejected the request — read fresh values purely to
+      // produce an accurate error message. This read has no bearing on
+      // enforcement, which already happened atomically above.
+      const fresh = await Wallet.findOne({ user: userId })
+        .select("withdrawableBalance totalWithdrawnToday totalWithdrawnThisMonth dailyWithdrawalLimit monthlyWithdrawalLimit");
+      if (fresh.withdrawableBalance < amount) {
+        return res.status(400).json({ message: "Insufficient withdrawable balance. Gift credits (site-only funds) cannot be withdrawn to your bank account." });
+      }
+      if (fresh.totalWithdrawnToday + amount > fresh.dailyWithdrawalLimit) {
+        return res.status(400).json({
+          message: `Daily withdrawal limit (₦${fresh.dailyWithdrawalLimit.toLocaleString()}) exceeded. You've already withdrawn ₦${fresh.totalWithdrawnToday.toLocaleString()} today.`,
+        });
+      }
       return res.status(400).json({
-        message: "Insufficient withdrawable balance. Gift credits (site-only funds) cannot be withdrawn to your bank account.",
+        message: `Monthly withdrawal limit (₦${fresh.monthlyWithdrawalLimit.toLocaleString()}) exceeded. You've already withdrawn ₦${fresh.totalWithdrawnThisMonth.toLocaleString()} this month.`,
       });
     }
-
-    await Wallet.updateOne(
-      { user: userId },
-      { $inc: { totalWithdrawnToday: amount, totalWithdrawnThisMonth: amount } }
-    );
 
     res.json({
       success: true,
       message: "Withdrawal request submitted. Transfer will process within 24-48 hours.",
       withdrawalId,
-      newWithdrawableBalance: result.balanceAfter,
+      balanceAfter: result.balanceAfter,
     });
   } catch (err) {
     logger.error("requestWithdrawal error:", err);
@@ -387,21 +449,16 @@ export const creditWallet = async (req, res) => {
         reference,
         status: "completed",
         withdrawable: true,
-        idempotencyKey,
         createdAt: new Date(),
       },
     });
 
-    if (result.alreadyProcessed) {
-      return res.json({ success: true, message: "Credit already processed (idempotent)", balanceAfter: result.tx.balanceAfter });
-    }
-
-    logger.info(`💰 Wallet credited: userId=${userId}, amount=₦${amount}, newBalance=₦${result.balanceAfter}`);
+    logger.info(`💰 Wallet credited: userId=${userId}, amount=₦${amount}, newBalance=₦${result.balanceAfter}${result.alreadyProcessed ? " (idempotent replay)" : ""}`);
 
     res.json({
       success: true,
-      message: "Wallet credited successfully",
-      newWithdrawableBalance: result.balanceAfter,
+      message: result.alreadyProcessed ? "Credit already processed (idempotent)" : "Wallet credited successfully",
+      balanceAfter: result.balanceAfter,
     });
   } catch (err) {
     logger.error("creditWallet error:", err);
@@ -436,29 +493,25 @@ export const giftCredits = async (req, res) => {
         reference,
         status: "completed",
         withdrawable: false, // CANNOT be withdrawn
-        idempotencyKey,
         createdAt: new Date(),
       },
     });
 
-    if (result.alreadyProcessed) {
-      return res.json({ success: true, message: "Gift already issued (idempotent)", balanceAfter: result.tx.balanceAfter });
+    if (!result.alreadyProcessed) {
+      notify(userId, {
+        type: "wallet",
+        title: "🎁 You received gift credits!",
+        message: `₦${amount.toLocaleString()} gift credits added to your wallet. Use them to buy anything on UMP!`,
+        link: "/wallet",
+      }).catch(() => {});
     }
 
-    // Notify user
-    notify(userId, {
-      type: "wallet",
-      title: "🎁 You received gift credits!",
-      message: `₦${amount.toLocaleString()} gift credits added to your wallet. Use them to buy anything on UMP!`,
-      link: "/wallet",
-    }).catch(() => {});
-
-    logger.info(`🎁 Gift credits issued: userId=${userId}, amount=₦${amount}, reason=${reason}`);
+    logger.info(`🎁 Gift credits issued: userId=${userId}, amount=₦${amount}, reason=${reason}${result.alreadyProcessed ? " (idempotent replay)" : ""}`);
 
     res.json({
       success: true,
-      message: "Gift credits issued successfully",
-      newGiftCredits: result.balanceAfter,
+      message: result.alreadyProcessed ? "Gift already issued (idempotent)" : "Gift credits issued successfully",
+      balanceAfter: result.balanceAfter,
     });
   } catch (err) {
     logger.error("giftCredits error:", err);
@@ -493,24 +546,20 @@ export const debitWallet = async (req, res) => {
         reference,
         status: "completed",
         withdrawable: true,
-        idempotencyKey,
         createdAt: new Date(),
       },
     });
 
-    if (result.alreadyProcessed) {
-      return res.json({ success: true, message: "Debit already processed (idempotent)", balanceAfter: result.tx.balanceAfter });
-    }
-    if (!result.wallet) {
+    if (!result.wallet && !result.alreadyProcessed) {
       return res.status(400).json({ message: "Insufficient withdrawable balance" });
     }
 
-    logger.info(`💳 Wallet debited: userId=${userId}, amount=₦${amount}, newBalance=₦${result.balanceAfter}`);
+    logger.info(`💳 Wallet debited: userId=${userId}, amount=₦${amount}, newBalance=₦${result.balanceAfter}${result.alreadyProcessed ? " (idempotent replay)" : ""}`);
 
     res.json({
       success: true,
-      message: "Wallet debited successfully",
-      newBalance: result.balanceAfter,
+      message: result.alreadyProcessed ? "Debit already processed (idempotent)" : "Wallet debited successfully",
+      balanceAfter: result.balanceAfter,
     });
   } catch (err) {
     logger.error("debitWallet error:", err);

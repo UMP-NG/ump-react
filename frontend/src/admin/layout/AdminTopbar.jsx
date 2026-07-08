@@ -83,10 +83,6 @@ export default function AdminTopbar({ onMenuOpen }) {
     if (query.trim()) navigate(`/admin/users?q=${encodeURIComponent(query.trim())}`);
   }
 
-  function handleSearchKeyDown(e) {
-    if (e.key === 'Enter') runSearch();
-  }
-
   return (
     <header className="adm-top">
       {isMobile && (
@@ -111,7 +107,6 @@ export default function AdminTopbar({ onMenuOpen }) {
           placeholder="Search users, orders, products…"
           value={query}
           onChange={e => setQuery(e.target.value)}
-          onKeyDown={handleSearchKeyDown}
         />
         <span className="kbd">⌘K</span>
       </form>
