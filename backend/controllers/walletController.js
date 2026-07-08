@@ -287,7 +287,7 @@ export const getTransactionHistory = async (req, res) => {
 // ─── Add credit to wallet (admin function for earnings, refunds, etc.) ──────
 export const creditWallet = async (req, res) => {
   try {
-    const { userId, amount, description, reference, type = "credit" } = req.body;
+    const { userId, amount, description, reference, type = "credit", idempotencyKey } = req.body;
 
     if (!userId || !amount || amount <= 0) {
       return res.status(400).json({ message: "Invalid userId or amount" });
@@ -296,6 +296,18 @@ export const creditWallet = async (req, res) => {
     let wallet = await Wallet.findOne({ user: userId });
     if (!wallet) {
       wallet = await Wallet.create({ user: userId });
+    }
+
+    // Idempotency: check if this key was already processed
+    if (idempotencyKey) {
+      const existingTx = wallet.transactions.find((t) => t.idempotencyKey === idempotencyKey);
+      if (existingTx) {
+        return res.json({
+          success: true,
+          message: "Credit already processed (idempotent)",
+          balanceAfter: existingTx.balanceAfter,
+        });
+      }
     }
 
     const oldWithdrawableBalance = wallet.withdrawableBalance;
@@ -310,6 +322,7 @@ export const creditWallet = async (req, res) => {
       balanceAfter: wallet.withdrawableBalance,
       status: "completed",
       withdrawable: true,
+      idempotencyKey,
       createdAt: new Date(),
     });
     await wallet.save();
@@ -331,7 +344,7 @@ export const creditWallet = async (req, res) => {
 // ─── Gift non-withdrawable credits (admin only) ────────────────────────────
 export const giftCredits = async (req, res) => {
   try {
-    const { userId, amount, description, reference, reason } = req.body;
+    const { userId, amount, description, reference, reason, idempotencyKey } = req.body;
 
     if (!userId || !amount || amount <= 0) {
       return res.status(400).json({ message: "Invalid userId or amount" });
@@ -340,6 +353,18 @@ export const giftCredits = async (req, res) => {
     let wallet = await Wallet.findOne({ user: userId });
     if (!wallet) {
       wallet = await Wallet.create({ user: userId });
+    }
+
+    // Idempotency: check if this key was already processed
+    if (idempotencyKey) {
+      const existingTx = wallet.transactions.find((t) => t.idempotencyKey === idempotencyKey);
+      if (existingTx) {
+        return res.json({
+          success: true,
+          message: "Gift already issued (idempotent)",
+          balanceAfter: existingTx.balanceAfter,
+        });
+      }
     }
 
     const oldGiftCredits = wallet.giftCredits;
@@ -354,6 +379,7 @@ export const giftCredits = async (req, res) => {
       balanceAfter: wallet.giftCredits,
       status: "completed",
       withdrawable: false, // CANNOT be withdrawn
+      idempotencyKey,
       createdAt: new Date(),
     });
     await wallet.save();
@@ -362,7 +388,7 @@ export const giftCredits = async (req, res) => {
     notify(userId, {
       type: "wallet",
       title: "🎁 You received gift credits!",
-      message: `${amount} gift credits added to your wallet. Use them to buy anything on UMP!`,
+      message: `₦${amount.toLocaleString()} gift credits added to your wallet. Use them to buy anything on UMP!`,
       link: "/wallet",
     }).catch(() => {});
 
@@ -383,7 +409,7 @@ export const giftCredits = async (req, res) => {
 // ─── Debit wallet (admin function) ─────────────────────────────────────────
 export const debitWallet = async (req, res) => {
   try {
-    const { userId, amount, description, reference } = req.body;
+    const { userId, amount, description, reference, idempotencyKey } = req.body;
 
     if (!userId || !amount || amount <= 0) {
       return res.status(400).json({ message: "Invalid userId or amount" });
@@ -394,31 +420,47 @@ export const debitWallet = async (req, res) => {
       wallet = await Wallet.create({ user: userId });
     }
 
-    if (wallet.balance < amount) {
-      return res.status(400).json({ message: "Insufficient wallet balance" });
+    // Idempotency: check if this key was already processed
+    if (idempotencyKey) {
+      const existingTx = wallet.transactions.find((t) => t.idempotencyKey === idempotencyKey);
+      if (existingTx) {
+        return res.json({
+          success: true,
+          message: "Debit already processed (idempotent)",
+          balanceAfter: existingTx.balanceAfter,
+        });
+      }
+    }
+
+    // MUST debit from withdrawable balance to maintain invariant
+    if (wallet.withdrawableBalance < amount) {
+      return res.status(400).json({ message: "Insufficient withdrawable balance" });
     }
 
     const oldBalance = wallet.balance;
     wallet.balance -= amount;
+    wallet.withdrawableBalance -= amount; // CRITICAL: maintain invariant
 
     wallet.transactions.push({
       type: "debit",
       amount,
       description: description || "Wallet debit",
       reference,
-      balanceAfter: wallet.balance,
+      balanceAfter: wallet.withdrawableBalance,
       status: "completed",
+      withdrawable: true,
+      idempotencyKey,
       createdAt: new Date(),
     });
     await wallet.save();
 
-    logger.info(`💳 Wallet debited: userId=${userId}, amount=₦${amount}, newBalance=₦${wallet.balance}`);
+    logger.info(`💳 Wallet debited: userId=${userId}, amount=₦${amount}, newBalance=₦${wallet.withdrawableBalance}`);
 
     res.json({
       success: true,
       message: "Wallet debited successfully",
       oldBalance,
-      newBalance: wallet.balance,
+      newBalance: wallet.withdrawableBalance,
     });
   } catch (err) {
     logger.error("debitWallet error:", err);

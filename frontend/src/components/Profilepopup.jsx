@@ -82,12 +82,15 @@ export default function ProfilePopup({ onClose }) {
             )}
           </div>
         </div>
-        {/* Wallet section */}
-        {user?.referralCredit !== undefined && (
+        {/* Wallet section - NOTE: use actual wallet balance, not referralCredit */}
+        {user?.walletBalance !== undefined && (
           <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--line)", background: "rgba(59,130,246,.05)" }}>
             <div style={{ fontSize: "0.95rem", color: "var(--ink-3)", marginBottom: 4 }}>UMP Wallet Balance</div>
             <div style={{ fontSize: "1.6rem", fontWeight: 700, color: "var(--accent)" }}>
-              ₦{Number(user.referralCredit || 0).toLocaleString()}
+              ₦{Number(user.walletBalance || 0).toLocaleString()}
+            </div>
+            <div style={{ fontSize: "0.85rem", color: "var(--ink-3)", marginTop: 4 }}>
+              <a href="/wallet" style={{ color: "var(--accent)", textDecoration: "none", fontWeight: 600 }}>View details →</a>
             </div>
           </div>
         )}

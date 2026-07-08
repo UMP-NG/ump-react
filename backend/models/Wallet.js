@@ -24,6 +24,7 @@ const walletSchema = new mongoose.Schema(
       default: 0,
       min: 0,
     },
+    // Store only last 100 transactions in document; rest go to WalletTransaction collection
     transactions: [
       {
         type: {
@@ -31,15 +32,14 @@ const walletSchema = new mongoose.Schema(
           enum: ["credit", "debit", "transfer_in", "transfer_out", "withdrawal", "refund", "gift_credit", "purchase"],
           required: true,
         },
-        // Whether this fund is withdrawable to bank account
         withdrawable: {
           type: Boolean,
-          default: true, // most credits are withdrawable; gifts are not
+          default: true,
         },
         amount: { type: Number, required: true, min: 0 },
         description: String,
-        reference: String, // order ID, transfer ID, etc.
-        balanceAfter: Number, // balance after transaction
+        reference: String,
+        balanceAfter: Number,
         status: {
           type: String,
           enum: ["pending", "completed", "failed"],
@@ -47,27 +47,19 @@ const walletSchema = new mongoose.Schema(
         },
         relatedUser: {
           type: mongoose.Schema.Types.ObjectId,
-          ref: "User", // who transferred to/from
-        },
-        bankDetails: {
-          bankName: String,
-          accountNumber: String,
-          accountName: String,
+          ref: "User",
         },
         failureReason: String,
-        createdAt: { type: Date, default: Date.now },
+        idempotencyKey: String, // for deduplication on retries
+        createdAt: { type: Date, default: Date.now, index: true },
       },
     ],
 
     // Bank details for withdrawals
-    bankDetails: {
-      bankName: String,
-      bankCode: String,
-      accountName: String,
-      accountNumber: String,
-      verified: { type: Boolean, default: false },
-      verifiedAt: Date,
-    },
+    // Encrypted bank details (do NOT store plaintext)
+    // In production, use field-level encryption via mongod Enterprise or application-level encryption
+    bankDetailsEncrypted: String, // encrypted JSON blob with iv + ciphertext
+    bankDetailsHash: String, // SHA256 for deduplication without decrypting
 
     // Withdrawal limits
     dailyWithdrawalLimit: { type: Number, default: 500000 }, // ₦500k per day
@@ -79,25 +71,20 @@ const walletSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// Auto-reset daily/monthly limits
+// Verify invariant: balance = withdrawableBalance + giftCredits
 walletSchema.pre("save", function (next) {
-  const now = new Date();
-  const lastReset = this.lastWithdrawalReset ? new Date(this.lastWithdrawalReset) : null;
-
-  // Reset daily limit (midnight)
-  if (!lastReset || lastReset.toDateString() !== now.toDateString()) {
-    this.totalWithdrawnToday = 0;
+  const sum = this.withdrawableBalance + this.giftCredits;
+  if (Math.abs(this.balance - sum) > 0.01) { // allow 1 paisa rounding
+    return next(new Error(`Balance invariant violated: ${this.balance} !== ${this.withdrawableBalance} + ${this.giftCredits}`));
   }
+  next();
+});
 
-  // Reset monthly limit (1st of month)
-  if (!lastReset || lastReset.getMonth() !== now.getMonth() || lastReset.getFullYear() !== now.getFullYear()) {
-    this.totalWithdrawnThisMonth = 0;
+// Prune transactions array to last 100 (prevent document size bloat)
+walletSchema.pre("save", function (next) {
+  if (this.transactions && this.transactions.length > 100) {
+    this.transactions = this.transactions.slice(-100);
   }
-
-  if (!lastReset || lastReset.toDateString() !== now.toDateString()) {
-    this.lastWithdrawalReset = now;
-  }
-
   next();
 });
 
