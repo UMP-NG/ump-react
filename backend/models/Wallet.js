@@ -55,11 +55,17 @@ const walletSchema = new mongoose.Schema(
       },
     ],
 
-    // Bank details for withdrawals
-    // Encrypted bank details (do NOT store plaintext)
-    // In production, use field-level encryption via mongod Enterprise or application-level encryption
-    bankDetailsEncrypted: String, // encrypted JSON blob with iv + ciphertext
-    bankDetailsHash: String, // SHA256 for deduplication without decrypting
+    // Bank details for withdrawals — accountNumber is encrypted at rest via
+    // utils/fieldEncryption.js (same pattern as Seller.bankDetails); mask() is
+    // used when returning it to the client so the raw digits are never exposed.
+    bankDetails: {
+      bankName: String,
+      bankCode: String,
+      accountName: String,
+      accountNumber: String, // stored as "<iv>:<ciphertext>" via encrypt()
+      verified: { type: Boolean, default: false },
+      verifiedAt: Date,
+    },
 
     // Withdrawal limits
     dailyWithdrawalLimit: { type: Number, default: 500000 }, // ₦500k per day

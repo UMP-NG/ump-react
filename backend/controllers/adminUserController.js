@@ -15,7 +15,11 @@ export const getAdminUsers = async (req, res) => {
     if (role) filter.roles = role;
     if (q) {
       const safeQ = q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      filter.$or = [{ name: { $regex: safeQ, $options: "i" } }, { email: { $regex: safeQ, $options: "i" } }];
+      filter.$or = [
+        { name: { $regex: safeQ, $options: "i" } },
+        { email: { $regex: safeQ, $options: "i" } },
+        { referralCode: { $regex: safeQ, $options: "i" } },
+      ];
     }
     const [users, total] = await Promise.all([
       User.find(filter).select("-password -otp -otpExpire -resetPasswordToken -resetPasswordExpire -schoolEmailOtp -schoolEmailOtpExpire -fcmToken").sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),

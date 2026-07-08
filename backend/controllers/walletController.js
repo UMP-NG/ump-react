@@ -2,24 +2,38 @@ import Wallet from "../models/Wallet.js";
 import User from "../models/User.js";
 import logger from "../utils/logger.js";
 import { notify } from "../utils/notify.js";
+import { encrypt, mask } from "../utils/fieldEncryption.js";
 import crypto from "crypto";
+
+// Atomically fetch-or-create a wallet. Using findOneAndUpdate with upsert
+// instead of findOne-then-create closes a race where two concurrent requests
+// for a brand-new user both see `null` and both try to create a document,
+// tripping the unique index on `user` (E11000 duplicate key).
+async function getOrCreateWallet(userId) {
+  return Wallet.findOneAndUpdate(
+    { user: userId },
+    { $setOnInsert: { user: userId } },
+    { upsert: true, new: true, setDefaultsOnInsert: true }
+  );
+}
+
+// Returns bankDetails with the account number masked (e.g. "****3210") instead
+// of the encrypted ciphertext — safe to send to the client.
+function maskedBankDetails(bankDetails) {
+  if (!bankDetails?.accountNumber) return bankDetails;
+  return { ...(bankDetails.toObject ? bankDetails.toObject() : bankDetails), accountNumber: mask(bankDetails.accountNumber) };
+}
 
 // ─── Get user's wallet balance and recent transactions ────────────────────
 export const getWallet = async (req, res) => {
   try {
-    const userId = req.user._id;
-    let wallet = await Wallet.findOne({ user: userId }).populate("bankDetails");
-
-    if (!wallet) {
-      // Auto-create wallet if it doesn't exist
-      wallet = await Wallet.create({ user: userId });
-    }
+    const wallet = await getOrCreateWallet(req.user._id);
 
     res.json({
       balance: wallet.balance,
       withdrawableBalance: wallet.withdrawableBalance,
       giftCredits: wallet.giftCredits,
-      bankDetails: wallet.bankDetails,
+      bankDetails: maskedBankDetails(wallet.bankDetails),
       transactions: wallet.transactions.slice(-20), // Last 20 transactions
       limits: {
         dailyWithdrawalLimit: wallet.dailyWithdrawalLimit,
@@ -43,21 +57,18 @@ export const saveBankDetails = async (req, res) => {
       return res.status(400).json({ message: "All bank details are required" });
     }
 
-    let wallet = await Wallet.findOne({ user: req.user._id });
-    if (!wallet) {
-      wallet = await Wallet.create({ user: req.user._id });
-    }
+    const wallet = await getOrCreateWallet(req.user._id);
 
     wallet.bankDetails = {
       bankName,
       bankCode,
-      accountNumber,
+      accountNumber: encrypt(accountNumber), // encrypted at rest
       accountName,
       verified: false, // Bank verification happens server-side in production
     };
     await wallet.save();
 
-    res.json({ success: true, message: "Bank details saved", bankDetails: wallet.bankDetails });
+    res.json({ success: true, message: "Bank details saved", bankDetails: maskedBankDetails(wallet.bankDetails) });
   } catch (err) {
     logger.error("saveBankDetails error:", err);
     res.status(500).json({ message: "Failed to save bank details" });
@@ -78,11 +89,14 @@ export const transferFunds = async (req, res) => {
       return res.status(400).json({ message: "Cannot transfer to yourself" });
     }
 
-    // Get sender's wallet
-    let senderWallet = await Wallet.findOne({ user: senderId });
-    if (!senderWallet) {
-      senderWallet = await Wallet.create({ user: senderId });
+    // Check recipient exists before touching any wallet
+    const recipient = await User.findById(recipientId).select("name email");
+    if (!recipient) {
+      return res.status(404).json({ message: "Recipient not found" });
     }
+
+    // Get sender's wallet
+    const senderWallet = await getOrCreateWallet(senderId);
 
     // Can only transfer withdrawable funds
     if (senderWallet.withdrawableBalance < amount) {
@@ -90,16 +104,7 @@ export const transferFunds = async (req, res) => {
     }
 
     // Get recipient's wallet
-    let recipientWallet = await Wallet.findOne({ user: recipientId });
-    if (!recipientWallet) {
-      recipientWallet = await Wallet.create({ user: recipientId });
-    }
-
-    // Check recipient exists
-    const recipient = await User.findById(recipientId).select("name email");
-    if (!recipient) {
-      return res.status(404).json({ message: "Recipient not found" });
-    }
+    const recipientWallet = await getOrCreateWallet(recipientId);
 
     // Execute transfer
     const transferId = `TXN_${crypto.randomBytes(6).toString("hex").toUpperCase()}`;
@@ -168,10 +173,7 @@ export const requestWithdrawal = async (req, res) => {
     }
 
     // Get wallet
-    let wallet = await Wallet.findOne({ user: userId });
-    if (!wallet) {
-      wallet = await Wallet.create({ user: userId });
-    }
+    const wallet = await getOrCreateWallet(userId);
 
     // Check withdrawable balance only (gift credits cannot be withdrawn)
     if (wallet.withdrawableBalance < amount) {
@@ -225,16 +227,11 @@ export const requestWithdrawal = async (req, res) => {
     wallet.transactions.push({
       type: "withdrawal",
       amount,
-      description: `Withdrawal to ${wallet.bankDetails.bankName} (${wallet.bankDetails.accountNumber})`,
+      description: `Withdrawal to ${wallet.bankDetails.bankName} (${mask(wallet.bankDetails.accountNumber)})`,
       reference: withdrawalId,
       balanceAfter: wallet.withdrawableBalance,
       status: "pending", // Will be marked "completed" by admin/webhook
       withdrawable: true,
-      bankDetails: {
-        bankName: wallet.bankDetails.bankName,
-        accountNumber: wallet.bankDetails.accountNumber,
-        accountName: wallet.bankDetails.accountName,
-      },
       createdAt: now,
     });
     await wallet.save();
@@ -260,10 +257,7 @@ export const getTransactionHistory = async (req, res) => {
     const limit = parseInt(req.query.limit || "20", 10);
     const skip = (page - 1) * limit;
 
-    let wallet = await Wallet.findOne({ user: userId });
-    if (!wallet) {
-      wallet = await Wallet.create({ user: userId });
-    }
+    const wallet = await getOrCreateWallet(userId);
 
     const transactions = wallet.transactions.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(skip, skip + limit);
 
@@ -293,10 +287,7 @@ export const creditWallet = async (req, res) => {
       return res.status(400).json({ message: "Invalid userId or amount" });
     }
 
-    let wallet = await Wallet.findOne({ user: userId });
-    if (!wallet) {
-      wallet = await Wallet.create({ user: userId });
-    }
+    const wallet = await getOrCreateWallet(userId);
 
     // Idempotency: check if this key was already processed
     if (idempotencyKey) {
@@ -350,10 +341,7 @@ export const giftCredits = async (req, res) => {
       return res.status(400).json({ message: "Invalid userId or amount" });
     }
 
-    let wallet = await Wallet.findOne({ user: userId });
-    if (!wallet) {
-      wallet = await Wallet.create({ user: userId });
-    }
+    const wallet = await getOrCreateWallet(userId);
 
     // Idempotency: check if this key was already processed
     if (idempotencyKey) {
@@ -415,10 +403,7 @@ export const debitWallet = async (req, res) => {
       return res.status(400).json({ message: "Invalid userId or amount" });
     }
 
-    let wallet = await Wallet.findOne({ user: userId });
-    if (!wallet) {
-      wallet = await Wallet.create({ user: userId });
-    }
+    const wallet = await getOrCreateWallet(userId);
 
     // Idempotency: check if this key was already processed
     if (idempotencyKey) {

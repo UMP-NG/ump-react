@@ -147,6 +147,7 @@ export default function Users() {
                 <span className="v">{viewUser.orderCount ?? 0}</span>
                 <span className="k">Email</span>
                 <span className="v">{viewUser.email}</span>
+                {viewUser.referralCode && <><span className="k">Referral code</span><span className="v" style={{ fontFamily: 'monospace' }}>{viewUser.referralCode}</span></>}
                 {viewUser.phone && <><span className="k">Phone</span><span className="v">{viewUser.phone}</span></>}
                 {viewUser.address && <><span className="k">Address</span><span className="v">{viewUser.address}</span></>}
                 <span className="k">Auth</span>
@@ -210,7 +211,7 @@ export default function Users() {
         <div className="adm-search" style={{ maxWidth: 280 }}>
           <i className="fa-solid fa-magnifying-glass"></i>
           <input
-            placeholder="Search users…"
+            placeholder="Search name, email, or referral code…"
             value={search}
             onChange={e => { setSearch(e.target.value); setPage(1); }}
           />

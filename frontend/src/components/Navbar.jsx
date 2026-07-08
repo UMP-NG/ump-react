@@ -89,9 +89,9 @@ export default function Navbar({ frosted = false, dark = false }) {
   const avatarUrl = user?.avatar?.url || (typeof user?.avatar === "string" ? user.avatar : null);
   const [avatarBroken, setAvatarBroken] = useState(false);
 
-  // Fetch search suggestions
+  // Fetch search suggestions with descriptions and categories
   function fetchSuggestions(q) {
-    if (q.length < 2) {
+    if (q.length < 1) {
       setSuggestions([]);
       setShowSuggestions(false);
       return;
@@ -99,22 +99,30 @@ export default function Navbar({ frosted = false, dark = false }) {
     clearTimeout(suggestionsTimeoutRef.current);
     suggestionsTimeoutRef.current = setTimeout(() => {
       Promise.allSettled([
-        apiFetch(`/api/products?search=${encodeURIComponent(q)}&limit=3`),
-        apiFetch(`/api/services?search=${encodeURIComponent(q)}&limit=3`),
+        apiFetch(`/api/products?search=${encodeURIComponent(q)}&limit=5`),
+        apiFetch(`/api/services?search=${encodeURIComponent(q)}&limit=5`),
         apiFetch(`/api/sellers?search=${encodeURIComponent(q)}&limit=3`),
-      ]).then(([pr, sr, slr]) => {
-        const prods = pr.status === "fulfilled" ? (pr.value?.products || pr.value || []).slice(0, 3) : [];
-        const servs = sr.status === "fulfilled" ? (sr.value?.services || sr.value || []).slice(0, 3) : [];
+        apiFetch(`/api/categories?search=${encodeURIComponent(q)}&limit=3`),
+      ]).then(([pr, sr, slr, cr]) => {
+        const prods = pr.status === "fulfilled" ? (pr.value?.products || pr.value || []).slice(0, 5) : [];
+        const servs = sr.status === "fulfilled" ? (sr.value?.services || sr.value || []).slice(0, 5) : [];
         const sells = slr.status === "fulfilled" ? (Array.isArray(slr.value) ? slr.value : slr.value?.sellers || []).slice(0, 3) : [];
+        const cats = cr.status === "fulfilled" ? (Array.isArray(cr.value) ? cr.value : cr.value?.categories || []).slice(0, 3) : [];
+
         const all = [
-          ...prods.map((p) => ({ type: "product", _id: p._id, name: p.name, icon: "bag-shopping" })),
-          ...servs.map((s) => ({ type: "service", _id: s._id, name: s.name, icon: "hand-holding-heart" })),
-          ...sells.map((s) => ({ type: "seller", _id: s._id, name: s.storeName || s.name, icon: "store" })),
+          // Categories first
+          ...cats.map((c) => ({ type: "category", _id: c._id, name: c.name, icon: "folder", desc: c.description })),
+          // Then products
+          ...prods.map((p) => ({ type: "product", _id: p._id, name: p.name, desc: p.desc || p.description, icon: "bag-shopping", image: p.images?.[0]?.url })),
+          // Then services
+          ...servs.map((s) => ({ type: "service", _id: s._id, name: s.name, desc: s.desc || s.title, icon: "hand-holding-heart" })),
+          // Then sellers
+          ...sells.map((s) => ({ type: "seller", _id: s._id, name: s.storeName || s.name, desc: s.description, icon: "store" })),
         ];
         setSuggestions(all);
         setShowSuggestions(all.length > 0);
       });
-    }, 300);
+    }, 200);
   }
 
   function handleSearchChange(val) {
@@ -130,6 +138,8 @@ export default function Navbar({ frosted = false, dark = false }) {
       navigate(`/services/${suggestion._id}`);
     } else if (suggestion.type === "seller") {
       navigate(`/sellers/${suggestion._id}`);
+    } else if (suggestion.type === "category") {
+      navigate(`/market?category=${suggestion._id}`);
     }
   }
 
@@ -234,10 +244,10 @@ export default function Navbar({ frosted = false, dark = false }) {
                     style={{ padding: "10px 14px 10px 40px", height: 40 }}
                   />
                 </div>
-                {/* Suggestions dropdown */}
+                {/* Suggestions dropdown - List format with descriptions */}
                 {showSuggestions && suggestions.length > 0 && (
                   <div ref={suggestionsRef} style={{
-                    position: "absolute", top: 40, left: 0, right: 0, background: "var(--paper)", borderRadius: "var(--r-md)", boxShadow: "var(--shadow-md)", zIndex: 100, maxHeight: 300, overflowY: "auto", border: "1px solid var(--line)"
+                    position: "absolute", top: 40, left: -50, width: 420, background: "var(--paper)", borderRadius: "var(--r-lg)", boxShadow: "var(--shadow-lg)", zIndex: 100, maxHeight: 400, overflowY: "auto", border: "1px solid var(--line)"
                   }}>
                     {suggestions.map((s, i) => (
                       <button
@@ -245,14 +255,40 @@ export default function Navbar({ frosted = false, dark = false }) {
                         type="button"
                         onClick={() => handleSuggestionClick(s)}
                         style={{
-                          width: "100%", padding: "12px 14px", display: "flex", alignItems: "center", gap: 12, border: "none", background: "transparent", cursor: "pointer", textAlign: "left", borderBottom: i < suggestions.length - 1 ? "1px solid var(--line)" : "none",
+                          width: "100%", padding: "12px 14px", display: "flex", alignItems: "center", gap: 12, border: "none", background: "transparent", cursor: "pointer", textAlign: "left", borderBottom: i < suggestions.length - 1 ? "1px solid rgba(0,0,0,.05)" : "none",
                           color: "var(--ink-1)", fontSize: "1.3rem", transition: "background .15s",
                         }}
-                        onMouseEnter={(e) => e.target.style.background = "rgba(59,130,246,.05)"}
+                        onMouseEnter={(e) => e.target.style.background = "rgba(59,130,246,.08)"}
                         onMouseLeave={(e) => e.target.style.background = "transparent"}
                       >
-                        <i className={`fas fa-${s.icon}`} style={{ color: "var(--accent)", width: 18 }} />
-                        <span>{s.name}</span>
+                        {/* Image thumbnail for products */}
+                        {s.image ? (
+                          <img src={s.image} alt={s.name} style={{ width: 44, height: 44, borderRadius: "var(--r-md)", objectFit: "cover", flexShrink: 0 }} />
+                        ) : (
+                          <div style={{ width: 44, height: 44, borderRadius: "var(--r-md)", background: "rgba(59,130,246,.1)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, color: "var(--accent)" }}>
+                            <i className={`fas fa-${s.icon}`} style={{ fontSize: "1.6rem" }} />
+                          </div>
+                        )}
+
+                        {/* Text info */}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontWeight: 600, fontSize: "1.3rem", marginBottom: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {s.name}
+                          </div>
+                          {s.desc && (
+                            <div style={{ fontSize: "0.95rem", color: "var(--ink-3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                              {s.desc.slice(0, 50)}
+                            </div>
+                          )}
+                          <div style={{ fontSize: "0.85rem", color: "var(--ink-3)", marginTop: 2 }}>
+                            {s.type === "product" && "Product"}
+                            {s.type === "service" && "Service"}
+                            {s.type === "seller" && "Seller"}
+                            {s.type === "category" && "Category"}
+                          </div>
+                        </div>
+
+                        <i className="fas fa-chevron-right" style={{ color: "var(--ink-3)", flexShrink: 0 }} />
                       </button>
                     ))}
                   </div>
