@@ -42,6 +42,10 @@ export default function Navbar({ frosted = false, dark = false }) {
   const [mobQ, setMobQ] = useState("");
   const [cartCount, setCartCount] = useState(0);
   const [notifCount, setNotifCount] = useState(0);
+  const [suggestions, setSuggestions] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const suggestionsRef = useRef(null);
+  const suggestionsTimeoutRef = useRef(null);
 
   useEffect(() => {
     if (!user) { setNotifCount(0); setCartCount(0); return; }
@@ -85,9 +89,56 @@ export default function Navbar({ frosted = false, dark = false }) {
   const avatarUrl = user?.avatar?.url || (typeof user?.avatar === "string" ? user.avatar : null);
   const [avatarBroken, setAvatarBroken] = useState(false);
 
+  // Fetch search suggestions
+  function fetchSuggestions(q) {
+    if (q.length < 2) {
+      setSuggestions([]);
+      setShowSuggestions(false);
+      return;
+    }
+    clearTimeout(suggestionsTimeoutRef.current);
+    suggestionsTimeoutRef.current = setTimeout(() => {
+      Promise.allSettled([
+        apiFetch(`/api/products?search=${encodeURIComponent(q)}&limit=3`),
+        apiFetch(`/api/services?search=${encodeURIComponent(q)}&limit=3`),
+        apiFetch(`/api/sellers?search=${encodeURIComponent(q)}&limit=3`),
+      ]).then(([pr, sr, slr]) => {
+        const prods = pr.status === "fulfilled" ? (pr.value?.products || pr.value || []).slice(0, 3) : [];
+        const servs = sr.status === "fulfilled" ? (sr.value?.services || sr.value || []).slice(0, 3) : [];
+        const sells = slr.status === "fulfilled" ? (Array.isArray(slr.value) ? slr.value : slr.value?.sellers || []).slice(0, 3) : [];
+        const all = [
+          ...prods.map((p) => ({ type: "product", _id: p._id, name: p.name, icon: "bag-shopping" })),
+          ...servs.map((s) => ({ type: "service", _id: s._id, name: s.name, icon: "hand-holding-heart" })),
+          ...sells.map((s) => ({ type: "seller", _id: s._id, name: s.storeName || s.name, icon: "store" })),
+        ];
+        setSuggestions(all);
+        setShowSuggestions(all.length > 0);
+      });
+    }, 300);
+  }
+
+  function handleSearchChange(val) {
+    setSearch(val);
+    fetchSuggestions(val);
+  }
+
+  function handleSuggestionClick(suggestion) {
+    setShowSuggestions(false);
+    if (suggestion.type === "product") {
+      navigate(`/products/${suggestion._id}`);
+    } else if (suggestion.type === "service") {
+      navigate(`/services/${suggestion._id}`);
+    } else if (suggestion.type === "seller") {
+      navigate(`/sellers/${suggestion._id}`);
+    }
+  }
+
   function handleSearch(e) {
     e.preventDefault();
-    if (search.trim()) navigate(`/search?q=${encodeURIComponent(search.trim())}`);
+    if (search.trim()) {
+      setShowSuggestions(false);
+      navigate(`/search?q=${encodeURIComponent(search.trim())}`);
+    }
   }
 
   function openMobSearch() {
@@ -171,17 +222,41 @@ export default function Navbar({ frosted = false, dark = false }) {
             {/* Right icons */}
             <div className="nav-icons">
               {/* Desktop search */}
-              <form className="nav-search" onSubmit={handleSearch}>
+              <form className="nav-search" onSubmit={handleSearch} style={{ position: "relative" }}>
                 <div className="search-wrap" style={{ width: 220 }}>
                   <i className="fas fa-magnifying-glass search-icon" />
                   <input
                     className="input"
                     placeholder="Search…"
                     value={search}
-                    onChange={(e) => setSearch(e.target.value)}
+                    onChange={(e) => handleSearchChange(e.target.value)}
+                    onFocus={() => search.length >= 2 && setShowSuggestions(true)}
                     style={{ padding: "10px 14px 10px 40px", height: 40 }}
                   />
                 </div>
+                {/* Suggestions dropdown */}
+                {showSuggestions && suggestions.length > 0 && (
+                  <div ref={suggestionsRef} style={{
+                    position: "absolute", top: 40, left: 0, right: 0, background: "var(--paper)", borderRadius: "var(--r-md)", boxShadow: "var(--shadow-md)", zIndex: 100, maxHeight: 300, overflowY: "auto", border: "1px solid var(--line)"
+                  }}>
+                    {suggestions.map((s, i) => (
+                      <button
+                        key={`${s.type}-${s._id}`}
+                        type="button"
+                        onClick={() => handleSuggestionClick(s)}
+                        style={{
+                          width: "100%", padding: "12px 14px", display: "flex", alignItems: "center", gap: 12, border: "none", background: "transparent", cursor: "pointer", textAlign: "left", borderBottom: i < suggestions.length - 1 ? "1px solid var(--line)" : "none",
+                          color: "var(--ink-1)", fontSize: "1.3rem", transition: "background .15s",
+                        }}
+                        onMouseEnter={(e) => e.target.style.background = "rgba(59,130,246,.05)"}
+                        onMouseLeave={(e) => e.target.style.background = "transparent"}
+                      >
+                        <i className={`fas fa-${s.icon}`} style={{ color: "var(--accent)", width: 18 }} />
+                        <span>{s.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </form>
 
               {/* Mobile search icon */}

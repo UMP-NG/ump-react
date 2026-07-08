@@ -8,6 +8,10 @@ export default function AdvertSlider() {
   const slideWidthRef = useRef(0);
   const offsetRef = useRef(0);
 
+  // Touch/swipe handling
+  const touchStartRef = useRef(0);
+  const touchEndRef = useRef(0);
+
   const slides = [
     { title: "Have You Heard Of UMP", img: "/images/ump-banner.svg" },
     { title: "Our Delivery System", img: "/images/walker.jpg" },
@@ -40,11 +44,11 @@ export default function AdvertSlider() {
       2;
   }, []);
 
-  /* Auto slide */
+  /* Auto slide — faster interval (3s instead of 4s) */
   useEffect(() => {
     intervalRef.current = setInterval(() => {
       setCurrentIndex((i) => i + 1);
-    }, 4000);
+    }, 3000);
 
     return () => clearInterval(intervalRef.current);
   }, []);
@@ -59,7 +63,7 @@ export default function AdvertSlider() {
         track.style.transition = "none";
         setCurrentIndex(1);
         requestAnimationFrame(() => {
-          track.style.transition = "transform 0.6s ease-in-out";
+          track.style.transition = "transform 0.4s ease-in-out";
         });
       }
 
@@ -67,7 +71,7 @@ export default function AdvertSlider() {
         track.style.transition = "none";
         setCurrentIndex(sliderSlides.length - 2);
         requestAnimationFrame(() => {
-          track.style.transition = "transform 0.6s ease-in-out";
+          track.style.transition = "transform 0.4s ease-in-out";
         });
       }
     };
@@ -89,9 +93,37 @@ export default function AdvertSlider() {
 
   const handleDotClick = (i) => setCurrentIndex(i + 1);
 
+  // Swipe handlers
+  const handleTouchStart = (e) => {
+    touchStartRef.current = e.touches?.[0]?.clientX || 0;
+    // Reset auto-advance timer on touch
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = setInterval(() => {
+        setCurrentIndex((i) => i + 1);
+      }, 3000);
+    }
+  };
+
+  const handleTouchEnd = (e) => {
+    touchEndRef.current = e.changedTouches?.[0]?.clientX || 0;
+    const diff = touchStartRef.current - touchEndRef.current;
+    const threshold = 50; // swipe distance threshold
+
+    if (Math.abs(diff) > threshold) {
+      if (diff > 0) {
+        // Swipe left → next slide
+        setCurrentIndex((i) => i + 1);
+      } else {
+        // Swipe right → previous slide
+        setCurrentIndex((i) => i - 1);
+      }
+    }
+  };
+
   return (
     <section className="advert-slider">
-      <div className="slider-wrapper" ref={wrapperRef}>
+      <div className="slider-wrapper" ref={wrapperRef} onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
         <div className="slider-track" ref={trackRef}>
           {sliderSlides.map((slide, i) => (
             <div className="slide box" key={i}>

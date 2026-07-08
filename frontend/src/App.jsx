@@ -55,6 +55,7 @@ const Privacy          = lazy(() => import("./pages/Privacy"));
 const PayForCart       = lazy(() => import("./pages/PayForCart"));
 const PayForCartSuccess = lazy(() => import("./pages/PayForCart").then(m => ({ default: m.PayForCartSuccess })));
 const Bookings         = lazy(() => import("./pages/Bookings"));
+const Wallet           = lazy(() => import("./pages/Wallet"));
 
 // Catches chunk-load errors (e.g. network failure while lazy-loading a route)
 // and shows a simple reload prompt instead of a blank screen.
@@ -250,6 +251,7 @@ export default function App() {
       <Route path="/orders"        element={<PrivateRoute><Orders /></PrivateRoute>} />
       <Route path="/bookings"      element={<PrivateRoute><Bookings /></PrivateRoute>} />
       <Route path="/wishlist"      element={<PrivateRoute><Wishlist /></PrivateRoute>} />
+      <Route path="/wallet"        element={<PrivateRoute><Wallet /></PrivateRoute>} />
       <Route path="/notifications" element={<PrivateRoute><Notifications /></PrivateRoute>} />
       <Route path="/settings"      element={<PrivateRoute><Settings /></PrivateRoute>} />
       <Route path="/help"          element={<HelpSupport />} />

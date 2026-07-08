@@ -86,6 +86,7 @@ import couponRoutes from "./routes/couponRoutes.js";
 import questionRoutes from "./routes/questionRoutes.js";
 import adRoutes       from "./routes/adRoutes.js";
 import deliveryRoutes from "./routes/deliveryRoutes.js";
+import walletRoutes   from "./routes/walletRoutes.js";
 
 const app = express();
 const __filename = fileURLToPath(import.meta.url);
@@ -328,6 +329,7 @@ app.use("/api/coupons",     couponRoutes);
 app.use("/api/questions",   questionRoutes);
 app.use("/api/ads",         adRoutes);
 app.use("/api/delivery",    deliveryRoutes);
+app.use("/api/wallet",      walletRoutes);
 
 // ── Health check ─────────────────────────────────────────────────────────────
 // Used by Render's health-check pings and uptime monitors.

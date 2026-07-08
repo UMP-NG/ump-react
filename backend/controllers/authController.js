@@ -423,33 +423,50 @@ export const login = async (req, res) => {
 // ===============================
 // GET LOGGED-IN USER
 // ===============================
-export const getMe = (req, res) => {
-  // req.user is already populated by the protect middleware — no second DB query needed
-  // Explicitly pick fields to avoid leaking internal ones (fcmToken, __v, etc.)
-  const u = req.user;
-  res.status(200).json({
-    message: "User fetched successfully",
-    user: {
-      _id:             u._id,
-      name:            u.name,
-      email:           u.email,
-      roles:           u.roles,
-      avatar:          u.avatar,
-      phone:           u.phone,
-      address:         u.address,
-      isVerified:      u.isVerified,
-      googleAccount:   u.googleAccount,
-      schoolEmail:     u.schoolEmail,
-      schoolEmailVerified: u.schoolEmailVerified,
-      status:          u.status,
-      createdAt:       u.createdAt,
-      isLimitedAccount:         !!(u.googleAccount && !u.isVerified),
-      notificationPreferences:  u.notificationPreferences || {},
-      serviceProviderInfo:      u.serviceProviderInfo,
-      referralCode:             u.referralCode,
-      referralCredit:           u.referralCredit || 0,
-    },
-  });
+export const getMe = async (req, res) => {
+  try {
+    // req.user is already populated by the protect middleware
+    let u = req.user;
+
+    // Ensure referralCode exists (for users created before referral system)
+    if (!u.referralCode) {
+      const crypto = (await import("crypto")).default;
+      const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+      let code = "UMP-";
+      for (let i = 0; i < 8; i++) {
+        code += chars[crypto.randomInt(chars.length)];
+      }
+      u.referralCode = code;
+      await User.findByIdAndUpdate(u._id, { referralCode: code });
+    }
+
+    res.status(200).json({
+      message: "User fetched successfully",
+      user: {
+        _id:             u._id,
+        name:            u.name,
+        email:           u.email,
+        roles:           u.roles,
+        avatar:          u.avatar,
+        phone:           u.phone,
+        address:         u.address,
+        isVerified:      u.isVerified,
+        googleAccount:   u.googleAccount,
+        schoolEmail:     u.schoolEmail,
+        schoolEmailVerified: u.schoolEmailVerified,
+        status:          u.status,
+        createdAt:       u.createdAt,
+        isLimitedAccount:         !!(u.googleAccount && !u.isVerified),
+        notificationPreferences:  u.notificationPreferences || {},
+        serviceProviderInfo:      u.serviceProviderInfo,
+        referralCode:             u.referralCode,
+        referralCredit:           u.referralCredit || 0,
+      },
+    });
+  } catch (err) {
+    logger.error("getMe error:", err);
+    res.status(500).json({ message: "Failed to fetch user profile" });
+  }
 };
 
 // ===============================
