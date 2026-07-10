@@ -19,10 +19,17 @@ export default function Wallet() {
   const [wallet, setWallet] = useState(null);
   const [transactions, setTransactions] = useState([]);
   const [bankSaving, setBankSaving] = useState(false);
+  const [bankVerifying, setBankVerifying] = useState(false);
+  const [banks, setBanks] = useState([]);
   const [transferring, setTransferring] = useState(false);
   const [showComingSoon, setShowComingSoon] = useState(false);
 
-  // Form states
+  // Bank details form — accountNumber/accountName always start blank, even if
+  // bank details are already on file. The server only ever returns a masked
+  // accountNumber (e.g. "****7890"); pre-filling an editable field with that
+  // would let a user "save" the masked placeholder over their real number.
+  // accountName is only ever set by verifyAccount() below, from Paystack's
+  // own resolve — never typed directly — so it can't drift from the real name.
   const [bankForm, setBankForm] = useState({ bankName: "", bankCode: "", accountNumber: "", accountName: "" });
   const [transferForm, setTransferForm] = useState({ recipientEmail: "", amount: "", note: "" });
   const [withdrawForm, setWithdrawForm] = useState({ amount: "" });
@@ -36,9 +43,6 @@ export default function Wallet() {
       ]);
       setWallet(w);
       setTransactions(t.transactions || []);
-      if (w.bankDetails) {
-        setBankForm(w.bankDetails);
-      }
     } catch (err) {
       showToast(err?.message || "Failed to load wallet", "error");
     } finally {
@@ -51,9 +55,34 @@ export default function Wallet() {
     loadWallet();
   }, [user, loadWallet]);
 
+  // Load the bank picker list once, when the Bank Details tab is first opened
+  useEffect(() => {
+    if (tab !== "bank" || banks.length > 0) return;
+    apiFetch("/api/payments/banks")
+      .then((d) => setBanks(d.banks || []))
+      .catch(() => {});
+  }, [tab, banks.length]);
+
+  async function verifyAccount() {
+    if (!bankForm.accountNumber || !bankForm.bankCode) {
+      showToast("Select a bank and enter account number first", "error");
+      return;
+    }
+    setBankVerifying(true);
+    try {
+      const d = await apiFetch(`/api/payments/verify-account?account_number=${bankForm.accountNumber}&bank_code=${bankForm.bankCode}`);
+      setBankForm((f) => ({ ...f, accountName: d.account_name }));
+      showToast("Account verified: " + d.account_name, "success");
+    } catch (err) {
+      showToast(err?.message || "Could not verify account", "error");
+    } finally {
+      setBankVerifying(false);
+    }
+  }
+
   async function saveBankDetails() {
-    if (!bankForm.bankName || !bankForm.bankCode || !bankForm.accountNumber || !bankForm.accountName) {
-      showToast("All fields are required", "error");
+    if (!bankForm.bankCode || !bankForm.accountNumber || !bankForm.accountName) {
+      showToast("Verify your account first", "error");
       return;
     }
     setBankSaving(true);
@@ -63,7 +92,8 @@ export default function Wallet() {
         body: bankForm,
       });
       setWallet((prev) => ({ ...prev, bankDetails: result.bankDetails }));
-      showToast("Bank details saved successfully", "success");
+      setBankForm({ bankName: "", bankCode: "", accountNumber: "", accountName: "" });
+      showToast("Bank details saved. They'll need to be verified by our team before you can withdraw.", "success");
     } catch (err) {
       showToast(err?.message || "Failed to save bank details", "error");
     } finally {
@@ -408,60 +438,92 @@ export default function Wallet() {
         {/* Bank Details Tab */}
         {tab === "bank" && (
           <div style={{ paddingBottom: 40 }}>
-            <div className="card" style={{ padding: 20 }}>
-              <h3 style={{ margin: "0 0 16px", fontSize: "1.5rem", fontWeight: 700 }}>Bank Account Details</h3>
-
-              <div style={{ marginBottom: 12 }}>
-                <label style={{ fontSize: "1.2rem", fontWeight: 600, display: "block", marginBottom: 6 }}>Bank Name</label>
-                <input
-                  type="text"
-                  className="input"
-                  placeholder="e.g. Zenith Bank"
-                  value={bankForm.bankName}
-                  onChange={(e) => setBankForm((f) => ({ ...f, bankName: e.target.value }))}
-                  style={{ width: "100%", padding: "10px 14px", fontSize: "1.3rem" }}
-                />
+            {/* Details already on file */}
+            {wallet?.bankDetails?.accountNumber && (
+              <div className="card" style={{ padding: 16, marginBottom: 16, background: "rgba(59,130,246,.05)" }}>
+                <div style={{ fontSize: "1.2rem", fontWeight: 600, marginBottom: 6 }}>
+                  <i className="fas fa-building-columns" style={{ marginRight: 6, color: "var(--accent)" }} />On file
+                </div>
+                <div style={{ fontSize: "1.3rem" }}>{wallet.bankDetails.bankName} · {wallet.bankDetails.accountNumber}</div>
+                <div style={{ fontSize: "1.3rem", color: "var(--ink-3)" }}>{wallet.bankDetails.accountName}</div>
+                <div style={{ marginTop: 6, fontSize: "1.1rem", fontWeight: 600, color: wallet.bankDetails.verified ? "#10b981" : "#d97706" }}>
+                  <i className={`fas fa-${wallet.bankDetails.verified ? "circle-check" : "clock"}`} style={{ marginRight: 4 }} />
+                  {wallet.bankDetails.verified ? "Verified — ready for withdrawal" : "Pending verification by our team"}
+                </div>
               </div>
+            )}
+
+            <div className="card" style={{ padding: 20 }}>
+              <h3 style={{ margin: "0 0 4px", fontSize: "1.5rem", fontWeight: 700 }}>
+                {wallet?.bankDetails?.accountNumber ? "Update Bank Account" : "Add Bank Account"}
+              </h3>
+              <p style={{ margin: "0 0 16px", fontSize: "1.15rem", color: "var(--ink-3)" }}>
+                Pick your bank and enter your account number — we'll verify it with your bank before saving.
+              </p>
 
               <div style={{ marginBottom: 12 }}>
-                <label style={{ fontSize: "1.2rem", fontWeight: 600, display: "block", marginBottom: 6 }}>Account Name</label>
-                <input
-                  type="text"
+                <label style={{ fontSize: "1.2rem", fontWeight: 600, display: "block", marginBottom: 6 }}>Bank</label>
+                <select
                   className="input"
-                  placeholder="Full name on account"
-                  value={bankForm.accountName}
-                  onChange={(e) => setBankForm((f) => ({ ...f, accountName: e.target.value }))}
+                  value={bankForm.bankCode}
+                  onChange={(e) => {
+                    const selected = banks.find((b) => b.code === e.target.value);
+                    setBankForm((f) => ({ ...f, bankCode: e.target.value, bankName: selected?.name || "", accountName: "" }));
+                  }}
                   style={{ width: "100%", padding: "10px 14px", fontSize: "1.3rem" }}
-                />
+                >
+                  <option value="">{banks.length ? "Select your bank…" : "Loading banks…"}</option>
+                  {banks.map((b, i) => <option key={`${b.code}-${i}`} value={b.code}>{b.name}</option>)}
+                </select>
               </div>
 
               <div style={{ marginBottom: 12 }}>
                 <label style={{ fontSize: "1.2rem", fontWeight: 600, display: "block", marginBottom: 6 }}>Account Number</label>
-                <input
-                  type="text"
-                  className="input"
-                  placeholder="10-digit account number"
-                  value={bankForm.accountNumber}
-                  onChange={(e) => setBankForm((f) => ({ ...f, accountNumber: e.target.value }))}
-                  style={{ width: "100%", padding: "10px 14px", fontSize: "1.3rem" }}
-                />
+                <div style={{ display: "flex", gap: 8 }}>
+                  <input
+                    type="text"
+                    className="input"
+                    placeholder="10-digit account number"
+                    value={bankForm.accountNumber}
+                    onChange={(e) => setBankForm((f) => ({ ...f, accountNumber: e.target.value, accountName: "" }))}
+                    style={{ flex: 1, padding: "10px 14px", fontSize: "1.3rem" }}
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    disabled={bankVerifying || !bankForm.accountNumber || !bankForm.bankCode}
+                    onClick={verifyAccount}
+                  >
+                    {bankVerifying ? <i className="fas fa-spinner fa-spin" /> : "Verify"}
+                  </button>
+                </div>
               </div>
 
               <div style={{ marginBottom: 16 }}>
-                <label style={{ fontSize: "1.2rem", fontWeight: 600, display: "block", marginBottom: 6 }}>Bank Code</label>
+                <label style={{ fontSize: "1.2rem", fontWeight: 600, display: "block", marginBottom: 6 }}>Account Name</label>
                 <input
                   type="text"
                   className="input"
-                  placeholder="3-digit bank code"
-                  value={bankForm.bankCode}
-                  onChange={(e) => setBankForm((f) => ({ ...f, bankCode: e.target.value }))}
-                  style={{ width: "100%", padding: "10px 14px", fontSize: "1.3rem" }}
+                  readOnly
+                  placeholder="Verify your account to see the name"
+                  value={bankForm.accountName}
+                  style={{
+                    width: "100%", padding: "10px 14px", fontSize: "1.3rem",
+                    background: bankForm.accountName ? "rgba(34,197,94,.07)" : undefined,
+                    color: bankForm.accountName ? "#16a34a" : undefined,
+                    fontWeight: bankForm.accountName ? 700 : 400,
+                  }}
                 />
+                {!bankForm.accountName && (
+                  <small style={{ display: "block", marginTop: 6, color: "var(--ink-3)" }}>
+                    This is filled in automatically once your account is verified — it can't be typed directly.
+                  </small>
+                )}
               </div>
 
               <button
                 onClick={saveBankDetails}
-                disabled={bankSaving}
+                disabled={bankSaving || !bankForm.accountName}
                 className="btn btn-primary"
                 style={{ width: "100%" }}
               >

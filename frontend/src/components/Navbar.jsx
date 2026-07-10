@@ -22,7 +22,7 @@ export function useTheme() {
   return [dark, toggle];
 }
 
-const SUGGESTION_TYPE_LABEL = { product: "Product", service: "Service", seller: "Seller", category: "Category" };
+const SUGGESTION_TYPE_LABEL = { product: "Product", service: "Service", seller: "Seller" };
 
 // One suggestion row, shared between the desktop dropdown and the mobile
 // full-width list so both stay in sync and get bug fixes for free.
@@ -149,20 +149,16 @@ export default function Navbar({ frosted = false, dark = false }) {
         apiFetch(`/api/products?search=${encodeURIComponent(q)}&limit=5`),
         apiFetch(`/api/services?search=${encodeURIComponent(q)}&limit=5`),
         apiFetch(`/api/sellers?search=${encodeURIComponent(q)}&limit=3`),
-        apiFetch(`/api/categories?search=${encodeURIComponent(q)}&limit=3`),
-      ]).then(([pr, sr, slr, cr]) => {
+      ]).then(([pr, sr, slr]) => {
         // A newer keystroke already fired a request — discard this stale response
         if (reqId !== suggestionsReqIdRef.current) return;
 
         const prods = pr.status === "fulfilled" ? (pr.value?.products || pr.value || []).slice(0, 5) : [];
         const servs = sr.status === "fulfilled" ? (sr.value?.services || sr.value || []).slice(0, 5) : [];
         const sells = slr.status === "fulfilled" ? (Array.isArray(slr.value) ? slr.value : slr.value?.sellers || []).slice(0, 3) : [];
-        const cats = cr.status === "fulfilled" ? (Array.isArray(cr.value) ? cr.value : cr.value?.categories || []).slice(0, 3) : [];
 
         const all = [
-          // Categories first
-          ...cats.map((c) => ({ type: "category", _id: c._id, name: c.name, icon: "folder", desc: c.description })),
-          // Then products
+          // Products first
           ...prods.map((p) => ({ type: "product", _id: p._id, name: p.name, desc: p.desc || p.description, icon: "bag-shopping", image: p.images?.[0]?.url })),
           // Then services
           ...servs.map((s) => ({ type: "service", _id: s._id, name: s.name, desc: s.desc || s.title, icon: "hand-holding-heart" })),
@@ -205,9 +201,7 @@ export default function Navbar({ frosted = false, dark = false }) {
     } else if (suggestion.type === "service") {
       navigate(`/services/${suggestion._id}`);
     } else if (suggestion.type === "seller") {
-      navigate(`/sellers/${suggestion._id}`);
-    } else if (suggestion.type === "category") {
-      navigate(`/market?category=${suggestion._id}`);
+      navigate(`/store/${suggestion._id}`);
     }
   }
 

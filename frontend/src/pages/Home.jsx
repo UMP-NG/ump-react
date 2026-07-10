@@ -64,7 +64,7 @@ const FALLBACK_CATS = [
 const FOUNDERS = [
   { name: "Ikechukwu", role: "Chief Executive Officer", about: "Visionary behind UMP — driven by the belief that every UNILAG student deserves a safe, simple way to earn and trade on campus.", avatarUrl: null },
   { name: "Joba", role: "Chief Operating Officer", about: "Keeps UMP running smoothly day-to-day, from onboarding sellers to making sure every transaction is fast, fair, and stress-free.", avatarUrl: null },
-  { name: "Oseni Matthew", role: "Fullstack Developer", about: "Focused on Building Web And Mobile Applications that Actually works and Meets Customers Satisfaction.", avatarUrl: null },
+  { name: "Oseni Matthew", role: "Chief Technology Officer", about: "Focused on Building Web And Mobile Applications that Actually works and Meets Customers Satisfaction.", avatarUrl: null },
   { name: "Prisca", role: "Chief Marketing Officer", about: "Driving UMP's growth and visibility across campus — connecting students to the marketplace through strategic campaigns and community building.", avatarUrl: null },
 ];
 
