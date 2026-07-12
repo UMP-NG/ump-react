@@ -43,12 +43,14 @@ function Stars({ value, onChange, readonly }) {
 export default function ProductDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { addToCart } = useCart();
+  const { addToCart, cartItems, updateQty } = useCart();
   const { user } = useUser();
   const [product, setProduct]   = useState(null);
   const [tab, setTab]           = useState("description");
   const [showReport, setShowReport] = useState(false);
-  const [qty, setQty] = useState(1);
+  // Always 1 — the qty stepper only appears once an item is in the cart (see
+  // cartEntry below), where quantity is controlled via updateQty instead.
+  const qty = 1;
   const [thumb, setThumb] = useState(0);
   const [selectedColor,   setSelectedColor]   = useState("");
   const [selectedSize,    setSelectedSize]    = useState("");
@@ -352,6 +354,24 @@ export default function ProductDetail() {
       ? product.variants.every(v => (v.stock ?? 0) <= 0)
       : activeStock <= 0);
   const lowStock = !outOfStock && activeStock > 0 && activeStock <= 5;
+
+  // Is this exact product + selected variant already in the buyer's cart?
+  // Drives whether the floating bar shows a qty stepper (only once it's
+  // actually in the cart) or just a clean "Add to cart" button.
+  const cartEntry = [...cartItems.values()].find((item) => {
+    const itemProductId = (item.product?._id || item.product)?.toString();
+    if (itemProductId !== product._id?.toString()) return false;
+    return (item.selectedVariant || "") === (selectedVariant?.label || "");
+  });
+
+  function incrementCartEntry() {
+    if (!cartEntry) return;
+    updateQty(cartEntry._id, Math.min(totalStock, cartEntry.quantity + 1));
+  }
+  function decrementCartEntry() {
+    if (!cartEntry) return;
+    updateQty(cartEntry._id, cartEntry.quantity - 1);
+  }
 
   const gallery = (
     <div>
@@ -816,20 +836,28 @@ export default function ProductDetail() {
       {isDesktop && (
         <>
         <div style={{ marginTop: 20, display: "flex", alignItems: "center", gap: 10 }}>
-          {!outOfStock && (
-            <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "8px 10px", border: "1px solid var(--line)", borderRadius: "var(--r-pill)", background: "var(--surface)" }}>
-              <button className="icon-btn" style={{ width: 30, height: 30, background: "var(--white)", borderRadius: 10 }} onClick={() => setQty(Math.max(1, qty - 1))}>
+          {/* Qty stepper only appears once this item is actually in the cart —
+              keeps the row clean and gives the price/button their full width before then. */}
+          {!outOfStock && cartEntry && (
+            <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "8px 10px", border: "1px solid var(--line)", borderRadius: "var(--r-pill)", background: "var(--surface)", flexShrink: 0 }}>
+              <button className="icon-btn" style={{ width: 30, height: 30, background: "var(--white)", borderRadius: 10 }} onClick={decrementCartEntry}>
                 <i className="fas fa-minus" />
               </button>
-              <span style={{ width: 28, textAlign: "center", fontWeight: 700 }}>{qty}</span>
-              <button className="icon-btn" style={{ width: 30, height: 30, background: "var(--white)", borderRadius: 10 }} onClick={() => setQty(Math.min(totalStock, qty + 1))}>
+              <span style={{ width: 28, textAlign: "center", fontWeight: 700 }}>{cartEntry.quantity}</span>
+              <button className="icon-btn" style={{ width: 30, height: 30, background: "var(--white)", borderRadius: 10 }} onClick={incrementCartEntry} disabled={cartEntry.quantity >= totalStock}>
                 <i className="fas fa-plus" />
               </button>
             </div>
           )}
-          <button className="btn btn-primary" style={{ flex: 1, opacity: outOfStock ? 0.6 : 1 }} onClick={handleAddToCart} disabled={cartLoading || outOfStock}>
-            {cartLoading ? <i className="fas fa-spinner fa-spin" /> : outOfStock ? "Out of Stock" : <><i className="fas fa-bag-shopping" /> Add to cart — {naira(product.price * qty)}</>}
-          </button>
+          {cartEntry ? (
+            <button className="btn btn-primary" style={{ flex: 1 }} onClick={() => navigate("/cart")}>
+              <i className="fas fa-check" /> In cart — {naira(displayPrice * cartEntry.quantity)}
+            </button>
+          ) : (
+            <button className="btn btn-primary" style={{ flex: 1, opacity: outOfStock ? 0.6 : 1 }} onClick={handleAddToCart} disabled={cartLoading || outOfStock}>
+              {cartLoading ? <i className="fas fa-spinner fa-spin" /> : outOfStock ? "Out of Stock" : <><i className="fas fa-bag-shopping" /> Add to cart — {naira(displayPrice * qty)}</>}
+            </button>
+          )}
         </div>
         {!outOfStock && seller && (
           <button
@@ -960,13 +988,15 @@ export default function ProductDetail() {
           display: "flex", alignItems: "center", gap: 8,
           boxShadow: "var(--shadow-pop)", zIndex: 40,
         }}>
-          {!outOfStock && (
-            <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 6px" }}>
-              <button className="icon-btn" style={{ width: 32, height: 32, background: "var(--surface)", borderRadius: 12 }} onClick={() => setQty(Math.max(1, qty - 1))}>
+          {/* Qty stepper only appears once this item is actually in the cart —
+              keeps the bar uncluttered so the price stays readable before then. */}
+          {!outOfStock && cartEntry && (
+            <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 6px", flexShrink: 0 }}>
+              <button className="icon-btn" style={{ width: 32, height: 32, background: "var(--surface)", borderRadius: 12 }} onClick={decrementCartEntry}>
                 <i className="fas fa-minus" />
               </button>
-              <span style={{ width: 32, textAlign: "center", fontWeight: 700 }}>{qty}</span>
-              <button className="icon-btn" style={{ width: 32, height: 32, background: "var(--surface)", borderRadius: 12 }} onClick={() => setQty(Math.min(totalStock, qty + 1))}>
+              <span style={{ width: 24, textAlign: "center", fontWeight: 700 }}>{cartEntry.quantity}</span>
+              <button className="icon-btn" style={{ width: 32, height: 32, background: "var(--surface)", borderRadius: 12 }} onClick={incrementCartEntry} disabled={cartEntry.quantity >= totalStock}>
                 <i className="fas fa-plus" />
               </button>
             </div>
@@ -995,9 +1025,15 @@ export default function ProductDetail() {
                 : <i className="fas fa-tag" />
             }
           </button>
-          <button className="btn btn-primary" style={{ flex: 1, opacity: outOfStock ? 0.6 : 1 }} onClick={handleAddToCart} disabled={cartLoading || outOfStock}>
-            {cartLoading ? <i className="fas fa-spinner fa-spin" /> : outOfStock ? "Out of Stock" : <><i className="fas fa-bag-shopping" /> Add — {naira(product.price * qty)}</>}
-          </button>
+          {cartEntry ? (
+            <button className="btn btn-primary" style={{ flex: 1 }} onClick={() => navigate("/cart")}>
+              <i className="fas fa-check" /> In cart — {naira(displayPrice * cartEntry.quantity)}
+            </button>
+          ) : (
+            <button className="btn btn-primary" style={{ flex: 1, opacity: outOfStock ? 0.6 : 1 }} onClick={handleAddToCart} disabled={cartLoading || outOfStock}>
+              {cartLoading ? <i className="fas fa-spinner fa-spin" /> : outOfStock ? "Out of Stock" : <><i className="fas fa-bag-shopping" /> Add — {naira(displayPrice * qty)}</>}
+            </button>
+          )}
         </div>
       )}
     </div>

@@ -21,6 +21,10 @@ const cartItemSchema = new mongoose.Schema({
   selectedColor: { type: String, default: "" },
   selectedSize:  { type: String, default: "" },
   selectedType:  { type: String, default: "" },
+  // Label of the selected entry in Product.variants (e.g. "Special Ankara Cover").
+  // `price` above is snapshotted from this variant at add-to-cart time so the
+  // buyer is charged the variant's actual price, not the product's base price.
+  selectedVariant: { type: String, default: "" },
 });
 
 const cartSchema = new mongoose.Schema(

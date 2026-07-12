@@ -31,7 +31,7 @@ export const getCart = async (req, res) => {
 export const addToCart = async (req, res) => {
   try {
 
-    const { productId, quantity = 1, selectedColor = "", selectedSize = "", selectedType = "" } = req.body;
+    const { productId, quantity = 1, selectedColor = "", selectedSize = "", selectedType = "", selectedVariant = "" } = req.body;
     const userId = req.user?._id;
 
     if (!userId) {
@@ -61,10 +61,24 @@ export const addToCart = async (req, res) => {
       return res.status(404).json({ message: "Product not found" });
     }
 
-    // Check stock
-    const variantStock = Array.isArray(product.variants) ? product.variants.reduce((s, v) => s + (v.stock || 0), 0) : 0;
-    const totalStock = (product.stock || 0) + variantStock;
-    if (totalStock <= 0) {
+    // Resolve the selected variant (if this product has variants) — the price
+    // and stock charged/checked must come from the SPECIFIC variant chosen,
+    // not the product's base price (which is just the cheapest variant).
+    const hasVariants = Array.isArray(product.variants) && product.variants.length > 0;
+    let matchedVariant = null;
+    if (hasVariants) {
+      if (!selectedVariant) {
+        return res.status(400).json({ message: "Please select a variant" });
+      }
+      matchedVariant = product.variants.find((v) => v.label === selectedVariant);
+      if (!matchedVariant) {
+        return res.status(400).json({ message: "Selected variant is no longer available" });
+      }
+    }
+    const itemPrice = matchedVariant ? matchedVariant.price : product.price;
+    const itemStock = matchedVariant ? (matchedVariant.stock || 0) : (product.stock || 0);
+
+    if (itemStock <= 0) {
       return res.status(400).json({ message: "This product is out of stock" });
     }
 
@@ -85,25 +99,35 @@ export const addToCart = async (req, res) => {
       cart = new Cart({ user: userId, items: [] });
     }
 
-    // Check if item already exists in cart (same product + same variant combination)
+    // Check if item already exists in cart (same product + same variant/option combination)
     const existingItem = cart.items.find(
       (item) =>
         item.product.toString() === productId &&
-        (item.selectedColor || "") === selectedColor &&
-        (item.selectedSize  || "") === selectedSize &&
-        (item.selectedType  || "") === selectedType
+        (item.selectedColor   || "") === selectedColor &&
+        (item.selectedSize    || "") === selectedSize &&
+        (item.selectedType    || "") === selectedType &&
+        (item.selectedVariant || "") === selectedVariant
     );
 
     if (existingItem) {
-      existingItem.quantity += qty;
+      const newQty = existingItem.quantity + qty;
+      if (newQty > itemStock) {
+        return res.status(400).json({ message: `Only ${itemStock} left in stock — you already have ${existingItem.quantity} in your cart.` });
+      }
+      existingItem.quantity = newQty;
+      existingItem.price = itemPrice; // keep in sync in case the variant's price changed since it was first added
     } else {
+      if (qty > itemStock) {
+        return res.status(400).json({ message: `Only ${itemStock} left in stock` });
+      }
       cart.items.push({
         product: productId,
         quantity: qty,
-        price: product.price,
+        price: itemPrice,
         selectedColor,
         selectedSize,
         selectedType,
+        selectedVariant,
       });
     }
 
@@ -128,6 +152,17 @@ export const updateQuantity = async (req, res) => {
     // Match by subdocument _id so two variants of the same product update independently
     const item = cart.items.id(itemId);
     if (!item) return res.status(404).json({ message: "Item not found in cart" });
+
+    const product = await Product.findById(item.product).select("stock variants").lean();
+    if (product) {
+      const matchedVariant = item.selectedVariant
+        ? product.variants?.find((v) => v.label === item.selectedVariant)
+        : null;
+      const itemStock = matchedVariant ? (matchedVariant.stock || 0) : (product.stock || 0);
+      if (quantity > itemStock) {
+        return res.status(400).json({ message: `Only ${itemStock} left in stock` });
+      }
+    }
 
     item.quantity = Math.max(1, quantity);
     await cart.save();

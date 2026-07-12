@@ -17,7 +17,12 @@ export default function Cart() {
   const { fees } = useAppConfig();
   const [step, setStep] = useState(1);
   const [applyCredit, setApplyCredit] = useState(false);
-  const creditBalance = user?.referralCredit || 0;
+  const [walletBalance, setWalletBalance] = useState({ giftCredits: 0, withdrawableBalance: 0 });
+  // Checkout can spend from three pools: wallet gift credits (purchase-only,
+  // e.g. admin-gifted funds), wallet withdrawable balance, and legacy
+  // referral credit. Shown to the buyer as one combined "wallet credit"
+  // figure — the backend applies gift credits first, matching this UI.
+  const creditBalance = (user?.referralCredit || 0) + walletBalance.giftCredits + walletBalance.withdrawableBalance;
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [delivery, setDelivery] = useState({ name: "", phone: "", street: "", building: "", area: "", city: "Lagos", state: "Lagos", landmark: "", notes: "" });
@@ -45,6 +50,9 @@ export default function Cart() {
       .then((d) => setItems(d.items || d || []))
       .catch(() => setItems([]))
       .finally(() => setLoading(false));
+    apiFetch("/api/wallet")
+      .then((d) => setWalletBalance({ giftCredits: d.giftCredits || 0, withdrawableBalance: d.withdrawableBalance || 0 }))
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -92,8 +100,12 @@ export default function Cart() {
   }, [step, items]);
 
 
+  // i.price is the price snapshotted on the cart item at add-to-cart time —
+  // for variant products that's the SELECTED variant's price, not the
+  // product's base/cheapest price. i.product?.price must never take priority
+  // over it, or every variant item silently re-prices to the base price.
   const sub = items.reduce((s, i) => {
-    const unitPrice = i.negotiatedPrice || i.product?.price || i.price || 0;
+    const unitPrice = i.negotiatedPrice ?? i.price ?? i.product?.price ?? 0;
     return s + unitPrice * (i.quantity || i.qty || 1);
   }, 0);
   const totalDeliveryFee = Object.values(deliverySelections).reduce((s, sel) => s + (Number(sel?.fee) || 0), 0);
@@ -101,7 +113,7 @@ export default function Cart() {
   const couponDiscount = coupon?.discount || 0;
   const serviceCharge = fees.serviceChargeEnabled
     ? items.reduce((total, i) => {
-        const unitPrice = i.negotiatedPrice || i.product?.price || i.price || 0;
+        const unitPrice = i.negotiatedPrice ?? i.price ?? i.product?.price ?? 0;
         const itemTotal = unitPrice * (i.quantity || i.qty || 1);
         return total + Math.min(fees.serviceChargeMax, Math.round(itemTotal * (fees.serviceFee / 100)));
       }, 0)
@@ -342,8 +354,9 @@ export default function Cart() {
                               onKeyDown={(e) => (e.key === "Enter" || e.key === " ") && productId && navigate(`/products/${productId}`)}
                               style={{ fontSize: "1.3rem", fontWeight: 600, lineHeight: 1.3, cursor: productId ? "pointer" : "default", display: "inline" }}
                             >{p.name}</div>
-                            {(it.selectedColor || it.selectedSize || it.selectedType) && (
+                            {(it.selectedVariant || it.selectedColor || it.selectedSize || it.selectedType) && (
                               <div style={{ fontSize: "1.1rem", color: "var(--ink-3)", marginTop: 2, display: "flex", flexWrap: "wrap", gap: 4 }}>
+                                {it.selectedVariant && <span style={{ background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 20, padding: "1px 7px" }}>{it.selectedVariant}</span>}
                                 {it.selectedColor && <span style={{ background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 20, padding: "1px 7px" }}>{it.selectedColor}</span>}
                                 {it.selectedSize  && <span style={{ background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 20, padding: "1px 7px" }}>{it.selectedSize}</span>}
                                 {it.selectedType  && <span style={{ background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 20, padding: "1px 7px" }}>{it.selectedType}</span>}
@@ -353,9 +366,9 @@ export default function Cart() {
                             {it.negotiatedPrice ? (
                               <>
                                 {naira(it.negotiatedPrice)}
-                                <span style={{ fontSize: "1.1rem", fontWeight: 400, color: "var(--ink-3)", textDecoration: "line-through", marginLeft: 6 }}>{naira(p.price)}</span>
+                                <span style={{ fontSize: "1.1rem", fontWeight: 400, color: "var(--ink-3)", textDecoration: "line-through", marginLeft: 6 }}>{naira(it.price ?? p.price)}</span>
                               </>
-                            ) : naira(p.price)}
+                            ) : naira(it.price ?? p.price)}
                           </div>
                           </div>
                           <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8 }}>
@@ -420,7 +433,7 @@ export default function Cart() {
                     </div>
                   </div>
 
-                  {/* Referral credit toggle */}
+                  {/* Wallet credit toggle — combines gift credits, wallet balance, and referral credit */}
                   {creditBalance > 0 && (
                     <div
                       onClick={() => setApplyCredit((v) => !v)}
@@ -429,7 +442,7 @@ export default function Cart() {
                       <i className="fas fa-wallet" style={{ color: applyCredit ? "var(--accent)" : "var(--ink-3)", fontSize: "1.4rem", flexShrink: 0 }} />
                       <div style={{ flex: 1 }}>
                         <div style={{ fontWeight: 700, fontSize: "1.3rem", color: applyCredit ? "var(--accent)" : "var(--ink-1)" }}>
-                          Use referral credit — {naira(creditBalance)} available
+                          Use wallet credit — {naira(creditBalance)} available
                         </div>
                         <div style={{ fontSize: "1.15rem", color: "var(--ink-3)", marginTop: 1 }}>
                           {applyCredit ? `Saving ${naira(creditToApply)} on this order` : "Tap to apply to this order"}
@@ -735,7 +748,7 @@ export default function Cart() {
                       <div style={{ fontSize: "1.2rem", fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{p.name}</div>
                       <div style={{ fontSize: "1.1rem", color: "var(--ink-3)" }}>× {qty}</div>
                     </div>
-                    <div style={{ fontSize: "1.2rem", fontWeight: 700, flexShrink: 0 }}>{naira((it.negotiatedPrice || p.price || 0) * qty)}</div>
+                    <div style={{ fontSize: "1.2rem", fontWeight: 700, flexShrink: 0 }}>{naira((it.negotiatedPrice ?? it.price ?? p.price ?? 0) * qty)}</div>
                   </div>
                 );
               })}
@@ -981,7 +994,7 @@ function MobileOrderSummary({ items, sub, deliveryFeeTotal, orderTotal, serviceC
                   <div style={{ fontSize: "1.25rem", fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.name}</div>
                   <div style={{ fontSize: "1.1rem", color: "var(--ink-3)" }}>× {qty}</div>
                 </div>
-                <div style={{ fontSize: "1.3rem", fontWeight: 700, flexShrink: 0 }}>{naira((p.price || 0) * qty)}</div>
+                <div style={{ fontSize: "1.3rem", fontWeight: 700, flexShrink: 0 }}>{naira((it.negotiatedPrice ?? it.price ?? p.price ?? 0) * qty)}</div>
               </div>
             );
           })}

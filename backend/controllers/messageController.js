@@ -48,7 +48,13 @@ export const sendMessage = async (req, res) => {
       isAdminMessage: req.user.roles?.includes("admin") ?? false,
     });
 
-    // ✅ Emit via Socket.io
+    // Messages go only to whoever they're actually addressed to. The only
+    // "randomness" in support messaging happens once, up front, when the
+    // frontend assigns a new support thread to one specific admin (see
+    // Messages.jsx) — after that it's a normal 1:1 conversation with that
+    // admin. The shared support inbox (getUserMessages/getConversation)
+    // already lets any admin see and reply to it if needed; this is just
+    // about who gets the real-time ping for a given message.
     const io = getIO();
     if (io) {
       io.to(receiver.toString()).emit("new_message", message);

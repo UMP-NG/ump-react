@@ -15,6 +15,7 @@ const ROUTE_LABELS = {
   '/admin/orders':     ['Admin', 'Orders'],
   '/admin/bookings':   ['Admin', 'Bookings'],
   '/admin/payouts':    ['Admin', 'Payouts'],
+  '/admin/gifts':      ['Admin', 'Gifts'],
   '/admin/reviews':    ['Admin', 'Reviews'],
   '/admin/disputes':   ['Admin', 'Disputes'],
   '/admin/reports':    ['Admin', 'Reports'],

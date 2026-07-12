@@ -21,6 +21,7 @@ const NAV_GROUPS = [
     { id: 'orders',   path: '/admin/orders',   icon: 'fa-receipt',             name: 'Orders' },
     { id: 'bookings', path: '/admin/bookings', icon: 'fa-calendar-check',      name: 'Bookings' },
     { id: 'payouts',  path: '/admin/payouts',  icon: 'fa-money-bill-transfer', name: 'Payouts', badge: null, badgeKind: 'amber' },
+    { id: 'gifts',    path: '/admin/gifts',    icon: 'fa-gift',                name: 'Gifts' },
   ]},
   { label: 'Moderation', items: [
     { id: 'reviews',       path: '/admin/reviews',       icon: 'fa-star',          name: 'Reviews' },

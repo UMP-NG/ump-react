@@ -5,6 +5,7 @@ import Product from "../models/Product.js";
 import Seller from "../models/Seller.js";
 import Cart from "../models/Cart.js";
 import User from "../models/User.js";
+import Wallet from "../models/Wallet.js";
 import Negotiation from "../models/Negotiation.js";
 import Config from "../models/Config.js";
 import Coupon from "../models/Coupon.js";
@@ -13,6 +14,7 @@ import cloudinary from "../config/cloudinary.js";
 import { audit } from "../utils/auditLog.js";
 import { notify } from "../utils/notify.js";
 import logger from "../utils/logger.js";
+import { spendWalletBalance, refundWalletBalance } from "./walletController.js";
 
 // Read platform fee settings from Config once per request (cached in local var)
 async function getFeeConfig() {
@@ -188,25 +190,78 @@ export const checkoutCart = async (req, res) => {
       });
     }
 
-    // ── Referral credit deduction ─────────────────────────────────────────────
-    const buyer      = await User.findById(userId).select("referralCredit").lean();
-    const available  = buyer?.referralCredit || 0;
-    // Use negotiatedPrice if set (server-stored when negotiation was accepted), else canonical product price
+    // ── Credit deduction: wallet gift credits → wallet withdrawable balance → referral credit ──
+    // Three separate pools can fund an order. Gift credits are spent first
+    // since they're purchase-only and least flexible; withdrawable wallet
+    // balance next; legacy referral credit last.
+    const [buyer, wallet] = await Promise.all([
+      User.findById(userId).select("referralCredit").lean(),
+      Wallet.findOne({ user: userId }).select("giftCredits withdrawableBalance").lean(),
+    ]);
+    const referralAvailable     = buyer?.referralCredit || 0;
+    const giftAvailable         = wallet?.giftCredits || 0;
+    const withdrawableAvailable = wallet?.withdrawableBalance || 0;
+    const available = referralAvailable + giftAvailable + withdrawableAvailable;
+    // Use negotiatedPrice if set (server-stored when negotiation was accepted), else the
+    // price snapshotted on the cart item itself — which already reflects the buyer's
+    // selected variant (addToCart stores the variant's own price, not the product's
+    // base/cheapest price). Falling back to i.product.price would silently re-price
+    // every variant item at the base price, undercharging for pricier variants.
     const cartTotal  = [...sellerGroups.values()].flat().reduce(
-      (s, i) => s + (i.negotiatedPrice ?? i.product.price) * (i.quantity || 1), 0
+      (s, i) => s + (i.negotiatedPrice ?? i.price ?? i.product.price) * (i.quantity || 1), 0
     );
     const creditApplied = Math.min(Math.max(0, Number(creditToUse) || 0), available, cartTotal);
     let creditRemaining = creditApplied;
 
     if (creditApplied > 0) {
-      // Atomic deduction with $gte guard — prevents double-spend in concurrent requests
-      const updated = await User.findOneAndUpdate(
-        { _id: userId, referralCredit: { $gte: creditApplied } },
-        { $inc: { referralCredit: -creditApplied } },
-        { new: false }
-      );
-      if (!updated) {
-        return res.status(400).json({ message: "Insufficient referral credit — it may have been used in another request." });
+      const creditRef = `ORDER_CREDIT_${Date.now()}_${crypto.randomBytes(4).toString("hex")}`;
+      let toApply = creditApplied;
+      // Track what actually got deducted so we can compensate (refund) if a
+      // later pool fails — a multi-pool deduction must be all-or-nothing,
+      // never leave gift credits spent with no order created.
+      const spent = { giftCredits: 0, withdrawableBalance: 0 };
+
+      async function rollback() {
+        if (spent.giftCredits > 0) {
+          await refundWalletBalance({ userId, balanceField: "giftCredits", amount: spent.giftCredits, reference: `${creditRef}_REVERT`, description: "Checkout failed — gift credits restored" }).catch(() => {});
+        }
+        if (spent.withdrawableBalance > 0) {
+          await refundWalletBalance({ userId, balanceField: "withdrawableBalance", amount: spent.withdrawableBalance, reference: `${creditRef}_REVERT`, description: "Checkout failed — wallet balance restored" }).catch(() => {});
+        }
+      }
+
+      const giftPortion = Math.min(giftAvailable, toApply);
+      if (giftPortion > 0) {
+        const result = await spendWalletBalance({ userId, balanceField: "giftCredits", amount: giftPortion, reference: creditRef, description: "Order payment (gift credits)" });
+        if (!result.wallet) {
+          return res.status(400).json({ message: "Your wallet balance changed — please retry checkout." });
+        }
+        spent.giftCredits = giftPortion;
+        toApply -= giftPortion;
+      }
+
+      const withdrawablePortion = Math.min(withdrawableAvailable, toApply);
+      if (withdrawablePortion > 0) {
+        const result = await spendWalletBalance({ userId, balanceField: "withdrawableBalance", amount: withdrawablePortion, reference: creditRef, description: "Order payment (wallet balance)" });
+        if (!result.wallet) {
+          await rollback();
+          return res.status(400).json({ message: "Your wallet balance changed — please retry checkout." });
+        }
+        spent.withdrawableBalance = withdrawablePortion;
+        toApply -= withdrawablePortion;
+      }
+
+      if (toApply > 0) {
+        // Atomic deduction with $gte guard — prevents double-spend in concurrent requests
+        const updated = await User.findOneAndUpdate(
+          { _id: userId, referralCredit: { $gte: toApply } },
+          { $inc: { referralCredit: -toApply } },
+          { new: false }
+        );
+        if (!updated) {
+          await rollback();
+          return res.status(400).json({ message: "Insufficient referral credit — it may have been used in another request." });
+        }
       }
     }
 
@@ -259,11 +314,14 @@ export const checkoutCart = async (req, res) => {
       const orderItems = sellerItems.map((i) => ({
         product:         i.product._id,
         quantity:        i.quantity,
-        // Use server-stored negotiatedPrice if present (set when buyer's negotiation was accepted)
-        price:           i.negotiatedPrice ?? i.product.price,
+        // Use server-stored negotiatedPrice if present (set when buyer's negotiation was
+        // accepted); otherwise the cart item's own snapshotted price, which already
+        // reflects the selected variant — never re-derive from i.product.price here,
+        // that's the product's base price and ignores variant selection entirely.
+        price:           i.negotiatedPrice ?? i.price ?? i.product.price,
         negotiatedPrice: i.negotiatedPrice || undefined,
         negotiationId:   i.negotiationId   || undefined,
-        variant:         i.variant || {},
+        variant:         i.selectedVariant ? { sku: i.selectedVariant, attributes: {} } : {},
       }));
 
       const subtotal = orderItems.reduce((s, i) => s + i.price * i.quantity, 0);

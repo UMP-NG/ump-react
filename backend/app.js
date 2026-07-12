@@ -381,7 +381,10 @@ function escJs(str) {
 // origins in most deployments: frontend on Netlify/Vercel, backend on Render).
 function siteOrigin() {
   return process.env.NODE_ENV === "production"
-    ? process.env.CLIENT_URL || "https://myump.com.ng"
+    // www is canonical — myump.com.ng (no www) 307-redirects to it, so every
+    // sitemap/robots URL must use www to avoid a needless redirect hop on
+    // every single crawled URL and to match the Search Console property.
+    ? process.env.CLIENT_URL || "https://www.myump.com.ng"
     : "http://localhost:5173";
 }
 

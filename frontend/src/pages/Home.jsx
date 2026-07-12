@@ -191,7 +191,7 @@ export default function Home() {
               src={s.img}
               alt=""
               decoding="async"
-              fetchpriority={i === 0 ? "high" : "low"}
+              fetchPriority={i === 0 ? "high" : "low"}
               style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }}
             />
             <div style={{ position: "absolute", inset: 0, background: "linear-gradient(160deg, rgba(0,0,0,.08) 0%, rgba(0,0,0,.72) 70%)" }} />

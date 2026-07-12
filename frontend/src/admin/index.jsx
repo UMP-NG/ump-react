@@ -9,6 +9,7 @@ import Products from './pages/Products';
 import Services from './pages/Services';
 import Orders from './pages/Orders';
 import Payouts from './pages/Payouts';
+import Gifts from './pages/Gifts';
 import Disputes from './pages/Disputes';
 import Analytics from './pages/Analytics';
 import Broadcast from './pages/Broadcast';
@@ -40,6 +41,7 @@ export default function AdminRoutes() {
           <Route path="orders"     element={<Orders />} />
           <Route path="bookings"   element={<Bookings />} />
           <Route path="payouts"    element={<Payouts />} />
+          <Route path="gifts"      element={<Gifts />} />
           <Route path="reviews"    element={<Reviews />} />
           <Route path="disputes"       element={<Disputes />} />
           <Route path="verifications"  element={<Verifications />} />

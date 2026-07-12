@@ -11,6 +11,7 @@ import {
   debitWallet,
   giftCredits,
   verifyBankDetails,
+  getAllGifts,
 } from "../controllers/walletController.js";
 
 const router = express.Router();
@@ -23,6 +24,9 @@ router.post("/withdraw", protect, requestWithdrawal);
 router.get("/history", protect, getTransactionHistory);
 
 // ✅ Admin wallet management (admin only)
+// NOTE: "/admin/gifts" must be registered before "/admin/:userId" or the
+// param route would swallow it (treating "gifts" as a userId).
+router.get("/admin/gifts", protect, requireRole("admin"), getAllGifts);
 router.get("/admin/:userId", protect, requireRole("admin"), getWalletForAdmin);
 router.post("/credit", protect, requireRole("admin"), creditWallet);
 router.post("/debit", protect, requireRole("admin"), debitWallet);

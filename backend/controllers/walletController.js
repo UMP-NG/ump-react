@@ -101,6 +101,50 @@ async function atomicMutateBalance({ userId, balanceField, delta, requireAtLeast
   return { wallet, alreadyProcessed: false, reference, balanceAfter };
 }
 
+// ─── Spend from a wallet balance pool toward an order (called from checkout) ─
+// Used by orderController.checkoutCart to apply gift credits / withdrawable
+// wallet balance toward a purchase. Reuses atomicMutateBalance so this is
+// exposed to exactly the same race protection as transfers/withdrawals — a
+// concurrent checkout or withdrawal can never double-spend the same balance.
+export async function spendWalletBalance({ userId, balanceField, amount, reference, description }) {
+  return atomicMutateBalance({
+    userId,
+    balanceField,
+    delta: -amount,
+    requireAtLeast: amount,
+    tx: {
+      type: "purchase",
+      amount,
+      description: description || "Order payment",
+      reference,
+      status: "completed",
+      withdrawable: balanceField === "withdrawableBalance",
+      createdAt: new Date(),
+    },
+  });
+}
+
+// Refunds a wallet balance pool — used to compensate an earlier successful
+// deduction if a later step in a multi-pool checkout fails, so a partial
+// failure never leaves money silently deducted with no order created.
+export async function refundWalletBalance({ userId, balanceField, amount, reference, description }) {
+  return atomicMutateBalance({
+    userId,
+    balanceField,
+    delta: amount,
+    upsert: true,
+    tx: {
+      type: "refund",
+      amount,
+      description: description || "Order payment reversed",
+      reference,
+      status: "completed",
+      withdrawable: balanceField === "withdrawableBalance",
+      createdAt: new Date(),
+    },
+  });
+}
+
 // ─── Get user's wallet balance and recent transactions ────────────────────
 export const getWallet = async (req, res) => {
   try {
@@ -493,6 +537,7 @@ export const giftCredits = async (req, res) => {
         reference,
         status: "completed",
         withdrawable: false, // CANNOT be withdrawn
+        relatedUser: req.user._id, // which admin issued this gift
         createdAt: new Date(),
       },
     });
@@ -592,5 +637,78 @@ export const verifyBankDetails = async (req, res) => {
   } catch (err) {
     logger.error("verifyBankDetails error:", err);
     res.status(500).json({ message: "Failed to verify bank details" });
+  }
+};
+
+// ─── List every gift-credit transaction across all users (admin only) ──────
+// Flattens each wallet's transactions array down to just its gift_credit
+// entries, joined with the recipient's and issuing admin's name/email, so
+// admins can see everyone who's been gifted something without having to
+// look up users one at a time.
+export const getAllGifts = async (req, res) => {
+  try {
+    const page  = Math.max(1, parseInt(req.query.page, 10)  || 1);
+    const limit = Math.min(50, parseInt(req.query.limit, 10) || 20);
+    const skip  = (page - 1) * limit;
+
+    const pipeline = [
+      { $unwind: "$transactions" },
+      { $match: { "transactions.type": "gift_credit" } },
+      { $sort: { "transactions.createdAt": -1 } },
+      {
+        $facet: {
+          data: [
+            { $skip: skip },
+            { $limit: limit },
+            {
+              $lookup: {
+                from: "users",
+                localField: "user",
+                foreignField: "_id",
+                as: "recipient",
+              },
+            },
+            {
+              $lookup: {
+                from: "users",
+                localField: "transactions.relatedUser",
+                foreignField: "_id",
+                as: "issuedByUser",
+              },
+            },
+            {
+              $project: {
+                _id: 0,
+                reference:    "$transactions.reference",
+                amount:       "$transactions.amount",
+                description:  "$transactions.description",
+                status:       "$transactions.status",
+                balanceAfter: "$transactions.balanceAfter",
+                createdAt:    "$transactions.createdAt",
+                recipient: {
+                  _id:   { $arrayElemAt: ["$recipient._id", 0] },
+                  name:  { $arrayElemAt: ["$recipient.name", 0] },
+                  email: { $arrayElemAt: ["$recipient.email", 0] },
+                },
+                issuedBy: {
+                  _id:  { $arrayElemAt: ["$issuedByUser._id", 0] },
+                  name: { $arrayElemAt: ["$issuedByUser.name", 0] },
+                },
+              },
+            },
+          ],
+          totalCount: [{ $count: "count" }],
+        },
+      },
+    ];
+
+    const [result] = await Wallet.aggregate(pipeline);
+    const gifts = result?.data || [];
+    const total = result?.totalCount?.[0]?.count || 0;
+
+    res.json({ gifts, total, page, pages: Math.ceil(total / limit) });
+  } catch (err) {
+    logger.error("getAllGifts error:", err);
+    res.status(500).json({ message: "Failed to fetch gift history" });
   }
 };
