@@ -130,9 +130,30 @@ const PAYMENT_METHODS = [
 ];
 
 export const checkoutCart = async (req, res) => {
+  const userId = req.user?._id;
+  if (!userId) return res.status(401).json({ message: "Unauthorized" });
+
+  // Declared outside the try block (not just "early inside it") so the
+  // catch block below — a sibling scope, not a child of try — can actually
+  // see rollbackCredit at all. It correctly no-ops if nothing was ever spent.
+  const creditRef = `ORDER_CREDIT_${Date.now()}_${crypto.randomBytes(4).toString("hex")}`;
+  const spent = { giftCredits: 0, withdrawableBalance: 0, referralCredit: 0 };
+  async function rollbackCredit() {
+    if (spent.giftCredits > 0) {
+      await refundWalletBalance({ userId, balanceField: "giftCredits", amount: spent.giftCredits, reference: `${creditRef}_GIFT_REVERT`, description: "Checkout failed — gift credits restored" }).catch(() => {});
+      spent.giftCredits = 0;
+    }
+    if (spent.withdrawableBalance > 0) {
+      await refundWalletBalance({ userId, balanceField: "withdrawableBalance", amount: spent.withdrawableBalance, reference: `${creditRef}_WITHDRAWABLE_REVERT`, description: "Checkout failed — wallet balance restored" }).catch(() => {});
+      spent.withdrawableBalance = 0;
+    }
+    if (spent.referralCredit > 0) {
+      await User.findOneAndUpdate({ _id: userId }, { $inc: { referralCredit: spent.referralCredit } }).catch(() => {});
+      spent.referralCredit = 0;
+    }
+  }
+
   try {
-    const userId = req.user?._id;
-    if (!userId) return res.status(401).json({ message: "Unauthorized" });
     const feeConfig = await getFeeConfig();
 
     const cart = await Cart.findOne({ user: userId }).populate("items.product");
@@ -214,25 +235,15 @@ export const checkoutCart = async (req, res) => {
     let creditRemaining = creditApplied;
 
     if (creditApplied > 0) {
-      const creditRef = `ORDER_CREDIT_${Date.now()}_${crypto.randomBytes(4).toString("hex")}`;
       let toApply = creditApplied;
-      // Track what actually got deducted so we can compensate (refund) if a
-      // later pool fails — a multi-pool deduction must be all-or-nothing,
-      // never leave gift credits spent with no order created.
-      const spent = { giftCredits: 0, withdrawableBalance: 0 };
-
-      async function rollback() {
-        if (spent.giftCredits > 0) {
-          await refundWalletBalance({ userId, balanceField: "giftCredits", amount: spent.giftCredits, reference: `${creditRef}_REVERT`, description: "Checkout failed — gift credits restored" }).catch(() => {});
-        }
-        if (spent.withdrawableBalance > 0) {
-          await refundWalletBalance({ userId, balanceField: "withdrawableBalance", amount: spent.withdrawableBalance, reference: `${creditRef}_REVERT`, description: "Checkout failed — wallet balance restored" }).catch(() => {});
-        }
-      }
 
       const giftPortion = Math.min(giftAvailable, toApply);
       if (giftPortion > 0) {
-        const result = await spendWalletBalance({ userId, balanceField: "giftCredits", amount: giftPortion, reference: creditRef, description: "Order payment (gift credits)" });
+        // Distinct reference per pool — atomicMutateBalance's follow-up
+        // balanceAfter write matches by reference via the array positional
+        // operator, which only updates the FIRST match. Two transactions
+        // sharing a reference would leave one of them with a stale balanceAfter.
+        const result = await spendWalletBalance({ userId, balanceField: "giftCredits", amount: giftPortion, reference: `${creditRef}_GIFT`, description: "Order payment (gift credits)" });
         if (!result.wallet) {
           return res.status(400).json({ message: "Your wallet balance changed — please retry checkout." });
         }
@@ -242,9 +253,9 @@ export const checkoutCart = async (req, res) => {
 
       const withdrawablePortion = Math.min(withdrawableAvailable, toApply);
       if (withdrawablePortion > 0) {
-        const result = await spendWalletBalance({ userId, balanceField: "withdrawableBalance", amount: withdrawablePortion, reference: creditRef, description: "Order payment (wallet balance)" });
+        const result = await spendWalletBalance({ userId, balanceField: "withdrawableBalance", amount: withdrawablePortion, reference: `${creditRef}_WITHDRAWABLE`, description: "Order payment (wallet balance)" });
         if (!result.wallet) {
-          await rollback();
+          await rollbackCredit();
           return res.status(400).json({ message: "Your wallet balance changed — please retry checkout." });
         }
         spent.withdrawableBalance = withdrawablePortion;
@@ -259,9 +270,10 @@ export const checkoutCart = async (req, res) => {
           { new: false }
         );
         if (!updated) {
-          await rollback();
+          await rollbackCredit();
           return res.status(400).json({ message: "Insufficient referral credit — it may have been used in another request." });
         }
+        spent.referralCredit = toApply;
       }
     }
 
@@ -271,13 +283,16 @@ export const checkoutCart = async (req, res) => {
     let couponDiscount = 0;
     if (couponId) {
       if (!mongoose.Types.ObjectId.isValid(couponId)) {
+        await rollbackCredit();
         return res.status(400).json({ message: "Invalid coupon" });
       }
       couponDoc = await Coupon.findById(couponId);
       if (!couponDoc || !couponDoc.active) {
+        await rollbackCredit();
         return res.status(400).json({ message: "Invalid or inactive coupon" });
       }
       if (couponDoc.expiresAt && couponDoc.expiresAt < new Date()) {
+        await rollbackCredit();
         return res.status(400).json({ message: "This coupon has expired" });
       }
       // Atomic check: claim one usage slot before any orders are created
@@ -291,6 +306,7 @@ export const checkoutCart = async (req, res) => {
         { new: false }
       );
       if (!claimed) {
+        await rollbackCredit();
         return res.status(400).json({ message: "This coupon has reached its usage limit" });
       }
       couponDoc = claimed; // pre-increment snapshot still holds the valid doc
@@ -299,6 +315,7 @@ export const checkoutCart = async (req, res) => {
       if (amount < (couponDoc.minOrderAmount || 0)) {
         // Roll back the slot we just claimed
         await Coupon.findByIdAndUpdate(couponDoc._id, { $inc: { usedCount: -1 } });
+        await rollbackCredit();
         return res.status(400).json({ message: `Minimum order amount for this coupon is ₦${couponDoc.minOrderAmount.toLocaleString("en-NG")}` });
       }
       couponDiscount = couponDoc.discountType === "percent"
@@ -392,6 +409,10 @@ export const checkoutCart = async (req, res) => {
     return res.status(201).json({ success: true, orders: createdOrders, order: createdOrders[0] });
   } catch (err) {
     logger.error("❌ Checkout error:", err);
+    // Covers failures after credit was already deducted but before any order
+    // was created (e.g. order.save() validation failure) — without this,
+    // wallet/referral credit stays spent with nothing to show for it.
+    await rollbackCredit();
     return res.status(500).json({ success: false, message: err.message });
   }
 };

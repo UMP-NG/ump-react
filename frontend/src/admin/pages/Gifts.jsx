@@ -112,13 +112,13 @@ export default function Gifts() {
           <div className="adm-pagination">
             <span>Showing {((page - 1) * 20) + 1}–{Math.min(page * 20, total)} of {total.toLocaleString()}</span>
             <div className="pages">
-              <button className="icon-action" disabled={page === 1} onClick={() => setPage(p => p - 1)}>
+              <button className="icon-action" aria-label="Previous page" disabled={loading || page === 1} onClick={() => setPage(p => p - 1)}>
                 <i className="fa-solid fa-chevron-left"></i>
               </button>
-              {page > 1 && <button className="abtn sm ghost" onClick={() => setPage(page - 1)}>{page - 1}</button>}
+              {page > 1 && <button className="abtn sm ghost" disabled={loading} onClick={() => setPage(page - 1)}>{page - 1}</button>}
               <button className="abtn sm dark">{page}</button>
-              {page * 20 < total && <button className="abtn sm ghost" onClick={() => setPage(page + 1)}>{page + 1}</button>}
-              <button className="icon-action" disabled={page * 20 >= total} onClick={() => setPage(p => p + 1)}>
+              {page * 20 < total && <button className="abtn sm ghost" disabled={loading} onClick={() => setPage(page + 1)}>{page + 1}</button>}
+              <button className="icon-action" aria-label="Next page" disabled={loading || page * 20 >= total} onClick={() => setPage(p => p + 1)}>
                 <i className="fa-solid fa-chevron-right"></i>
               </button>
             </div>

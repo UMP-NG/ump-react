@@ -644,7 +644,15 @@ export const verifyBankDetails = async (req, res) => {
 // Flattens each wallet's transactions array down to just its gift_credit
 // entries, joined with the recipient's and issuing admin's name/email, so
 // admins can see everyone who's been gifted something without having to
-// look up users one at a time.
+// look up users one at a time. Route is gated behind protect + requireRole("admin").
+//
+// Cost note: $unwind runs over every wallet's full transactions array before
+// $match can filter to gift_credit entries — Mongo can't use an index across
+// an unwind+match on a subdocument array this way, so this is a full scan of
+// all wallets' transaction history. Fine at campus-marketplace scale where
+// gifting is an infrequent admin action, not a per-request hot path; if wallet
+// transaction volume grows substantially, move gift_credit issuance into its
+// own indexed collection instead of scanning it out of the embedded array.
 export const getAllGifts = async (req, res) => {
   try {
     const page  = Math.max(1, parseInt(req.query.page, 10)  || 1);

@@ -369,7 +369,11 @@ export default function ProductDetail() {
     updateQty(cartEntry._id, Math.min(totalStock, cartEntry.quantity + 1));
   }
   function decrementCartEntry() {
-    if (!cartEntry) return;
+    if (!cartEntry || cartEntry.quantity <= 1) return;
+    // Stops at 1 rather than falling through to 0 — updateQty treats <1 as
+    // "remove the item", which would silently delete it on one more tap of
+    // what looks like a quantity control. Removing an item is a separate,
+    // deliberate action (the cart page's trash icon), not a side effect of "-".
     updateQty(cartEntry._id, cartEntry.quantity - 1);
   }
 
@@ -840,7 +844,7 @@ export default function ProductDetail() {
               keeps the row clean and gives the price/button their full width before then. */}
           {!outOfStock && cartEntry && (
             <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "8px 10px", border: "1px solid var(--line)", borderRadius: "var(--r-pill)", background: "var(--surface)", flexShrink: 0 }}>
-              <button className="icon-btn" style={{ width: 30, height: 30, background: "var(--white)", borderRadius: 10 }} onClick={decrementCartEntry}>
+              <button className="icon-btn" style={{ width: 30, height: 30, background: "var(--white)", borderRadius: 10 }} onClick={decrementCartEntry} disabled={cartEntry.quantity <= 1}>
                 <i className="fas fa-minus" />
               </button>
               <span style={{ width: 28, textAlign: "center", fontWeight: 700 }}>{cartEntry.quantity}</span>
@@ -992,7 +996,7 @@ export default function ProductDetail() {
               keeps the bar uncluttered so the price stays readable before then. */}
           {!outOfStock && cartEntry && (
             <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "4px 6px", flexShrink: 0 }}>
-              <button className="icon-btn" style={{ width: 32, height: 32, background: "var(--surface)", borderRadius: 12 }} onClick={decrementCartEntry}>
+              <button className="icon-btn" style={{ width: 32, height: 32, background: "var(--surface)", borderRadius: 12 }} onClick={decrementCartEntry} disabled={cartEntry.quantity <= 1}>
                 <i className="fas fa-minus" />
               </button>
               <span style={{ width: 24, textAlign: "center", fontWeight: 700 }}>{cartEntry.quantity}</span>

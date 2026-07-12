@@ -143,8 +143,13 @@ export const addToCart = async (req, res) => {
 // ✅ Update item quantity
 export const updateQuantity = async (req, res) => {
   try {
-    const { itemId, quantity } = req.body;
+    const { itemId } = req.body;
     const userId = req.user._id;
+
+    const qty = parseInt(req.body.quantity, 10);
+    if (!Number.isInteger(qty) || qty < 1) {
+      return res.status(400).json({ message: "Quantity must be a positive integer" });
+    }
 
     const cart = await Cart.findOne({ user: userId });
     if (!cart) return res.status(404).json({ message: "Cart not found" });
@@ -159,12 +164,12 @@ export const updateQuantity = async (req, res) => {
         ? product.variants?.find((v) => v.label === item.selectedVariant)
         : null;
       const itemStock = matchedVariant ? (matchedVariant.stock || 0) : (product.stock || 0);
-      if (quantity > itemStock) {
+      if (qty > itemStock) {
         return res.status(400).json({ message: `Only ${itemStock} left in stock` });
       }
     }
 
-    item.quantity = Math.max(1, quantity);
+    item.quantity = qty;
     await cart.save();
 
     res.json({ message: "✅ Quantity updated", cart });
