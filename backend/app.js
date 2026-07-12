@@ -376,6 +376,74 @@ function escHtml(str) {
 function escJs(str) {
   return JSON.stringify(String(str)).replace(/<\/script/gi, "<\\/script");
 }
+// Canonical public frontend origin — sitemap/robots URLs must point at the
+// site users actually visit, not this API's own host (they're on different
+// origins in most deployments: frontend on Netlify/Vercel, backend on Render).
+function siteOrigin() {
+  return process.env.NODE_ENV === "production"
+    ? process.env.CLIENT_URL || "https://myump.com.ng"
+    : "http://localhost:5173";
+}
+
+app.get("/robots.txt", (req, res) => {
+  res.type("text/plain").send(
+    `User-agent: *\n` +
+    `Allow: /\n` +
+    `Disallow: /admin\n` +
+    `Disallow: /api\n` +
+    `Disallow: /wallet\n` +
+    `Disallow: /settings\n` +
+    `Disallow: /messages\n\n` +
+    `Sitemap: ${siteOrigin()}/sitemap.xml\n`
+  );
+});
+
+app.get("/sitemap.xml", async (req, res) => {
+  try {
+    const origin = siteOrigin();
+    const urlEntry = (loc, lastmod, priority) =>
+      `<url><loc>${escHtml(loc)}</loc>` +
+      (lastmod ? `<lastmod>${new Date(lastmod).toISOString()}</lastmod>` : "") +
+      `<priority>${priority}</priority></url>`;
+
+    const STATIC_PAGES = [
+      ["", "1.0"],
+      ["/market", "0.9"],
+      ["/services", "0.9"],
+      ["/hustle", "0.8"],
+      ["/hostel", "0.8"],
+      ["/store", "0.8"],
+    ];
+    const entries = STATIC_PAGES.map(([p, priority]) => urlEntry(`${origin}${p}`, null, priority));
+
+    const [{ default: Product }, { default: Service }, { default: Seller }] = await Promise.all([
+      import("./models/Product.js"),
+      import("./models/Service.js"),
+      import("./models/Seller.js"),
+    ]);
+
+    // Capped and sorted by recency — a campus marketplace won't approach the
+    // 50,000-URL sitemap limit, but the cap keeps this query cheap regardless.
+    const [products, services, sellers] = await Promise.all([
+      Product.find({ isRemoved: { $ne: true } }).select("_id updatedAt").sort({ updatedAt: -1 }).limit(5000).lean(),
+      Service.find({}).select("_id updatedAt").sort({ updatedAt: -1 }).limit(2000).lean(),
+      Seller.find({}).select("_id updatedAt").sort({ updatedAt: -1 }).limit(2000).lean(),
+    ]);
+
+    products.forEach((p) => entries.push(urlEntry(`${origin}/products/${p._id}`, p.updatedAt, "0.6")));
+    services.forEach((s) => entries.push(urlEntry(`${origin}/services/${s._id}`, s.updatedAt, "0.6")));
+    sellers.forEach((s) => entries.push(urlEntry(`${origin}/store/${s._id}`, s.updatedAt, "0.5")));
+
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>\n` +
+      `<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${entries.join("\n")}\n</urlset>`;
+
+    res.type("application/xml").send(xml);
+  } catch (err) {
+    logger.error("sitemap.xml generation failed:", err);
+    res.status(500).type("text/plain").send("Failed to generate sitemap");
+  }
+});
+
 app.get("/products/:id", async (req, res, next) => {
   try {
     if (!BOT_UA.test(req.headers["user-agent"] || "")) return next();

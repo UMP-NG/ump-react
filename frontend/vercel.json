@@ -1,3 +1,7 @@
 {
-  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+  "rewrites": [
+    { "source": "/sitemap.xml", "destination": "https://ump-backend.onrender.com/sitemap.xml" },
+    { "source": "/robots.txt",  "destination": "https://ump-backend.onrender.com/robots.txt" },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ]
 }
