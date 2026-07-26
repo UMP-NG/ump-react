@@ -86,7 +86,12 @@ function ProductCard({ product, variant = "always", onAddToCart }) {
     }
   }
 
-  const totalStock = (product?.stock || 0) + (Array.isArray(product?.variants) ? product.variants.reduce((s, v) => s + (v.stock || 0), 0) : 0);
+  // Backend already mirrors variant-stock sum into product.stock (see Product pre-save
+  // hook) — adding both here would double-count. Use the variant sum when variants
+  // exist, otherwise fall back to the top-level stock, matching ProductDetail.jsx.
+  const totalStock = Array.isArray(product?.variants) && product.variants.length > 0
+    ? product.variants.reduce((s, v) => s + (v.stock || 0), 0)
+    : (product?.stock || 0);
   // isAvailable === false also covers a temporarily closed store (stock may still be > 0)
   const outOfStock = totalStock <= 0 || product?.isAvailable === false;
   const cls = `product-card${variant === "hover" ? " hover-reveal" : ""}`;

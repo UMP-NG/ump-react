@@ -3,6 +3,7 @@ import Admin from "../models/Admin.js";
 import { bulkImportProducts, updateUserRole, deleteUser, updateProduct, deleteProduct, updateListing, deleteListing, updateService, deleteService, updateOrder, deleteOrder, updateSellerStatus, deleteSeller } from "../controllers/adminController.js";
 import { protect, requireRole } from "../middleware/authMiddleware.js";
 import { uploadSingle, uploadListingMedia } from "../middleware/upload.js";
+import { handleSellerUpload } from "../middleware/uploadHandler.js";
 import logger from "../utils/logger.js";
 import {
   getAdminStats,
@@ -60,6 +61,7 @@ import {
   approveIdentityVerification,
   rejectIdentityVerification,
   getUmpStore,
+  updateUmpStore,
 } from "../controllers/adminDashboardController.js";
 
 const router = express.Router();
@@ -130,6 +132,7 @@ router.post("/providers/:userId/approve",      ...adm, approveProvider);
 
 // ── Products ───────────────────────────────────────────────────────────────
 router.get   ("/ump-store",                  ...adm, getUmpStore);
+router.put   ("/ump-store",                  ...adm, handleSellerUpload, updateUmpStore);
 router.get   ("/products",                  ...adm, getAdminProducts);
 router.post  ("/products",                  ...adm, uploadListingMedia, adminCreateProduct);
 router.post  ("/products/bulk",             ...adm, bulkProductAction);

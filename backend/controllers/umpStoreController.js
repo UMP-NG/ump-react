@@ -6,11 +6,13 @@ import logger from "../utils/logger.js";
 
 const OFFICIAL_STORE_EMAIL = "official-store@ump.internal";
 
-// Lazily creates the dedicated system account + Seller profile backing the official
-// UMP Store the first time any admin opens the UMP Store page. Idempotent — a second
-// call just returns the existing Seller doc. This account is never used to log in;
-// admins manage its products entirely through the existing admin product endpoints.
-async function getOrCreateOfficialSeller() {
+// Creates the dedicated system account + Seller profile backing the official UMP
+// Store if it doesn't already exist. Idempotent — a second call just returns the
+// existing Seller doc. Called once at server startup (see server.js) so the store
+// shows up on /store immediately, without depending on an admin first opening the
+// admin UMP Store page. This account is never used to log in; admins manage its
+// products entirely through the existing admin product endpoints.
+export async function getOrCreateOfficialSeller() {
   let seller = await Seller.findOne({ isOfficial: true });
   if (seller) return seller;
 
@@ -61,6 +63,31 @@ export const getUmpStore = async (req, res) => {
     res.json({ seller, products });
   } catch (err) {
     logger.error("getUmpStore:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+// Admins can update the official store's logo/banner (via handleSellerUpload,
+// the same Cloudinary upload middleware normal sellers use) and basic profile
+// text — any admin, no ownership check, matching every other admin route.
+export const updateUmpStore = async (req, res) => {
+  try {
+    const seller = await getOrCreateOfficialSeller();
+
+    const { storeName, bio, description } = req.body;
+    if (storeName?.trim()) seller.storeName = storeName.trim();
+    if (bio?.trim()) seller.bio = bio.trim();
+    if (description?.trim()) seller.description = description.trim();
+
+    const logoFile = req.files?.logo?.[0];
+    const bannerFile = req.files?.banner?.[0];
+    if (logoFile) seller.logo = { url: logoFile.path, publicId: logoFile.filename };
+    if (bannerFile) seller.banner = { url: bannerFile.path, publicId: bannerFile.filename };
+
+    await seller.save();
+    res.json({ success: true, seller });
+  } catch (err) {
+    logger.error("updateUmpStore:", err);
     res.status(500).json({ message: "Server error" });
   }
 };

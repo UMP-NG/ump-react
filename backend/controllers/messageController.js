@@ -40,13 +40,36 @@ export const sendMessage = async (req, res) => {
       publicId: file.filename
     }));
 
+    // Only accept replyTo if the referenced message is actually visible to this
+    // sender — otherwise a crafted ObjectId could pull another user's private
+    // message text/attachments into this thread via the populate below.
+    let replyToId = null;
+    if (mongoose.isValidObjectId(replyTo)) {
+      const parent = await Message.findById(replyTo).select("sender receiver").lean();
+      if (parent) {
+        const myId = req.user._id.toString();
+        const isDirectParty = parent.sender.toString() === myId || parent.receiver.toString() === myId;
+        let isSharedAdminThread = false;
+        if (!isDirectParty && req.user.roles?.includes("admin")) {
+          // Admins share a support inbox — allow replying within any user↔admin thread,
+          // matching the visibility rule already used in getUserMessages/getUserConversations.
+          const [senderIsAdmin, receiverIsAdmin] = await Promise.all([
+            User.exists({ _id: parent.sender, roles: "admin" }),
+            User.exists({ _id: parent.receiver, roles: "admin" }),
+          ]);
+          isSharedAdminThread = !!(senderIsAdmin || receiverIsAdmin);
+        }
+        if (isDirectParty || isSharedAdminThread) replyToId = replyTo;
+      }
+    }
+
     const message = await Message.create({
       sender: req.user._id,
       receiver,
       text: text || "",
       attachments,
       isAdminMessage: req.user.roles?.includes("admin") ?? false,
-      replyTo: mongoose.isValidObjectId(replyTo) ? replyTo : null,
+      replyTo: replyToId,
     });
 
     if (message.replyTo) {

@@ -1,19 +1,33 @@
 ﻿import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import Thumb from '../components/Thumb';
 import { apiFetch } from '../../utils/api';
+import ImageCropModal from '../../components/ImageCropModal';
 
 // â”€â”€ tiny image-upload hook (reused by create + edit forms) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// Selecting a file opens the crop modal first; the cropped blob is what
+// actually gets uploaded to /api/upload.
 function useImageUpload() {
   const [uploading, setUploading] = useState(false);
   const [url,       setUrl]       = useState('');
   const [publicId,  setPublicId]  = useState('');
   const [error,     setError]     = useState('');
+  const [cropSrc,   setCropSrc]   = useState(null);
 
-  async function pick(file) {
+  function pick(file) {
     if (!file) return;
     const ALLOWED = ['image/jpeg', 'image/png', 'image/webp'];
     if (!ALLOWED.includes(file.type)) { setError('Image must be JPEG, PNG or WebP'); return; }
-    setError(''); setUploading(true);
+    setError('');
+    const reader = new FileReader();
+    reader.onload = () => setCropSrc(reader.result);
+    reader.readAsDataURL(file);
+  }
+
+  async function confirmCrop(blob) {
+    setCropSrc(null);
+    const file = new File([blob], `category-${Date.now()}.jpg`, { type: 'image/jpeg' });
+    setUploading(true);
     try {
       const fd = new FormData();
       fd.append('file', file);
@@ -27,11 +41,13 @@ function useImageUpload() {
     }
   }
 
+  function cancelCrop() { setCropSrc(null); }
+
   function reset(initialUrl = '', initialPid = '') {
-    setUrl(initialUrl); setPublicId(initialPid); setError('');
+    setUrl(initialUrl); setPublicId(initialPid); setError(''); setCropSrc(null);
   }
 
-  return { url, publicId, uploading, error, pick, reset };
+  return { url, publicId, uploading, error, cropSrc, pick, confirmCrop, cancelCrop, reset };
 }
 
 // â”€â”€ main page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -250,8 +266,18 @@ function ImagePicker({ label, upload }) {
           )}
           {upload.error && <div style={{ color: '#ef4444', fontSize: '1.15rem' }}>{upload.error}</div>}
         </div>
-        <input ref={ref} type="file" accept="image/jpeg,image/png,image/webp" style={{ display: 'none' }} onChange={e => upload.pick(e.target.files[0])} />
+        <input ref={ref} type="file" accept="image/jpeg,image/png,image/webp" style={{ display: 'none' }} onChange={e => { upload.pick(e.target.files[0]); e.target.value = ''; }} />
       </div>
+      {upload.cropSrc && createPortal(
+        <ImageCropModal
+          src={upload.cropSrc}
+          aspect={1}
+          title="Crop category image"
+          onConfirm={upload.confirmCrop}
+          onCancel={upload.cancelCrop}
+        />,
+        document.body
+      )}
     </div>
   );
 }

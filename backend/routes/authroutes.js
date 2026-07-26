@@ -1,7 +1,6 @@
 import express from "express";
 import {
   signup,
-  signupProvider,
   login,
   getMe,
   forgotPassword,
@@ -38,7 +37,6 @@ const router = express.Router();
 
 // ── Public auth ───────────────────────────────────────────────────────────────
 router.post("/signup",         authLimiter,          signup);
-router.post("/signup-provider", authLimiter,         signupProvider);
 router.post("/login",          authLimiter,          login);
 router.post("/google",         authLimiter,          googleSignIn);
 router.post("/force-logout",                         forceLogout);

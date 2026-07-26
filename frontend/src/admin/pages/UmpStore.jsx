@@ -1,7 +1,8 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import Thumb from '../components/Thumb';
 import { apiFetch } from '../../utils/api';
 import { CreateProductModal } from './Products';
+import ImageCropModal from '../../components/ImageCropModal';
 
 export default function UmpStore() {
   const [seller, setSeller]     = useState(null);
@@ -9,6 +10,7 @@ export default function UmpStore() {
   const [loading, setLoading]   = useState(true);
   const [drawer, setDrawer]     = useState(null);
   const [showCreate, setShowCreate] = useState(false);
+  const [showEdit, setShowEdit] = useState(false);
 
   const fetchStore = useCallback(() => {
     setLoading(true);
@@ -49,6 +51,9 @@ export default function UmpStore() {
           <button className="abtn ghost" onClick={fetchStore} disabled={loading} title="Refresh">
             <i className={`fa-solid fa-rotate-right${loading ? ' fa-spin' : ''}`}></i> Refresh
           </button>
+          <button className="abtn ghost" onClick={() => setShowEdit(true)} disabled={!seller}>
+            <i className="fa-solid fa-image"></i> Edit Store
+          </button>
           <button className="abtn" onClick={() => setShowCreate(true)} disabled={!seller}>
             <i className="fa-solid fa-plus"></i> Add Product
           </button>
@@ -56,20 +61,29 @@ export default function UmpStore() {
       </div>
 
       {seller && (
-        <div className="adm-card" style={{ padding: 16, marginBottom: 16, display: 'flex', alignItems: 'center', gap: 14 }}>
-          <div style={{
-            width: 52, height: 52, borderRadius: 12, flexShrink: 0,
-            background: 'linear-gradient(135deg,#3b82f6,#1d4ed8)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-          }}>
-            <i className="fa-solid fa-shield-halved" style={{ color: '#fff', fontSize: '1.6rem' }}></i>
+        <div className="adm-card" style={{ overflow: 'hidden', marginBottom: 16 }}>
+          <div style={{ height: 100, position: 'relative', background: seller.banner?.url ? undefined : 'linear-gradient(135deg,#3b82f6,#1d4ed8)' }}>
+            {seller.banner?.url && (
+              <img src={seller.banner.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            )}
           </div>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: '1.5rem', fontWeight: 800 }}>{seller.storeName}</div>
-            <div className="muted" style={{ fontSize: '1.2rem', marginTop: 2 }}>{seller.bio}</div>
-          </div>
-          <div style={{ fontSize: '1.2rem', color: 'var(--ink-3)', textAlign: 'right' }}>
-            <div><strong>{products.length}</strong> product{products.length !== 1 ? 's' : ''}</div>
+          <div style={{ padding: 16, display: 'flex', alignItems: 'center', gap: 14, marginTop: -36 }}>
+            <div style={{
+              width: 64, height: 64, borderRadius: 12, flexShrink: 0, overflow: 'hidden',
+              border: '3px solid var(--white)', background: 'var(--white)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+            }}>
+              {seller.logo?.url
+                ? <img src={seller.logo.url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                : <i className="fa-solid fa-shield-halved" style={{ color: '#3b82f6', fontSize: '1.8rem' }}></i>}
+            </div>
+            <div style={{ flex: 1, paddingTop: 20 }}>
+              <div style={{ fontSize: '1.5rem', fontWeight: 800 }}>{seller.storeName}</div>
+              <div className="muted" style={{ fontSize: '1.2rem', marginTop: 2 }}>{seller.bio}</div>
+            </div>
+            <div style={{ fontSize: '1.2rem', color: 'var(--ink-3)', textAlign: 'right', paddingTop: 20 }}>
+              <div><strong>{products.length}</strong> product{products.length !== 1 ? 's' : ''}</div>
+            </div>
           </div>
         </div>
       )}
@@ -168,6 +182,147 @@ export default function UmpStore() {
           onSave={() => { setShowCreate(false); fetchStore(); }}
         />
       )}
+
+      {showEdit && seller && (
+        <EditStoreModal
+          seller={seller}
+          onClose={() => setShowEdit(false)}
+          onSave={() => { setShowEdit(false); fetchStore(); }}
+        />
+      )}
+    </>
+  );
+}
+
+function EditStoreModal({ seller, onClose, onSave }) {
+  const [storeName, setStoreName] = useState(seller.storeName || '');
+  const [bio, setBio] = useState(seller.bio || '');
+  const [bannerFile, setBannerFile] = useState(null);
+  const [logoFile, setLogoFile] = useState(null);
+  const [bannerPreview, setBannerPreview] = useState(seller.banner?.url || null);
+  const [logoPreview, setLogoPreview] = useState(seller.logo?.url || null);
+  const [cropSrc, setCropSrc] = useState(null);
+  const [cropTarget, setCropTarget] = useState(null); // "banner" | "logo"
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const bannerRef = useRef(null);
+  const logoRef = useRef(null);
+
+  function openCrop(file, target) {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => { setCropSrc(reader.result); setCropTarget(target); };
+    reader.readAsDataURL(file);
+  }
+
+  function handleCropConfirm(blob) {
+    const file = new File([blob], `ump-store-${cropTarget}.jpg`, { type: 'image/jpeg' });
+    const url = URL.createObjectURL(blob);
+    if (cropTarget === 'banner') { setBannerPreview(url); setBannerFile(file); }
+    else { setLogoPreview(url); setLogoFile(file); }
+    setCropSrc(null);
+    setCropTarget(null);
+  }
+
+  async function handleSave() {
+    setError('');
+    setSaving(true);
+    try {
+      const fd = new FormData();
+      if (storeName.trim()) fd.append('storeName', storeName.trim());
+      if (bio.trim()) fd.append('bio', bio.trim());
+      if (bannerFile) fd.append('banner', bannerFile);
+      if (logoFile) fd.append('logo', logoFile);
+      await apiFetch('/api/admins/ump-store', { method: 'PUT', body: fd });
+      onSave();
+    } catch (err) {
+      setError(err?.message || 'Failed to save store details');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <>
+      {cropSrc && (
+        <ImageCropModal
+          src={cropSrc}
+          aspect={cropTarget === 'banner' ? 3 / 1 : 1}
+          title={cropTarget === 'banner' ? 'Crop store banner' : 'Crop store logo'}
+          onConfirm={handleCropConfirm}
+          onCancel={() => { setCropSrc(null); setCropTarget(null); }}
+        />
+      )}
+      <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.6)', zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }} onClick={onClose}>
+        <div style={{ background: 'var(--white)', borderRadius: 12, maxWidth: 480, width: '100%', maxHeight: '90vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
+          <div style={{ padding: '18px 20px', borderBottom: '1px solid var(--line)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ fontWeight: 800, fontSize: '1.8rem' }}>Edit UMP Store</div>
+            <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.6rem', color: 'var(--ink-3)' }}><i className="fa-solid fa-xmark"></i></button>
+          </div>
+
+          <div style={{ padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <input ref={bannerRef} type="file" accept="image/*" style={{ display: 'none' }}
+              onChange={(e) => { openCrop(e.target.files[0], 'banner'); e.target.value = ''; }} />
+            <input ref={logoRef} type="file" accept="image/*" style={{ display: 'none' }}
+              onChange={(e) => { openCrop(e.target.files[0], 'logo'); e.target.value = ''; }} />
+
+            <div>
+              <label style={{ fontSize: '1.15rem', fontWeight: 600, color: 'var(--ink-3)', marginBottom: 4, display: 'block' }}>Banner</label>
+              <div
+                onClick={() => bannerRef.current?.click()}
+                style={{ width: '100%', height: 110, borderRadius: 10, border: bannerPreview ? 'none' : '2px dashed var(--line)', overflow: 'hidden', cursor: 'pointer', position: 'relative', background: bannerPreview ? undefined : 'var(--surface)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              >
+                {bannerPreview
+                  ? <img src={bannerPreview} alt="banner" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  : <span style={{ color: 'var(--ink-3)', fontSize: '1.2rem' }}><i className="fa-solid fa-cloud-arrow-up"></i> Upload banner</span>}
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+              <div
+                onClick={() => logoRef.current?.click()}
+                style={{ width: 80, height: 80, borderRadius: 10, flexShrink: 0, border: logoPreview ? 'none' : '2px dashed var(--line)', overflow: 'hidden', cursor: 'pointer', background: logoPreview ? undefined : 'var(--surface)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              >
+                {logoPreview
+                  ? <img src={logoPreview} alt="logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  : <i className="fa-solid fa-image" style={{ color: 'var(--ink-3)' }}></i>}
+              </div>
+              <button className="abtn ghost sm" onClick={() => logoRef.current?.click()}>
+                <i className="fa-solid fa-upload"></i> {logoPreview ? 'Change logo' : 'Upload logo'}
+              </button>
+            </div>
+
+            <div>
+              <label style={{ fontSize: '1.15rem', fontWeight: 600, color: 'var(--ink-3)', marginBottom: 4, display: 'block' }}>Store name</label>
+              <input
+                style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink-1)', fontSize: '1.3rem', fontFamily: 'inherit', boxSizing: 'border-box' }}
+                value={storeName} onChange={(e) => setStoreName(e.target.value)}
+              />
+            </div>
+
+            <div>
+              <label style={{ fontSize: '1.15rem', fontWeight: 600, color: 'var(--ink-3)', marginBottom: 4, display: 'block' }}>Bio</label>
+              <textarea
+                style={{ width: '100%', padding: '8px 12px', borderRadius: 8, border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink-1)', fontSize: '1.3rem', fontFamily: 'inherit', height: 64, resize: 'vertical', boxSizing: 'border-box' }}
+                value={bio} onChange={(e) => setBio(e.target.value)}
+              />
+            </div>
+          </div>
+
+          {error && (
+            <div style={{ margin: '0 20px 12px', padding: '10px 14px', background: 'rgba(239,68,68,.08)', border: '1px solid rgba(239,68,68,.3)', borderRadius: 8, fontSize: '1.25rem', color: '#dc2626' }}>
+              {error}
+            </div>
+          )}
+
+          <div style={{ padding: '14px 20px', borderTop: '1px solid var(--line)', display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+            <button className="abtn ghost" onClick={onClose} disabled={saving}>Cancel</button>
+            <button className="abtn" onClick={handleSave} disabled={saving}>
+              {saving ? <><i className="fa-solid fa-circle-notch fa-spin"></i> Saving…</> : <><i className="fa-solid fa-check"></i> Save</>}
+            </button>
+          </div>
+        </div>
+      </div>
     </>
   );
 }

@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { apiFetch } from '../../utils/api';
 import { useAppConfig } from '../../context/AppConfigContext';
+import ImageCropModal from '../../components/ImageCropModal';
 
 const DEFAULT_SUBS = {
   seller:   { monthly: { price: 3000, label: 'Monthly' }, annual: { price: 25000, label: 'Annual', badge: 'Save 31%' } },
@@ -46,9 +48,12 @@ export default function Config() {
   const [subs, setSubs] = useState(DEFAULT_SUBS);
   const [adPlans, setAdPlans] = useState(DEFAULT_AD_PLANS);
   const [logoUploading, setLogoUploading] = useState(false);
+  const [logoCropSrc, setLogoCropSrc] = useState(null);
   const logoInputRef = useRef();
   const slideInputRefs = useRef([]);
   const [slideUploading, setSlideUploading] = useState(new Set());
+  const [slideCropSrc, setSlideCropSrc] = useState(null);
+  const [slideCropIdx, setSlideCropIdx] = useState(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState('');
@@ -148,14 +153,7 @@ export default function Config() {
     setFlags(prev => prev.map(f => f.key === key ? { ...f, on: !f.on } : f));
   }
 
-  async function handleLogoUpload(e) {
-    const file = e.target.files[0];
-    if (!file) return;
-    const ALLOWED = ['image/jpeg', 'image/png', 'image/svg+xml', 'image/webp'];
-    if (!ALLOWED.includes(file.type)) {
-      setSaveError('Logo must be a JPEG, PNG, SVG, or WebP image.');
-      return;
-    }
+  async function uploadLogoFile(file) {
     setSaveError('');
     setLogoUploading(true);
     try {
@@ -170,14 +168,29 @@ export default function Config() {
     }
   }
 
-  async function handleSlideImageUpload(e, idx) {
+  function handleLogoUpload(e) {
     const file = e.target.files[0];
+    e.target.value = '';
     if (!file) return;
-    const ALLOWED = ['image/jpeg', 'image/png', 'image/webp'];
+    const ALLOWED = ['image/jpeg', 'image/png', 'image/svg+xml', 'image/webp'];
     if (!ALLOWED.includes(file.type)) {
-      setSaveError(`Slide ${idx + 1}: image must be JPEG, PNG, or WebP.`);
+      setSaveError('Logo must be a JPEG, PNG, SVG, or WebP image.');
       return;
     }
+    setSaveError('');
+    // SVGs are vector — a canvas-based crop would rasterize them, so upload as-is.
+    if (file.type === 'image/svg+xml') { uploadLogoFile(file); return; }
+    const reader = new FileReader();
+    reader.onload = () => setLogoCropSrc(reader.result);
+    reader.readAsDataURL(file);
+  }
+
+  function confirmLogoCrop(blob) {
+    setLogoCropSrc(null);
+    uploadLogoFile(new File([blob], `logo-${Date.now()}.jpg`, { type: 'image/jpeg' }));
+  }
+
+  async function uploadSlideFile(file, idx) {
     setSaveError('');
     setSlideUploading(prev => new Set([...prev, idx]));
     try {
@@ -190,6 +203,28 @@ export default function Config() {
     } finally {
       setSlideUploading(prev => { const n = new Set(prev); n.delete(idx); return n; });
     }
+  }
+
+  function handleSlideImageUpload(e, idx) {
+    const file = e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    const ALLOWED = ['image/jpeg', 'image/png', 'image/webp'];
+    if (!ALLOWED.includes(file.type)) {
+      setSaveError(`Slide ${idx + 1}: image must be JPEG, PNG, or WebP.`);
+      return;
+    }
+    setSaveError('');
+    const reader = new FileReader();
+    reader.onload = () => { setSlideCropSrc(reader.result); setSlideCropIdx(idx); };
+    reader.readAsDataURL(file);
+  }
+
+  function confirmSlideCrop(blob) {
+    const idx = slideCropIdx;
+    setSlideCropSrc(null);
+    setSlideCropIdx(null);
+    uploadSlideFile(new File([blob], `slide-${idx}-${Date.now()}.jpg`, { type: 'image/jpeg' }), idx);
   }
 
   async function createEvent() {
@@ -672,6 +707,28 @@ export default function Config() {
           ))}
         </div>
       </div>
+
+      {logoCropSrc && createPortal(
+        <ImageCropModal
+          src={logoCropSrc}
+          aspect={1}
+          title="Crop app logo"
+          onConfirm={confirmLogoCrop}
+          onCancel={() => setLogoCropSrc(null)}
+        />,
+        document.body
+      )}
+
+      {slideCropSrc && createPortal(
+        <ImageCropModal
+          src={slideCropSrc}
+          aspect={2 / 1}
+          title={`Crop slide ${slideCropIdx + 1} image`}
+          onConfirm={confirmSlideCrop}
+          onCancel={() => { setSlideCropSrc(null); setSlideCropIdx(null); }}
+        />,
+        document.body
+      )}
     </>
   );
 }

@@ -11,6 +11,7 @@ import Message from "./models/Message.js";
 import { setIO } from "./utils/socket.js";
 import { startAutoCancelJob } from "./utils/autoCancel.js";
 import { notify } from "./utils/notify.js";
+import { getOrCreateOfficialSeller } from "./controllers/umpStoreController.js";
 
 dotenv.config();
 
@@ -253,6 +254,14 @@ if (ENABLE_CLUSTER && cluster.isPrimary) {
       // to avoid N duplicate cron runs when cluster mode is active.
       const isFirstWorker = !cluster.isWorker || cluster.worker?.id === 1;
       if (isFirstWorker) startAutoCancelJob();
+
+      // Ensure the official UMP Store exists so it shows up on /store immediately —
+      // doesn't depend on an admin first opening the admin UMP Store page.
+      if (isFirstWorker) {
+        getOrCreateOfficialSeller()
+          .then(() => console.log("✅ Official UMP Store ready"))
+          .catch((err) => console.error("❌ Failed to provision official UMP Store:", err.message));
+      }
 
       server.listen(PORT, () => {
         const workerTag = cluster.isWorker ? ` [worker ${cluster.worker.id}]` : "";
