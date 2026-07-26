@@ -41,7 +41,12 @@ export default function Provider() {
     whatsapp: "", portfolioUrl: "", instagram: "", twitter: "",
   });
 
-  if (!user?.identityVerified) {
+  // Only gate first-time seller/provider signup on identity verification — existing
+  // sellers/providers still need this page to edit their profile (becomeSeller /
+  // becomeServiceProvider double as the profile-update endpoints), and the backend
+  // itself only blocks the initial role grant, not subsequent edits.
+  const alreadyPartner = user?.roles?.includes("seller") || user?.roles?.includes("service_provider");
+  if (!alreadyPartner && !user?.identityVerified) {
     return <Navigate to="/settings?tab=verify" replace />;
   }
 

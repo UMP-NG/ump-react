@@ -96,7 +96,7 @@ const STATUS_STYLE = {
 const DELIVERY_STEPS = ["pending", "confirmed", "shipped", "completed"];
 const PICKUP_STEPS   = ["pending", "confirmed", "shipped", "ready_for_pickup", "completed"];
 const DELIVERY_LABELS = ["Placed", "Confirmed", "Shipped", "Delivered"];
-const PICKUP_LABELS   = ["Placed", "Confirmed", "Shipped", "Ready for pickup", "Delivered"];
+const PICKUP_LABELS   = ["Placed", "Confirmed", "Packed", "Ready for pickup", "Delivered"];
 
 function OrderTimeline({ status, deliveryMethod }) {
   if (status === "cancelled") return null;

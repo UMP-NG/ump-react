@@ -10,5 +10,9 @@ const visitSchema = new mongoose.Schema(
 
 visitSchema.index({ createdAt: -1 });
 visitSchema.index({ visitorId: 1, createdAt: -1 });
+// Retention: raw visit pings (anonymous visitorId + optional userId) are not kept
+// indefinitely — auto-expire after ~13 months, comfortably past the 365-day admin
+// reporting window.
+visitSchema.index({ createdAt: 1 }, { expireAfterSeconds: 60 * 60 * 24 * 400 });
 
 export default mongoose.model("Visit", visitSchema);

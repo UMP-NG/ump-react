@@ -2108,7 +2108,7 @@ export default function SellerDashboard() {
                 const isDone = status === "completed" || status === "cancelled";
 
                 const dm = o.deliveryMethod || "pickup";
-                const SHIPPED_LABEL = dm === "pickup" ? "Mark as Shipped" : dm === "self" ? "Out for Delivery" : null; // null = Shipbubble handles its own button
+                const SHIPPED_LABEL = dm === "pickup" ? "Mark as Packed" : dm === "self" ? "Out for Delivery" : null; // null = Shipbubble handles its own button
                 const NEXT_ACTION = {
                   pending:   { label: "Confirm Order", newStatus: "confirmed", color: "var(--accent)" },
                   confirmed: SHIPPED_LABEL ? { label: SHIPPED_LABEL, newStatus: "shipped", color: "#3b82f6" } : null,

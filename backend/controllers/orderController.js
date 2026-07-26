@@ -569,9 +569,12 @@ export const updateOrderStatus = async (req, res) => {
     if (order.status === "partial" && status !== "cancelled")
       return res.status(400).json({ message: "Partial delivery in progress — use the delivery code to confirm remaining items" });
 
-    // Non-pickup orders must be completed via the buyer's delivery code
-    if (status === "completed" && order.deliveryMethod !== "pickup" && !order.deliveryCodeUsed)
-      return res.status(400).json({ message: "Delivery orders must be completed by the buyer confirming the delivery code — use the 'Confirm delivery' flow instead." });
+    // Every order (pickup included) must be completed via the buyer's delivery code —
+    // confirmDelivery is the only path that sets deliveryCodeUsed, and it already
+    // requires paymentStatus === "paid" first, so this also guarantees payment was
+    // confirmed before an order can reach "completed".
+    if (status === "completed" && !order.deliveryCodeUsed)
+      return res.status(400).json({ message: "Orders must be completed by the buyer confirming the delivery code — use the 'Confirm delivery' flow instead." });
 
     // "Ready for pickup" only applies to self-pickup orders — shipped-to-address orders
     // go straight from shipped to completed via the delivery-code flow.

@@ -14,7 +14,7 @@ import NotificationBanner from "./components/NotificationBanner";
 const AdminRoutes = lazy(() => import("./admin/index"));
 import { AppConfigProvider, useAppConfig } from "./context/AppConfigContext";
 import { useUser } from "./context/UserContext";
-import { apiFetch } from "./utils/api";
+import { apiFetch, API_BASE, getToken } from "./utils/api";
 
 // All page components are lazy-loaded so each route only downloads its own
 // JS chunk. This cuts the initial bundle by ~70% for users on slow networks.
@@ -179,6 +179,9 @@ export default function App() {
 
   useEffect(() => {
     // Record one site-visit ping per browser tab session (not per route change).
+    // Uses a plain fetch — not apiFetch — so this fire-and-forget ping never
+    // triggers apiFetch's write-path cache invalidation (which nukes admin/
+    // products/sellers caches on every non-GET call).
     try {
       if (sessionStorage.getItem("ump_visit_tracked")) return;
       let visitorId = localStorage.getItem("ump_visitor_id");
@@ -186,8 +189,23 @@ export default function App() {
         visitorId = crypto.randomUUID();
         localStorage.setItem("ump_visitor_id", visitorId);
       }
-      sessionStorage.setItem("ump_visit_tracked", "1");
-      apiFetch("/api/track/visit", { method: "POST", body: { visitorId } }).catch(() => {});
+      const token = getToken();
+      fetch(`${API_BASE}/api/track/visit`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        credentials: "include",
+        body: JSON.stringify({ visitorId }),
+      })
+        .then((res) => {
+          // Only mark this tab session as tracked once the ping actually succeeds —
+          // a transient network failure should be retried on the next reload rather
+          // than silently never counting this visit for the rest of the session.
+          if (res.ok) sessionStorage.setItem("ump_visit_tracked", "1");
+        })
+        .catch(() => {});
     } catch {
       // Storage may be unavailable (private browsing) — skip tracking silently
     }

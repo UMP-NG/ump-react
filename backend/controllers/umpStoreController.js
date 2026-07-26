@@ -14,8 +14,8 @@ async function getOrCreateOfficialSeller() {
   let seller = await Seller.findOne({ isOfficial: true });
   if (seller) return seller;
 
-  let systemUser = await User.findOne({ email: OFFICIAL_STORE_EMAIL });
-  if (!systemUser) {
+  let systemUser;
+  try {
     systemUser = await User.create({
       name: "UMP Store",
       email: OFFICIAL_STORE_EMAIL,
@@ -24,18 +24,30 @@ async function getOrCreateOfficialSeller() {
       isVerified: true,
       identityVerified: true,
     });
+  } catch (err) {
+    // Two admins opening the page at the same time can race here — the unique
+    // email index rejects the second create, so just fetch the one that won.
+    if (err.code === 11000) systemUser = await User.findOne({ email: OFFICIAL_STORE_EMAIL });
+    else throw err;
   }
 
-  seller = await Seller.create({
-    user: systemUser._id,
-    name: "UMP Store",
-    storeName: "UMP Store",
-    businessName: "UMP Store",
-    bio: "The official UMP store — verified merch and campus picks.",
-    description: "Official UMP-run store for verified products and merch.",
-    isOfficial: true,
-    isOpen: true,
-  });
+  try {
+    seller = await Seller.create({
+      user: systemUser._id,
+      name: "UMP Store",
+      storeName: "UMP Store",
+      businessName: "UMP Store",
+      bio: "The official UMP store — verified merch and campus picks.",
+      description: "Official UMP-run store for verified products and merch.",
+      isOfficial: true,
+      isOpen: true,
+    });
+  } catch (err) {
+    // Same race, but on the Seller side (partial unique index on isOfficial:true,
+    // or the per-user unique index) — whichever request lost just reads the winner.
+    if (err.code === 11000) seller = await Seller.findOne({ isOfficial: true });
+    else throw err;
+  }
   return seller;
 }
 

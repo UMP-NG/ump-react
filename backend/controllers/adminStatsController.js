@@ -117,16 +117,24 @@ export const getVisitStats = async (req, res) => {
   if (cached) return res.json(cached);
   try {
     const since = startOf(days);
-    const [totalVisits, uniqueVisitors, dailyBuckets] = await Promise.all([
+    // Counts are computed server-side via $group/$count — visitor IDs themselves
+    // are never pulled into the Node process, only aggregate counts (unlike
+    // Visit.distinct(...) or $addToSet, which would materialize every ID).
+    const [totalVisits, uniqueAgg, dailyBuckets] = await Promise.all([
       Visit.countDocuments({ createdAt: { $gte: since } }),
-      Visit.distinct("visitorId", { createdAt: { $gte: since } }),
       Visit.aggregate([
         { $match: { createdAt: { $gte: since } } },
-        { $group: { _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } }, count: { $sum: 1 }, visitors: { $addToSet: "$visitorId" } } },
+        { $group: { _id: "$visitorId" } },
+        { $count: "count" },
+      ]),
+      Visit.aggregate([
+        { $match: { createdAt: { $gte: since } } },
+        { $group: { _id: { day: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } }, visitorId: "$visitorId" }, count: { $sum: 1 } } },
+        { $group: { _id: "$_id.day", visits: { $sum: "$count" }, uniques: { $sum: 1 } } },
         { $sort: { _id: 1 } },
       ]),
     ]);
-    const dailyMap = Object.fromEntries(dailyBuckets.map((d) => [d._id, { count: d.count, unique: d.visitors.length }]));
+    const dailyMap = Object.fromEntries(dailyBuckets.map((d) => [d._id, { count: d.visits, unique: d.uniques }]));
     const labels = [], visits = [], uniques = [];
     for (let i = Math.min(days, 90) - 1; i >= 0; i--) {
       const key = startOf(i).toISOString().slice(0, 10);
@@ -134,7 +142,7 @@ export const getVisitStats = async (req, res) => {
       visits.push(dailyMap[key]?.count || 0);
       uniques.push(dailyMap[key]?.unique || 0);
     }
-    const result = { days, totalVisits, uniqueVisitors: uniqueVisitors.length, labels, visits, uniques };
+    const result = { days, totalVisits, uniqueVisitors: uniqueAgg[0]?.count || 0, labels, visits, uniques };
     scSet(`visits:${days}`, result);
     res.json(result);
   } catch (err) {

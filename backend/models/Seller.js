@@ -126,5 +126,9 @@ sellerSchema.index({
   story: "text",
 });
 
+// Only one Seller can ever be the official UMP Store — a partial unique index
+// enforces this at the DB level (guards against a race creating a duplicate).
+sellerSchema.index({ isOfficial: 1 }, { unique: true, partialFilterExpression: { isOfficial: true } });
+
 export default mongoose.model("Seller", sellerSchema);
 

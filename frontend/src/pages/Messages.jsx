@@ -1042,6 +1042,11 @@ function MsgThread({ convo, onBack }) {
             msg.meta.isResponse ? isMe : !isMe
           );
 
+          // Optimistic messages (not yet confirmed by the server) don't have a real
+          // id yet — replying to one would silently send replyTo: null since the
+          // backend rejects non-ObjectId values, so hide the affordance until then.
+          const isPending = typeof msg._id === "string" && msg._id.startsWith("opt_");
+
           let bubbleBg, bubbleColor, borderRadius;
           if (isNegotiation) {
             bubbleBg = "transparent"; bubbleColor = "var(--ink-1)"; borderRadius = 0;
@@ -1088,7 +1093,7 @@ function MsgThread({ convo, onBack }) {
               )}
 
               <div style={{ display: "flex", alignItems: "flex-end", gap: 4, maxWidth: isNegotiation ? "min(340px, 86vw)" : "78%" }}>
-                {isMe && !isNegotiation && (
+                {isMe && !isNegotiation && !isPending && (
                   <button
                     type="button"
                     onClick={() => setReplyingTo({ _id: msg._id, text: msg.content || msg.text, isOwn: msg.isOwn })}
