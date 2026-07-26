@@ -20,6 +20,8 @@ const messageSchema = new mongoose.Schema(
     isRead: { type: Boolean, default: false },
     readBy: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
     isAdminMessage: { type: Boolean, default: false },
+    replyTo: { type: mongoose.Schema.Types.ObjectId, ref: "Message", default: null },
+    deliveredAt: { type: Date, default: null },
   },
   { timestamps: true }
 );

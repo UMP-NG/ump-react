@@ -2,6 +2,7 @@ import User from "../models/User.js";
 import Seller from "../models/Seller.js";
 import Order from "../models/Order.js";
 import Payout from "../models/Payout.js";
+import Visit from "../models/Visit.js";
 import logger from "../utils/logger.js";
 import { scGet, scSet, fmt, startOf } from "./adminHelpers.js";
 
@@ -105,6 +106,39 @@ export const getRecentOrders = async (req, res) => {
     res.json(shaped);
   } catch (err) {
     logger.error("getRecentOrders:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+export const getVisitStats = async (req, res) => {
+  const VALID_DAYS = [1, 7, 30, 365, 1825];
+  const days = VALID_DAYS.includes(parseInt(req.query.days)) ? parseInt(req.query.days) : 30;
+  const cached = scGet(`visits:${days}`, 60_000);
+  if (cached) return res.json(cached);
+  try {
+    const since = startOf(days);
+    const [totalVisits, uniqueVisitors, dailyBuckets] = await Promise.all([
+      Visit.countDocuments({ createdAt: { $gte: since } }),
+      Visit.distinct("visitorId", { createdAt: { $gte: since } }),
+      Visit.aggregate([
+        { $match: { createdAt: { $gte: since } } },
+        { $group: { _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } }, count: { $sum: 1 }, visitors: { $addToSet: "$visitorId" } } },
+        { $sort: { _id: 1 } },
+      ]),
+    ]);
+    const dailyMap = Object.fromEntries(dailyBuckets.map((d) => [d._id, { count: d.count, unique: d.visitors.length }]));
+    const labels = [], visits = [], uniques = [];
+    for (let i = Math.min(days, 90) - 1; i >= 0; i--) {
+      const key = startOf(i).toISOString().slice(0, 10);
+      labels.push(key);
+      visits.push(dailyMap[key]?.count || 0);
+      uniques.push(dailyMap[key]?.unique || 0);
+    }
+    const result = { days, totalVisits, uniqueVisitors: uniqueVisitors.length, labels, visits, uniques };
+    scSet(`visits:${days}`, result);
+    res.json(result);
+  } catch (err) {
+    logger.error("getVisitStats:", err);
     res.status(500).json({ message: "Server error" });
   }
 };

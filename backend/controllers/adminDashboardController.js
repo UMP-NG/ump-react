@@ -11,3 +11,4 @@ export * from "./adminModerationController.js";
 export * from "./adminBroadcastController.js";
 export * from "./adminConfigController.js";
 export * from "./adminVerificationController.js";
+export * from "./umpStoreController.js";

@@ -178,6 +178,22 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    // Record one site-visit ping per browser tab session (not per route change).
+    try {
+      if (sessionStorage.getItem("ump_visit_tracked")) return;
+      let visitorId = localStorage.getItem("ump_visitor_id");
+      if (!visitorId) {
+        visitorId = crypto.randomUUID();
+        localStorage.setItem("ump_visitor_id", visitorId);
+      }
+      sessionStorage.setItem("ump_visit_tracked", "1");
+      apiFetch("/api/track/visit", { method: "POST", body: { visitorId } }).catch(() => {});
+    } catch {
+      // Storage may be unavailable (private browsing) — skip tracking silently
+    }
+  }, []);
+
+  useEffect(() => {
     // When the browser is idle, prefetch the JS chunks for the most common next pages
     // so navigation to them is instant rather than showing the PageLoader spinner.
     if (!("requestIdleCallback" in window)) return;

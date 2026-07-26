@@ -13,11 +13,15 @@ export const becomeSeller = async (req, res) => {
       return res.status(401).json({ message: "Unauthorized" });
     }
 
-    if (req.user.googleAccount && !req.user.isVerified) {
-      return res.status(403).json({ message: "Please link your UNILAG email before registering as a seller." });
-    }
-
     let seller = await Seller.findOne({ user: req.user._id });
+
+    // Identity verification is required to become a seller (not required again on
+    // profile edits, so already-registered sellers aren't retroactively locked out).
+    if (!seller && !req.user.identityVerified) {
+      return res.status(403).json({
+        message: "You need to complete identity verification before you can sell. Submit your verification in Settings.",
+      });
+    }
 
     const logoFile = req.files?.logo?.[0];
     const bannerFile = req.files?.banner?.[0];

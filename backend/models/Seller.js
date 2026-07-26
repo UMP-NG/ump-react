@@ -44,6 +44,9 @@ const sellerSchema = new mongoose.Schema(
     verificationRequested: { type: Boolean, default: false },
     isSuspended: { type: Boolean, default: false },
 
+    // ✅ Official UMP-run store (verified badge, merch) — admin-managed, not tied to subscription
+    isOfficial: { type: Boolean, default: false },
+
     // ✅ Paid subscription — controls the crown badge on store/product pages
     isSubscribed:          { type: Boolean, default: false },
     subscriptionRequested: { type: Boolean, default: false },

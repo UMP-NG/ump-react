@@ -545,9 +545,9 @@ export const updateOrderStatus = async (req, res) => {
     const { id } = req.params;
     const { status } = req.body;
 
-    const VALID = ["confirmed", "shipped", "completed", "cancelled"];
+    const VALID = ["confirmed", "shipped", "ready_for_pickup", "completed", "cancelled"];
     if (!VALID.includes(status))
-      return res.status(400).json({ message: "Invalid status. Must be one of: confirmed, shipped, completed, cancelled" });
+      return res.status(400).json({ message: "Invalid status. Must be one of: confirmed, shipped, ready_for_pickup, completed, cancelled" });
 
     const order = await Order.findById(id).populate("items.product");
     if (!order) return res.status(404).json({ message: "Order not found" });
@@ -573,12 +573,17 @@ export const updateOrderStatus = async (req, res) => {
     if (status === "completed" && order.deliveryMethod !== "pickup" && !order.deliveryCodeUsed)
       return res.status(400).json({ message: "Delivery orders must be completed by the buyer confirming the delivery code — use the 'Confirm delivery' flow instead." });
 
+    // "Ready for pickup" only applies to self-pickup orders — shipped-to-address orders
+    // go straight from shipped to completed via the delivery-code flow.
+    if (status === "ready_for_pickup" && order.deliveryMethod !== "pickup")
+      return res.status(400).json({ message: "Only pickup orders can be marked ready for pickup." });
+
     // Fix #11: prevent double-crediting if escrow was already released
     if (status === "completed" && order.escrowReleasedAt)
       return res.status(400).json({ message: "Escrow has already been released for this order." });
 
     // Enforce forward-only transitions (cancellation is always allowed)
-    const FLOW = { "pending": 0, "pending-verification": 0, "confirmed": 1, "shipped": 2, "completed": 3 };
+    const FLOW = { "pending": 0, "pending-verification": 0, "confirmed": 1, "shipped": 2, "ready_for_pickup": 3, "completed": 4 };
     if (status !== "cancelled" && FLOW[status] <= FLOW[order.status])
       return res.status(400).json({ message: `Cannot move from "${order.status}" to "${status}"` });
 
@@ -651,10 +656,11 @@ export const updateOrderStatus = async (req, res) => {
 
     // Notify buyer of status change
     const STATUS_MSG = {
-      confirmed:  "Your order has been confirmed by the seller.",
-      shipped:    "Your order is on its way!",
-      completed:  "Your order has been marked as completed.",
-      cancelled:  "Your order has been cancelled.",
+      confirmed:        "Your order has been confirmed by the seller.",
+      shipped:          "Your order is on its way!",
+      ready_for_pickup: "Your order is ready for pickup!",
+      completed:        "Your order has been marked as completed.",
+      cancelled:        "Your order has been cancelled.",
     };
     if (order.buyer) {
       notify(order.buyer, {

@@ -7,6 +7,7 @@ import logger from "../utils/logger.js";
 import {
   getAdminStats,
   getActivityChart,
+  getVisitStats,
   getRecentOrders,
   getPendingVerifications,
   getAdminUsers,
@@ -58,6 +59,7 @@ import {
   getIdentityVerifications,
   approveIdentityVerification,
   rejectIdentityVerification,
+  getUmpStore,
 } from "../controllers/adminDashboardController.js";
 
 const router = express.Router();
@@ -83,6 +85,7 @@ router.get("/", ...adm, async (req, res) => {
 // ── Dashboard ──────────────────────────────────────────────────────────────
 router.get("/stats",                  ...adm, getAdminStats);
 router.get("/activity-chart",         ...adm, getActivityChart);
+router.get("/visit-stats",            ...adm, getVisitStats);
 router.get("/recent-orders",          ...adm, getRecentOrders);
 router.get("/pending-verifications",  ...adm, getPendingVerifications);
 router.get("/analytics",              ...adm, getAnalytics);
@@ -126,6 +129,7 @@ router.get ("/providers",                      ...adm, getAdminProviders);
 router.post("/providers/:userId/approve",      ...adm, approveProvider);
 
 // ── Products ───────────────────────────────────────────────────────────────
+router.get   ("/ump-store",                  ...adm, getUmpStore);
 router.get   ("/products",                  ...adm, getAdminProducts);
 router.post  ("/products",                  ...adm, uploadListingMedia, adminCreateProduct);
 router.post  ("/products/bulk",             ...adm, bulkProductAction);

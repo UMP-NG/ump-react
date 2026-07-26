@@ -41,9 +41,7 @@ export default function Provider() {
     whatsapp: "", portfolioUrl: "", instagram: "", twitter: "",
   });
 
-  const isLimited = user?.isLimitedAccount;
-
-  if (isLimited) {
+  if (!user?.identityVerified) {
     return <Navigate to="/settings?tab=verify" replace />;
   }
 

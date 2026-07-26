@@ -26,12 +26,18 @@ export const becomeServiceProvider = async (req, res) => {
     const user = await User.findById(req.user._id);
     if (!user) return res.status(404).json({ message: "User not found" });
 
-    if (user.googleAccount && !user.isVerified) {
-      return res.status(403).json({ message: "Please link your UNILAG email before registering as a service provider." });
+    const isNewProvider = !user.roles?.includes("service_provider");
+
+    // Identity verification is required to become a provider (not required again on
+    // profile edits, so already-registered providers aren't retroactively locked out).
+    if (isNewProvider && !user.identityVerified) {
+      return res.status(403).json({
+        message: "You need to complete identity verification before you can offer services. Submit your verification in Settings.",
+      });
     }
 
     if (!user.roles) user.roles = [];
-    if (!user.roles.includes("service_provider")) user.roles.push("service_provider");
+    if (isNewProvider) user.roles.push("service_provider");
 
     // Save provider profile — individual services are created separately from the dashboard
     const {

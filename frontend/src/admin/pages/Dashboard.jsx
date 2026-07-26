@@ -41,6 +41,7 @@ export default function Dashboard() {
   const [chartLabels, setChartLabels]   = useState([]);
   const [recentOrders, setRecentOrders] = useState([]);
   const [pendingVerif, setPendingVerif] = useState([]);
+  const [visitStats, setVisitStats]     = useState(null);
   const [loading, setLoading]           = useState(true);
   const [refreshing, setRefreshing]     = useState(false);
   const chartInitRef                    = useRef(false);
@@ -56,7 +57,8 @@ export default function Dashboard() {
       apiFetch(`/api/admins/activity-chart?days=${period}`).catch(() => null),
       apiFetch('/api/admins/recent-orders?limit=6').catch(() => []),
       apiFetch('/api/admins/pending-verifications?limit=4').catch(() => []),
-    ]).then(([s, chart, orders, verif]) => {
+      apiFetch(`/api/admins/visit-stats?days=${period}`).catch(() => null),
+    ]).then(([s, chart, orders, verif, visits]) => {
       if (s) setStats(s);
       if (chart) {
         setChartSeries({ orders: chart.orders || [], revenue: chart.revenue || [], users: chart.users || [] });
@@ -64,6 +66,7 @@ export default function Dashboard() {
       }
       setRecentOrders(Array.isArray(orders) ? orders : (orders?.orders || []));
       setPendingVerif(Array.isArray(verif) ? verif : (verif?.results || []));
+      if (visits) setVisitStats(visits);
       chartInitRef.current = true;
     }).finally(() => { setLoading(false); setRefreshing(false); });
   }, [period]);
@@ -187,6 +190,12 @@ export default function Dashboard() {
           delta={stats?.pendingPayoutsCount ? `${stats.pendingPayoutsCount} requests` : '—'}
           icon="fa-money-bill-transfer"
           badge={stats?.pendingPayoutsCount > 0 ? <span className="pill-warn">action</span> : null}
+        />
+        <StatCard
+          label={`Site visits (${periodShort})`}
+          value={val(visitStats?.totalVisits?.toLocaleString())}
+          delta={visitStats?.uniqueVisitors != null ? `${visitStats.uniqueVisitors.toLocaleString()} unique` : '—'}
+          icon="fa-eye"
         />
         <StatCard
           label="Flagged content"

@@ -12,6 +12,7 @@ const NAV_GROUPS = [
     { id: 'providers', path: '/admin/providers', icon: 'fa-briefcase', name: 'Service Providers', badge: null, badgeKind: 'amber' },
   ]},
   { label: 'Content', items: [
+    { id: 'ump-store',  path: '/admin/ump-store',  icon: 'fa-shield-halved', name: 'UMP Store' },
     { id: 'products',   path: '/admin/products',   icon: 'fa-box',         name: 'Products' },
     { id: 'services',   path: '/admin/services',   icon: 'fa-handshake',   name: 'Services' },
     { id: 'listings',   path: '/admin/listings',   icon: 'fa-bed',         name: 'Listings (Hostel)' },

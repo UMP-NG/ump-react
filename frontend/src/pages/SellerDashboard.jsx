@@ -122,6 +122,7 @@ const S_STYLE = {
   pending:   { bg: "#fef3c7", color: "#d97706" },
   confirmed: { bg: "#dbeafe", color: "#1d4ed8" },
   shipped:   { bg: "#e0f2fe", color: "#0284c7" },
+  ready_for_pickup: { bg: "#ede9fe", color: "#6d28d9" },
   partial:   { bg: "#fef9c3", color: "#a16207" },
   completed: { bg: "#dcfce7", color: "#16a34a" },
   delivered: { bg: "#dcfce7", color: "#16a34a" },
@@ -1548,10 +1549,11 @@ export default function SellerDashboard() {
           : o
       ));
       const msgs = {
-        confirmed: "Order confirmed — buyer notified",
-        shipped:   "Order marked as shipped",
-        completed: "Order completed — funds released to your wallet",
-        cancelled: "Order cancelled" + (d.order.paymentStatus === "refunded" ? " — refund initiated for buyer" : ""),
+        confirmed:        "Order confirmed — buyer notified",
+        shipped:          "Order marked as shipped",
+        ready_for_pickup: "Buyer notified — order is ready for pickup",
+        completed:        "Order completed — funds released to your wallet",
+        cancelled:        "Order cancelled" + (d.order.paymentStatus === "refunded" ? " — refund initiated for buyer" : ""),
       };
       showToast(msgs[newStatus] || "Order updated", "success");
     } catch (err) {
@@ -2089,8 +2091,8 @@ export default function SellerDashboard() {
 
           <h2 style={{ fontSize: "2rem", fontWeight: 800, margin: "0 0 16px" }}>Orders</h2>
           <div style={{ display: "flex", gap: 8, overflowX: "auto", scrollbarWidth: "none", marginBottom: 16 }}>
-            {["All", "Pending", "Confirmed", "Shipped", "Completed", "Cancelled"].map((s) => (
-              <span key={s} className={`chip${orderFilter === s ? " active" : ""}`} style={{ cursor: "pointer", flexShrink: 0 }} onClick={() => setOrderFilter(s)}>{s}</span>
+            {["All", "Pending", "Confirmed", "Shipped", "Ready_for_pickup", "Completed", "Cancelled"].map((s) => (
+              <span key={s} className={`chip${orderFilter === s ? " active" : ""}`} style={{ cursor: "pointer", flexShrink: 0 }} onClick={() => setOrderFilter(s)}>{s === "Ready_for_pickup" ? "Ready for Pickup" : s}</span>
             ))}
           </div>
 
@@ -2106,11 +2108,13 @@ export default function SellerDashboard() {
                 const isDone = status === "completed" || status === "cancelled";
 
                 const dm = o.deliveryMethod || "pickup";
-                const SHIPPED_LABEL = dm === "pickup" ? "Ready for Pickup" : dm === "self" ? "Out for Delivery" : null; // null = Shipbubble handles its own button
+                const SHIPPED_LABEL = dm === "pickup" ? "Mark as Shipped" : dm === "self" ? "Out for Delivery" : null; // null = Shipbubble handles its own button
                 const NEXT_ACTION = {
                   pending:   { label: "Confirm Order", newStatus: "confirmed", color: "var(--accent)" },
                   confirmed: SHIPPED_LABEL ? { label: SHIPPED_LABEL, newStatus: "shipped", color: "#3b82f6" } : null,
-                  // shipped → completion handled via delivery code input above
+                  // Pickup orders get an extra step: shipped → ready for pickup, before completion via delivery code.
+                  shipped: dm === "pickup" ? { label: "Ready for Pickup", newStatus: "ready_for_pickup", color: "#8b5cf6" } : null,
+                  // ready_for_pickup / shipped (non-pickup) → completion handled via delivery code input above
                 };
                 const next = NEXT_ACTION[status];
 
@@ -2177,7 +2181,7 @@ export default function SellerDashboard() {
                       )}
                     </div>
 
-                    {!isDone && o.paymentStatus === "paid" && status !== "shipped" && (
+                    {!isDone && o.paymentStatus === "paid" && status !== "shipped" && status !== "ready_for_pickup" && (
                       <div style={{ padding: "10px 16px", background: "rgba(59,130,246,.06)", borderBottom: "1px solid var(--line)", display: "flex", alignItems: "center", gap: 8, fontSize: "1.2rem", color: "#1d4ed8" }}>
                         <i className="fas fa-lock" /> Funds held in UMP escrow — released when delivery is confirmed
                       </div>
@@ -2234,8 +2238,8 @@ export default function SellerDashboard() {
                       </div>
                     )}
 
-                    {/* Delivery code input — shown when shipped or partially delivered */}
-                    {(status === "shipped" || status === "partial") && (
+                    {/* Delivery code input — shown when shipped, ready for pickup, or partially delivered */}
+                    {(status === "shipped" || status === "ready_for_pickup" || status === "partial") && (
                       <div style={{ padding: "14px 16px", background: "rgba(99,102,241,.06)", borderBottom: "1px solid var(--line)" }}>
                         {status === "partial" && (
                           <div style={{ display: "flex", alignItems: "center", gap: 8, background: "rgba(234,179,8,.1)", border: "1px solid rgba(234,179,8,.3)", borderRadius: "var(--r-md)", padding: "8px 12px", marginBottom: 10, fontSize: "1.2rem", color: "#92400e" }}>

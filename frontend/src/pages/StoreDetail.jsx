@@ -163,6 +163,7 @@ export default function StoreDetail() {
           <div>
             <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
               <h1 style={{ margin: 0, fontSize: "2rem", fontWeight: 800, letterSpacing: "-0.02em" }}>{seller.storeName || seller.name}</h1>
+              {seller.isOfficial && <i className="fas fa-shield-halved" style={{ color: "#3b82f6", fontSize: "1.3rem" }} title="Official UMP Store" />}
               {seller.isSubscribed && <i className="fas fa-crown" style={{ color: "#f59e0b", fontSize: "1.3rem" }} title="UMP Subscribed" />}
             </div>
             {seller.category?.length > 0 && (

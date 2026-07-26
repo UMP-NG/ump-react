@@ -139,6 +139,9 @@ const userSchema = new mongoose.Schema(
     // SECURITY & VERIFICATION
     // ===============================
     isVerified: { type: Boolean, default: false },
+    // Identity/document verification (matric + admin approval) — required to sell,
+    // distinct from isVerified (email OTP confirmed / login gate).
+    identityVerified: { type: Boolean, default: false },
     otp: String,
     otpExpire: Date,
     resetPasswordToken: String,

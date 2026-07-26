@@ -85,6 +85,7 @@ const STATUS_STYLE = {
   pending:            { bg: "#fef3c7", color: "#d97706" },
   confirmed:          { bg: "#dbeafe", color: "#1d4ed8" },
   shipped:            { bg: "#e0f2fe", color: "#0284c7" },
+  ready_for_pickup:   { bg: "#ede9fe", color: "#6d28d9" },
   partial:            { bg: "#fef9c3", color: "#a16207" },
   completed:          { bg: "#dcfce7", color: "#16a34a" },
   delivered:          { bg: "#dcfce7", color: "#16a34a" },
@@ -92,14 +93,20 @@ const STATUS_STYLE = {
   "pending-verification": { bg: "#f3e8ff", color: "#7c3aed" },
 };
 
-const STATUS_STEPS = ["pending", "confirmed", "shipped", "completed"];
-function OrderTimeline({ status }) {
+const DELIVERY_STEPS = ["pending", "confirmed", "shipped", "completed"];
+const PICKUP_STEPS   = ["pending", "confirmed", "shipped", "ready_for_pickup", "completed"];
+const DELIVERY_LABELS = ["Placed", "Confirmed", "Shipped", "Delivered"];
+const PICKUP_LABELS   = ["Placed", "Confirmed", "Shipped", "Ready for pickup", "Delivered"];
+
+function OrderTimeline({ status, deliveryMethod }) {
   if (status === "cancelled") return null;
+  const isPickup = deliveryMethod === "pickup";
+  const STATUS_STEPS = isPickup ? PICKUP_STEPS : DELIVERY_STEPS;
+  const labels = isPickup ? PICKUP_LABELS : DELIVERY_LABELS;
   // treat "partial" as being at the "shipped" stage on the timeline
   const displayStatus = status === "partial" ? "shipped" : status;
   const idx = STATUS_STEPS.indexOf(displayStatus);
   if (idx < 0) return null;
-  const labels = ["Placed", "Confirmed", "Shipped", "Delivered"];
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 0, margin: "12px 0 4px" }}>
       {STATUS_STEPS.map((s, i) => {
@@ -313,6 +320,7 @@ export default function Orders() {
   const [loading, setLoading] = useState(true);
   const [expanded, setExpanded] = useState(null);
   const [cancelling, setCancelling]   = useState(null);
+  const [payingId, setPayingId]       = useState(null);
   const [reviewOrder, setReviewOrder] = useState(null);
   const [disputeOrder, setDisputeOrder] = useState(null);
 
@@ -330,6 +338,32 @@ export default function Orders() {
     if (filter === "Cancelled") return o.status === "cancelled";
     return true;
   });
+
+  async function payNow(order) {
+    const orderId = order._id || order.id;
+    setPayingId(orderId);
+    try {
+      sessionStorage.setItem("ump_pending_orders", JSON.stringify([orderId]));
+      if (order.paymentMethod === "Flutterwave") {
+        const payRes = await apiFetch("/api/payments/flw/initialize", {
+          method: "POST",
+          body: { orderIds: [orderId] },
+        });
+        if (!payRes.payment_link) throw new Error("No payment link returned");
+        window.location.href = payRes.payment_link;
+      } else {
+        const payRes = await apiFetch("/api/payments/initialize", {
+          method: "POST",
+          body: { orderIds: [orderId], provider: "Paystack", method: "card" },
+        });
+        if (!payRes.authorization_url) throw new Error("No payment URL returned from server");
+        window.location.href = payRes.authorization_url;
+      }
+    } catch (err) {
+      showToast(err.message || "Could not start payment", "error");
+      setPayingId(null);
+    }
+  }
 
   async function cancelOrder(orderId) {
     if (!window.confirm("Cancel this order?")) return;
@@ -401,7 +435,7 @@ export default function Orders() {
                     </div>
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 6 }}>
                     <div style={{ fontSize: "1.5rem", fontWeight: 800, color: "var(--accent)" }}>{naira(o.totalAmount || o.total || 0)}</div>
-                    {["confirmed", "shipped", "pending-verification"].includes(o.status) && (
+                    {["confirmed", "shipped", "ready_for_pickup", "pending-verification"].includes(o.status) && (
                       <button
                         onClick={(e) => { e.stopPropagation(); setDisputeOrder(o); }}
                         style={{ background: "none", border: "none", cursor: "pointer", fontSize: "1.1rem", color: "#dc2626", fontWeight: 600, display: "flex", alignItems: "center", gap: 4, padding: 0, fontFamily: "var(--font-sans)" }}
@@ -416,7 +450,7 @@ export default function Orders() {
 
                 {isOpen && (
                   <div style={{ borderTop: "1px solid var(--line)", padding: 14 }}>
-                    <OrderTimeline status={o.status} />
+                    <OrderTimeline status={o.status} deliveryMethod={o.deliveryMethod} />
 
                     {/* Delivery method info */}
                     {o.deliveryMethod && (
@@ -464,7 +498,7 @@ export default function Orders() {
                     )}
 
                     {/* Delivery code — shown to buyer when order is confirmed, shipped, or partially delivered */}
-                    {o.deliveryCode && o.paymentStatus === "paid" && ["confirmed", "shipped", "partial"].includes(o.status) && (
+                    {o.deliveryCode && o.paymentStatus === "paid" && ["confirmed", "shipped", "ready_for_pickup", "partial"].includes(o.status) && (
                       <div style={{ padding: "14px 16px", borderRadius: "var(--r-lg)", background: "linear-gradient(135deg, #1e1b4b 0%, #0f172a 100%)", marginBottom: 12, position: "relative", overflow: "hidden" }}>
                         <div style={{ fontSize: "1.1rem", color: "rgba(255,255,255,.65)", fontWeight: 600, letterSpacing: ".06em", marginBottom: 6 }}>
                           <i className="fas fa-key" style={{ marginRight: 6 }} />
@@ -567,6 +601,17 @@ export default function Orders() {
                           <i className="fas fa-star" /> Write a Review
                         </button>
                       )}
+                      {o.status === "pending" && o.paymentStatus === "pending" && (
+                        <button
+                          className="btn btn-sm btn-primary"
+                          disabled={payingId === orderId}
+                          onClick={() => payNow(o)}
+                        >
+                          {payingId === orderId
+                            ? <i className="fas fa-spinner fa-spin" />
+                            : <><i className="fas fa-credit-card" /> Pay Now</>}
+                        </button>
+                      )}
                       {o.status === "pending" && (
                         <button
                           className="btn btn-sm"
@@ -579,7 +624,7 @@ export default function Orders() {
                             : <><i className="fas fa-xmark" /> Cancel order</>}
                         </button>
                       )}
-                      {["confirmed", "shipped", "pending-verification"].includes(o.status) && (
+                      {["confirmed", "shipped", "ready_for_pickup", "pending-verification"].includes(o.status) && (
                         <button
                           className="btn btn-sm"
                           style={{ color: "#dc2626", border: "1px solid rgba(220,38,38,.4)", background: "rgba(220,38,38,.05)" }}

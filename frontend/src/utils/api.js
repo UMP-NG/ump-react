@@ -68,6 +68,7 @@ const MEM_MAX = 150; // max entries before evicting oldest
 const CACHE_TTLS = {
   "/api/admins/stats":          60_000,   // 60 s  — heavy aggregation
   "/api/admins/activity-chart": 120_000,  // 2 min — chart aggregation
+  "/api/admins/visit-stats":    60_000,   // 60 s  — visit aggregation
   "/api/admins/analytics":      180_000,  // 3 min — analytics aggregation
   "/api/auth/me":               300_000,  // 5 min — user profile
 };

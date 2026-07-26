@@ -10,12 +10,12 @@ const TABS = [
   { label: 'Disputed',  filter: 'disputed' },
 ];
 const STATUS_COLOR = {
-  completed: 'green', confirmed: 'blue', shipped: 'amber',
+  completed: 'green', confirmed: 'blue', shipped: 'amber', ready_for_pickup: 'purple',
   pending: 'gray', cancelled: 'red', disputed: 'red', 'pending-verification': 'gray',
 };
 const PAY_COLOR = { paystack: 'blue', wallet: 'purple', cash: 'gray', transfer: 'amber', flutterwave: 'amber' };
 
-const ALL_STATUSES = ['pending', 'confirmed', 'shipped', 'completed', 'cancelled', 'disputed'];
+const ALL_STATUSES = ['pending', 'confirmed', 'shipped', 'ready_for_pickup', 'completed', 'cancelled', 'disputed'];
 
 export default function Orders() {
   const [tab, setTab]           = useState(0);

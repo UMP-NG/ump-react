@@ -6,8 +6,6 @@ import { useUser } from "../context/UserContext";
 import { auth } from "../config/firebase";
 import { GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult } from "firebase/auth";
 
-const DOMAIN = "@live.unilag.edu.ng";
-
 function getStrength(pwd) {
   if (!pwd) return 0;
   let s = 0;
@@ -132,47 +130,6 @@ function ReferralInput({ value, onChange }) {
   );
 }
 
-const SCHOOL_MAIL_STEPS = [
-  { n: 1, text: "Go to portal.office.com and click Sign in" },
-  { n: 2, text: "Enter your matric number as your email, e.g. 190401234@live.unilag.edu.ng" },
-  { n: 3, text: "Use the temporary password sent to you by UNILAG (ABS-CITS)" },
-  { n: 4, text: "You'll be asked to change your password and set up recovery options" },
-  { n: 5, text: "Once in, open Outlook — your OTP from UMP will arrive there" },
-];
-
-function SchoolMailGuide() {
-  const [open, setOpen] = useState(false);
-  return (
-    <div style={{ marginTop: 6, marginBottom: 4 }}>
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        style={{ background: "none", border: "none", padding: 0, cursor: "pointer", color: "var(--accent)", fontSize: "1.2rem", fontWeight: 600, display: "flex", alignItems: "center", gap: 5 }}
-      >
-        <i className={`fas fa-chevron-${open ? "up" : "down"}`} style={{ fontSize: "0.9rem" }} />
-        How do I get my UNILAG school email?
-      </button>
-      {open && (
-        <div style={{ marginTop: 10, padding: "14px 16px", background: "rgba(249,115,22,.06)", border: "1px solid rgba(249,115,22,.2)", borderRadius: "var(--r-lg)" }}>
-          <div style={{ fontSize: "1.25rem", fontWeight: 700, color: "var(--ink-1)", marginBottom: 10 }}>
-            <i className="fas fa-graduation-cap" style={{ marginRight: 7, color: "var(--accent)" }} />
-            Setting up your UNILAG student email
-          </div>
-          <ol style={{ margin: 0, paddingLeft: 18, display: "flex", flexDirection: "column", gap: 8 }}>
-            {SCHOOL_MAIL_STEPS.map((s) => (
-              <li key={s.n} style={{ fontSize: "1.25rem", color: "var(--ink-2)", lineHeight: 1.5 }}>{s.text}</li>
-            ))}
-          </ol>
-          <div style={{ marginTop: 10, padding: "8px 12px", background: "rgba(249,115,22,.1)", borderRadius: "var(--r-md)", fontSize: "1.15rem", color: "var(--ink-2)" }}>
-            <i className="fas fa-info-circle" style={{ marginRight: 5, color: "var(--accent)" }} />
-            Your matric number is on your UNILAG ID card or admission letter.
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 export default function Login() {
   const navigate = useNavigate();
   const { state: routeState } = useLocation();
@@ -182,7 +139,7 @@ export default function Login() {
   const [show, setShow] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [name, setName] = useState("");
-  const [matric, setMatric] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [referralCode, setReferralCode] = useState(searchParams.get("ref") || "");
@@ -191,8 +148,6 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [googleLoading, setGoogleLoading] = useState(false);
-
-  const email = matric.trim() ? `${matric.trim()}${DOMAIN}` : "";
 
   function validatePassword() {
     if (password.length < 8) return "Password must be at least 8 characters";
@@ -206,7 +161,7 @@ export default function Login() {
   async function handleSubmit(e) {
     e.preventDefault();
     setError("");
-    if (!matric.trim()) { setError("Please enter your matric number"); return; }
+    if (!email.trim()) { setError("Please enter your email address"); return; }
 
     if (tab === "signup") {
       const pwErr = validatePassword();
@@ -216,12 +171,15 @@ export default function Login() {
 
     setLoading(true);
     try {
+      const trimmedEmail = email.trim().toLowerCase();
       const endpoint = tab === "signin" ? "/api/auth/login" : "/api/auth/signup";
-      const body = tab === "signin" ? { email, password } : { name, email, password, ...(referralCode.trim() && { referralCode: referralCode.trim().toUpperCase() }) };
+      const body = tab === "signin"
+        ? { email: trimmedEmail, password }
+        : { name, email: trimmedEmail, password, ...(referralCode.trim() && { referralCode: referralCode.trim().toUpperCase() }) };
       const data = await apiFetch(endpoint, { method: "POST", body });
       if (tab === "signup") {
-        try { sessionStorage.setItem("ump_otp_email", email); } catch { /* ignore */ }
-        navigate("/auth", { state: { email } });
+        try { sessionStorage.setItem("ump_otp_email", trimmedEmail); } catch { /* ignore */ }
+        navigate("/auth", { state: { email: trimmedEmail } });
         return;
       }
       if (data.token) setToken(data.token);
@@ -336,7 +294,7 @@ export default function Login() {
             {tab === "signin" ? "Welcome back 👋" : "Join the campus"}
           </h1>
           <p style={{ margin: "0 0 20px", color: "var(--ink-2)", fontSize: "1.3rem" }}>
-            {tab === "signin" ? "Sign in with your UNILAG matric number." : "Create your student account in under a minute."}
+            {tab === "signin" ? "Sign in with your email." : "Create your student account in under a minute."}
           </p>
 
           {/* Tab switcher */}
@@ -374,26 +332,18 @@ export default function Login() {
               </div>
             )}
 
-            {/* Email — matric number + fixed domain suffix */}
+            {/* Email — any email address */}
             <div style={{ marginBottom: 16 }}>
               <div className="label" style={{ marginBottom: 6 }}>Email</div>
-              <div style={{ display: "flex", border: "1.5px solid var(--line)", borderRadius: "var(--r-md)", overflow: "hidden", background: "var(--white)", transition: "border-color .2s" }}
-                onFocusCapture={(e) => e.currentTarget.style.borderColor = "var(--accent)"}
-                onBlurCapture={(e) => e.currentTarget.style.borderColor = "var(--line)"}
-              >
-                <input
-                  style={{ flex: 1, border: "none", outline: "none", padding: "12px 14px", fontSize: "1.4rem", fontFamily: "var(--font-sans)", background: "transparent", color: "var(--ink-1)", minWidth: 0 }}
-                  placeholder="matric number"
-                  value={matric}
-                  onChange={(e) => setMatric(e.target.value.replace(/\s/g, ""))}
-                  required
-                />
-                <div style={{ padding: "0 14px", background: "var(--surface)", borderLeft: "1.5px solid var(--line)", display: "flex", alignItems: "center", whiteSpace: "nowrap", fontSize: "1.25rem", color: "var(--ink-2)", fontWeight: 500, flexShrink: 0 }}>
-                  {DOMAIN}
-                </div>
-              </div>
+              <input
+                className="input"
+                type="email"
+                placeholder="you@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value.trim())}
+                required
+              />
             </div>
-            {tab === "signup" && <SchoolMailGuide />}
 
             {/* Password */}
             <div style={{ marginBottom: 16 }}>

@@ -272,12 +272,12 @@ export default function Cart() {
         window.location.href = payRes.authorization_url;
       }
     } catch (err) {
-      // Cancel any orders that were created before the payment init failed
+      // Orders created before the payment-init call failed are left in place
+      // (status "pending") — the buyer can finish checkout later from the
+      // Orders page via "Pay Now" instead of losing the order.
       sessionStorage.removeItem("ump_pending_orders");
-      if (orderIds.length) {
-        await Promise.allSettled(orderIds.map((id) => apiFetch(`/api/orders/${id}`, { method: "DELETE" })));
-      }
       if (err?.status === 401) navigate("/login");
+      else if (orderIds.length) showToast(err?.message || "Payment could not start — you can finish checkout from your Orders page.", "error");
       else showToast(err?.message || "Failed to place order. Please try again.", "error");
       setPlacing(false);
     }

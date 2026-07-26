@@ -9,7 +9,7 @@ import { notify } from "../utils/notify.js";
 // ---------- SEND MESSAGE ----------
 export const sendMessage = async (req, res) => {
   try {
-    const { receiver, text } = req.body;
+    const { receiver, text, replyTo } = req.body;
 
     if (!receiver && !text && !req.files?.length) {
       return res
@@ -46,7 +46,12 @@ export const sendMessage = async (req, res) => {
       text: text || "",
       attachments,
       isAdminMessage: req.user.roles?.includes("admin") ?? false,
+      replyTo: mongoose.isValidObjectId(replyTo) ? replyTo : null,
     });
+
+    if (message.replyTo) {
+      await message.populate("replyTo", "text sender attachments");
+    }
 
     // Messages go only to whoever they're actually addressed to. The only
     // "randomness" in support messaging happens once, up front, when the
@@ -108,9 +113,12 @@ export const getUserMessages = async (req, res) => {
     const messages = await Message.find(filter)
       .populate("sender", "name avatar roles")
       .populate("receiver", "name avatar roles")
+      .populate("replyTo", "text sender attachments")
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit));
+
+    await markDeliveredAndNotify(messages, req.user._id);
 
     res.json(messages);
   } catch (error) {
@@ -118,6 +126,36 @@ export const getUserMessages = async (req, res) => {
     res.status(500).json({ message: "Server error" });
   }
 };
+
+// Bulk-marks any fetched messages addressed to `receiverId` as delivered (idempotent),
+// then pings each sender's room so an open thread can live-update its checkmarks.
+// This single code path covers both the live-socket case (receiver online, fetches on
+// thread open) and the reconnect-then-reload case (receiver was offline) — no separate
+// delivery-ack plumbing needed.
+async function markDeliveredAndNotify(messages, receiverId) {
+  const receiverIdStr = receiverId.toString();
+  const undelivered = messages.filter(
+    (m) => m.receiver?._id?.toString() === receiverIdStr && !m.deliveredAt
+  );
+  if (!undelivered.length) return;
+
+  const now = new Date();
+  const ids = undelivered.map((m) => m._id);
+  await Message.updateMany({ _id: { $in: ids } }, { $set: { deliveredAt: now } });
+  undelivered.forEach((m) => { m.deliveredAt = now; });
+
+  const io = getIO();
+  if (!io) return;
+  const bySender = new Map();
+  for (const m of undelivered) {
+    const senderId = (m.sender?._id || m.sender).toString();
+    if (!bySender.has(senderId)) bySender.set(senderId, []);
+    bySender.get(senderId).push(m._id);
+  }
+  for (const [senderId, messageIds] of bySender) {
+    io.to(senderId).emit("message_status_update", { messageIds, deliveredAt: now });
+  }
+}
 
 // ---------- MARK MESSAGE READ ----------
 export const markMessageRead = async (req, res) => {
@@ -244,12 +282,37 @@ export const getUserConversations = async (req, res) => {
       { $limit: 100 },
     ]).allowDiskUse(true);
 
+    markAllDeliveredForUser(userId).catch((err) => logger.warn("markAllDeliveredForUser failed:", err.message));
+
     res.json(conversations);
   } catch (error) {
     logger.error("❌ Error getting conversations:", error);
     res.status(500).json({ message: "Server error", error: error.message });
   }
 };
+
+// Marks every still-undelivered message addressed to `userId` as delivered — used when
+// the conversation list loads, since the aggregation above doesn't return full message
+// docs for markDeliveredAndNotify to work with directly.
+async function markAllDeliveredForUser(userId) {
+  const undelivered = await Message.find({ receiver: userId, deliveredAt: null }, { sender: 1 }).lean();
+  if (!undelivered.length) return;
+
+  const now = new Date();
+  await Message.updateMany({ _id: { $in: undelivered.map((m) => m._id) } }, { $set: { deliveredAt: now } });
+
+  const io = getIO();
+  if (!io) return;
+  const bySender = new Map();
+  for (const m of undelivered) {
+    const senderId = m.sender.toString();
+    if (!bySender.has(senderId)) bySender.set(senderId, []);
+    bySender.get(senderId).push(m._id);
+  }
+  for (const [senderId, messageIds] of bySender) {
+    io.to(senderId).emit("message_status_update", { messageIds, deliveredAt: now });
+  }
+}
 
 // ---------- LATEST CONVERSATIONS ----------
 export const getUserConversationsLatest = async (req, res) => {
@@ -289,6 +352,13 @@ export const markConversationRead = async (req, res) => {
   try {
     const userId = req.user._id;
     const { conversationWithId } = req.params;
+    const now = new Date();
+
+    // Read implies delivered — a message can't be "seen" without having reached the client first.
+    const unread = await Message.find(
+      { sender: conversationWithId, receiver: userId, readBy: { $ne: userId } },
+      { _id: 1 }
+    ).lean();
 
     await Message.updateMany(
       {
@@ -296,8 +366,19 @@ export const markConversationRead = async (req, res) => {
         receiver: userId,
         readBy: { $ne: userId },
       },
-      { $push: { readBy: userId }, $set: { isRead: true } }
+      { $push: { readBy: userId }, $set: { isRead: true, deliveredAt: now } }
     );
+
+    if (unread.length) {
+      const io = getIO();
+      if (io) {
+        io.to(conversationWithId.toString()).emit("message_status_update", {
+          messageIds: unread.map((m) => m._id),
+          deliveredAt: now,
+          isRead: true,
+        });
+      }
+    }
 
     res.json({ message: "Conversation marked as read" });
   } catch (error) {

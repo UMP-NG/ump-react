@@ -2,14 +2,11 @@ import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { apiFetch } from "../utils/api";
 
-async function cancelPendingOrders() {
-  try {
-    const ids = JSON.parse(sessionStorage.getItem("ump_pending_orders") || "[]");
-    sessionStorage.removeItem("ump_pending_orders");
-    if (ids.length) {
-      await Promise.allSettled(ids.map((id) => apiFetch(`/api/orders/${id}`, { method: "DELETE" })));
-    }
-  } catch { /* ignore */ }
+// A failed/cancelled/timed-out payment leaves the order in place (status "pending",
+// paymentStatus "pending") rather than deleting it — the buyer can finish checkout
+// later from the Orders page via "Pay Now" instead of losing the order.
+function cancelPendingOrders() {
+  try { sessionStorage.removeItem("ump_pending_orders"); } catch { /* ignore */ }
 }
 
 export default function PaymentSuccess() {

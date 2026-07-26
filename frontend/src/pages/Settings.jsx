@@ -993,7 +993,7 @@ function VerifyTab({ user, setUser, showToast }) {
   }
 
   // ── Already fully verified ────────────────────────────────────────────────
-  if (user?.isVerified && !user?.isLimitedAccount) {
+  if (user?.identityVerified) {
     return (
       <div className="card" style={{ padding: 20 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -1402,9 +1402,9 @@ export default function Settings() {
   const { user, setUser } = useUser();
   const showToast = useToast();
 
-  const TABS = user?.isLimitedAccount ? [...BASE_TABS, "Verify"] : BASE_TABS;
+  const TABS = !user?.identityVerified ? [...BASE_TABS, "Verify"] : BASE_TABS;
 
-  const defaultTab = searchParams.get("tab") === "verify" && user?.isLimitedAccount
+  const defaultTab = searchParams.get("tab") === "verify" && !user?.identityVerified
     ? "Verify"
     : "Profile";
   const [tab, setTab] = useState(defaultTab);

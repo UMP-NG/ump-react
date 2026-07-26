@@ -331,10 +331,10 @@ function ProductDrawer({ product, onClose, onFlag, onRemove, onRestore }) {
   );
 }
 
-function CreateProductModal({ onClose, onSave }) {
+export function CreateProductModal({ onClose, onSave, presetSeller, title }) {
   const [sellers, setSellers] = useState([]);
-  const [sellerSearch, setSellerSearch] = useState('');
-  const [form, setForm] = useState({ sellerId: '', name: '', price: '', stock: '1', desc: '', condition: 'New', category: '' });
+  const [sellerSearch, setSellerSearch] = useState(presetSeller?.name || '');
+  const [form, setForm] = useState({ sellerId: presetSeller?.id || '', name: '', price: '', stock: '1', desc: '', condition: 'New', category: '' });
   const [categories, setCategories] = useState([]);
   const [colors, setColors] = useState([]);
   const [sizes, setSizes] = useState([]);
@@ -356,9 +356,11 @@ function CreateProductModal({ onClose, onSave }) {
   const modalRef = useRef();
 
   useEffect(() => {
-    apiFetch('/api/admins/sellers?limit=100').then(d => setSellers(d?.sellers || [])).catch(() => {});
+    if (!presetSeller) {
+      apiFetch('/api/admins/sellers?limit=100').then(d => setSellers(d?.sellers || [])).catch(() => {});
+    }
     apiFetch('/api/categories').then(d => setCategories(d?.categories || d || [])).catch(() => {});
-  }, []);
+  }, [presetSeller]);
 
   const set = (f) => (e) => setForm(p => ({ ...p, [f]: e.target.value }));
 
@@ -533,7 +535,7 @@ function CreateProductModal({ onClose, onSave }) {
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.6)', zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }} onClick={handleClose}>
       <div ref={modalRef} style={{ background: 'var(--white)', borderRadius: 12, maxWidth: 580, width: '100%', maxHeight: '90vh', overflowY: 'auto', padding: 0 }} onClick={e => e.stopPropagation()}>
         <div style={{ padding: '18px 20px', borderBottom: '1px solid var(--line)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: 0, background: 'var(--white)', zIndex: 1 }}>
-          <div style={{ fontWeight: 800, fontSize: '1.8rem' }}>List Product for Seller</div>
+          <div style={{ fontWeight: 800, fontSize: '1.8rem' }}>{title || 'List Product for Seller'}</div>
           <button onClick={handleClose} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.6rem', color: 'var(--ink-3)' }}><i className="fa-solid fa-xmark"></i></button>
         </div>
 
@@ -565,22 +567,29 @@ function CreateProductModal({ onClose, onSave }) {
             </div>
           )}
 
-          {/* Seller picker */}
-          <div>
-            <label style={lSty}>Seller <span style={{ color: '#ef4444' }}>*</span></label>
-            <input style={iSty} placeholder="Search seller name or store…" value={sellerSearch} onChange={e => { setSellerSearch(e.target.value); setForm(f => ({ ...f, sellerId: '' })); }} />
-            {sellerSearch && !form.sellerId && filteredSellers.length > 0 && (
-              <div style={{ border: '1px solid var(--line)', borderRadius: 8, marginTop: 4, background: 'var(--white)', maxHeight: 180, overflowY: 'auto' }}>
-                {filteredSellers.slice(0, 8).map(s => (
-                  <div key={s._id} onClick={() => { setForm(f => ({ ...f, sellerId: s.userId || s._id })); setSellerSearch(s.storeName || s.name || s._id); }}
-                    style={{ padding: '8px 12px', cursor: 'pointer', fontSize: '1.3rem', borderBottom: '1px solid var(--line)' }}>
-                    <strong>{s.storeName || '—'}</strong> <span style={{ color: 'var(--ink-3)', fontSize: '1.1rem' }}>{s.name || ''}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-            {form.sellerId && <div style={{ marginTop: 4, fontSize: '1.2rem', color: '#16a34a' }}><i className="fa-solid fa-check"></i> Seller selected</div>}
-          </div>
+          {/* Seller picker — hidden when a preset seller (e.g. the official UMP Store) is passed in */}
+          {presetSeller ? (
+            <div style={{ padding: '8px 12px', background: 'var(--surface)', borderRadius: 8, fontSize: '1.2rem', color: 'var(--ink-2)' }}>
+              <i className="fa-solid fa-store" style={{ marginRight: 6, color: 'var(--accent)' }}></i>
+              Listing for <strong>{presetSeller.name}</strong>
+            </div>
+          ) : (
+            <div>
+              <label style={lSty}>Seller <span style={{ color: '#ef4444' }}>*</span></label>
+              <input style={iSty} placeholder="Search seller name or store…" value={sellerSearch} onChange={e => { setSellerSearch(e.target.value); setForm(f => ({ ...f, sellerId: '' })); }} />
+              {sellerSearch && !form.sellerId && filteredSellers.length > 0 && (
+                <div style={{ border: '1px solid var(--line)', borderRadius: 8, marginTop: 4, background: 'var(--white)', maxHeight: 180, overflowY: 'auto' }}>
+                  {filteredSellers.slice(0, 8).map(s => (
+                    <div key={s._id} onClick={() => { setForm(f => ({ ...f, sellerId: s.userId || s._id })); setSellerSearch(s.storeName || s.name || s._id); }}
+                      style={{ padding: '8px 12px', cursor: 'pointer', fontSize: '1.3rem', borderBottom: '1px solid var(--line)' }}>
+                      <strong>{s.storeName || '—'}</strong> <span style={{ color: 'var(--ink-3)', fontSize: '1.1rem' }}>{s.name || ''}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {form.sellerId && <div style={{ marginTop: 4, fontSize: '1.2rem', color: '#16a34a' }}><i className="fa-solid fa-check"></i> Seller selected</div>}
+            </div>
+          )}
 
           {/* Name & Price */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>

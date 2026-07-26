@@ -6,6 +6,7 @@ import Users from './pages/Users';
 import Sellers from './pages/Sellers';
 import Providers from './pages/Providers';
 import Products from './pages/Products';
+import UmpStore from './pages/UmpStore';
 import Services from './pages/Services';
 import Orders from './pages/Orders';
 import Payouts from './pages/Payouts';
@@ -35,6 +36,7 @@ export default function AdminRoutes() {
           <Route path="sellers"    element={<Sellers />} />
           <Route path="providers"  element={<Providers />} />
           <Route path="products"   element={<Products />} />
+          <Route path="ump-store"  element={<UmpStore />} />
           <Route path="services"   element={<Services />} />
           <Route path="listings"   element={<Listings />} />
           <Route path="categories" element={<Categories />} />

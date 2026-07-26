@@ -98,7 +98,8 @@ export default function Store() {
       (s.category || []).some((c) => c.toLowerCase().includes(q))
     );
   });
-  const visible = applySort(filtered, sort);
+  // Official UMP Store is always pinned first, regardless of sort/shuffle.
+  const visible = applySort(filtered, sort).sort((a, b) => (b.isOfficial ? 1 : 0) - (a.isOfficial ? 1 : 0));
 
   return (
     <div className="page">
@@ -189,6 +190,9 @@ export default function Store() {
                       {/* Name + subscribed badge */}
                       <div style={{ fontWeight: 700, fontSize: "1.3rem", display: "flex", alignItems: "center", justifyContent: "center", gap: 4 }}>
                         {s.storeName || s.name}
+                        {s.isOfficial && (
+                          <i className="fas fa-shield-halved" style={{ color: "#3b82f6", fontSize: "0.9rem" }} title="Official UMP Store" />
+                        )}
                         {s.isSubscribed && (
                           <i className="fas fa-crown" style={{ color: "#f59e0b", fontSize: "0.9rem" }} title="UMP Subscribed" />
                         )}

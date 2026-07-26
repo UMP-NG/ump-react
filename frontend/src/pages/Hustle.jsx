@@ -126,7 +126,7 @@ function StoresTab({ search, navigate }) {
       (s.businessName || "").toLowerCase().includes(q) ||
       (s.description || s.bio || "").toLowerCase().includes(q)
     );
-  });
+  }).sort((a, b) => (b.isOfficial ? 1 : 0) - (a.isOfficial ? 1 : 0));
 
   return (
     <div style={{ padding: "10px 16px 100px" }}>
@@ -169,6 +169,11 @@ function StoresTab({ search, navigate }) {
                 </div>
                 <div style={{ padding: "26px 12px 14px", textAlign: "center" }}>
                   <div style={{ fontSize: "1.3rem", fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</div>
+                  {s.isOfficial && (
+                    <div style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: "1rem", color: "#3b82f6", marginTop: 3 }}>
+                      <i className="fas fa-shield-halved" style={{ fontSize: "0.85rem" }} /> Official UMP Store
+                    </div>
+                  )}
                   {s.isSubscribed && (
                     <div style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: "1rem", color: "#f59e0b", marginTop: 3 }}>
                       <i className="fas fa-crown" style={{ fontSize: "0.85rem" }} /> Subscribed

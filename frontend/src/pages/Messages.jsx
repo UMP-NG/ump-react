@@ -755,6 +755,7 @@ function MsgThread({ convo, onBack }) {
   const [sending, setSending]     = useState(false);
   const [authError, setAuthError] = useState(false);
   const [noticeDismissed, setNoticeDismissed] = useState(false);
+  const [replyingTo, setReplyingTo] = useState(null);
   const bottomRef  = useRef(null);
   const inputRef   = useRef(null);
 
@@ -818,6 +819,22 @@ function MsgThread({ convo, onBack }) {
     return () => socket.off("new_message", onNewMessage);
   }, [receiverId, mapMessage, user]);
 
+  // Live-update delivered/seen checkmarks as the other person receives/reads our messages.
+  useEffect(() => {
+    function onStatusUpdate({ messageIds, deliveredAt, isRead }) {
+      const idSet = new Set((messageIds || []).map((id) => id.toString()));
+      setMessages((prev) =>
+        prev.map((m) =>
+          idSet.has(m._id?.toString())
+            ? { ...m, deliveredAt: deliveredAt || m.deliveredAt, isRead: isRead || m.isRead }
+            : m
+        )
+      );
+    }
+    socket.on("message_status_update", onStatusUpdate);
+    return () => socket.off("message_status_update", onStatusUpdate);
+  }, []);
+
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
@@ -852,22 +869,50 @@ function MsgThread({ convo, onBack }) {
     e.preventDefault();
     if (!text.trim() || sending) return;
     const draft = text.trim();
+    const replyToId = replyingTo?._id;
+    const optimisticId = `opt_${Date.now()}`;
     const optimistic = {
-      _id: `opt_${Date.now()}`,
+      _id: optimisticId,
       text: draft,
       isOwn: true,
       isAdminMessage: iAmAdmin,
       createdAt: new Date().toISOString(),
+      replyTo: replyingTo ? { _id: replyingTo._id, text: replyingTo.text, isOwn: replyingTo.isOwn } : null,
     };
     setMessages((prev) => [...prev, optimistic]);
     setText("");
+    setReplyingTo(null);
     setSending(true);
     try {
-      await apiFetch("/api/messages/send", { method: "POST", body: { receiver: receiverId, text: draft } });
+      const res = await apiFetch("/api/messages/send", {
+        method: "POST",
+        body: { receiver: receiverId, text: draft, ...(replyToId && { replyTo: replyToId }) },
+      });
+      const real = res?.message;
+      if (real?._id) {
+        setMessages((prev) => prev.map((m) => (m._id === optimisticId ? { ...mapMessage(real), isOwn: true } : m)));
+      }
     } catch (err) {
       if (err?.status === 401) setAuthError(true);
     } finally {
       setSending(false);
+    }
+  }
+
+  function replyLabelFor(replyTo) {
+    if (!replyTo) return null;
+    if (typeof replyTo.isOwn === "boolean") return replyTo.isOwn ? "You" : (other.name || "them");
+    const senderId = typeof replyTo.sender === "object" ? replyTo.sender?._id?.toString() : replyTo.sender?.toString();
+    const isOwn = !!senderId && senderId !== receiverId?.toString();
+    return isOwn ? "You" : (other.name || "them");
+  }
+
+  function scrollToMessage(id) {
+    const el = document.getElementById(`msg-${id}`);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      el.style.background = "rgba(249,115,22,.12)";
+      setTimeout(() => { el.style.background = ""; }, 900);
     }
   }
 
@@ -1011,7 +1056,7 @@ function MsgThread({ convo, onBack }) {
           }
 
           return (
-            <div key={msg._id} style={{ display: "flex", flexDirection: "column", alignItems: isMe ? "flex-end" : "flex-start", gap: 2 }}>
+            <div key={msg._id} id={`msg-${msg._id}`} style={{ display: "flex", flexDirection: "column", alignItems: isMe ? "flex-end" : "flex-start", gap: 2, transition: "background .3s", borderRadius: 10 }}>
 
               {/* Date separator */}
               {showDateSep && msg.createdAt && (
@@ -1042,24 +1087,72 @@ function MsgThread({ convo, onBack }) {
                 </div>
               )}
 
-              <div style={{
-                background: bubbleBg, color: bubbleColor,
-                padding: isNegotiation ? 0 : "9px 14px",
-                borderRadius,
-                fontSize: "1.4rem", lineHeight: 1.5,
-                maxWidth: isNegotiation ? "min(340px, 86vw)" : "78%",
-                boxShadow: isAdminMsg ? "0 2px 8px rgba(30,41,59,.18)" : isNegotiation ? "none" : "0 1px 3px rgba(0,0,0,.07)",
-                wordBreak: "break-word",
-                border: isAdminMsg ? "1px solid rgba(245,158,11,.12)" : "none",
-              }}>
-                {isNegotiation ? (
-                  <NegotiationCard
-                    msg={msg}
-                    iAmSeller={iAmSellerOnThisCard}
-                    onRespond={handleNegotiationRespond}
-                    onApply={handleApplyPrice}
-                  />
-                ) : (msg.content || msg.text)}
+              <div style={{ display: "flex", alignItems: "flex-end", gap: 4, maxWidth: isNegotiation ? "min(340px, 86vw)" : "78%" }}>
+                {isMe && !isNegotiation && (
+                  <button
+                    type="button"
+                    onClick={() => setReplyingTo({ _id: msg._id, text: msg.content || msg.text, isOwn: msg.isOwn })}
+                    title="Reply"
+                    style={{ order: -1, background: "none", border: "none", cursor: "pointer", color: "var(--ink-4)", padding: 4, flexShrink: 0 }}
+                  >
+                    <i className="fas fa-reply" style={{ fontSize: "1.1rem" }} />
+                  </button>
+                )}
+
+                <div style={{ minWidth: 0 }}>
+                  {msg.replyTo && (
+                    <button
+                      type="button"
+                      onClick={() => scrollToMessage(msg.replyTo._id)}
+                      style={{
+                        display: "block", width: "100%", textAlign: "left", cursor: "pointer",
+                        background: isMe ? "rgba(255,255,255,.18)" : "var(--surface)",
+                        border: "none", borderLeft: `3px solid ${isMe ? "rgba(255,255,255,.5)" : "var(--accent)"}`,
+                        borderRadius: 8, padding: "5px 9px", marginBottom: 3,
+                        fontSize: "1.15rem", lineHeight: 1.3,
+                      }}
+                    >
+                      <div style={{ fontWeight: 700, color: isMe ? "rgba(255,255,255,.85)" : "var(--accent)", fontSize: "1.05rem" }}>
+                        {replyLabelFor(msg.replyTo)}
+                      </div>
+                      <div style={{
+                        color: isMe ? "rgba(255,255,255,.85)" : "var(--ink-3)",
+                        overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+                      }}>
+                        {msg.replyTo.text || "Attachment"}
+                      </div>
+                    </button>
+                  )}
+                  <div style={{
+                    background: bubbleBg, color: bubbleColor,
+                    padding: isNegotiation ? 0 : "9px 14px",
+                    borderRadius,
+                    fontSize: "1.4rem", lineHeight: 1.5,
+                    boxShadow: isAdminMsg ? "0 2px 8px rgba(30,41,59,.18)" : isNegotiation ? "none" : "0 1px 3px rgba(0,0,0,.07)",
+                    wordBreak: "break-word",
+                    border: isAdminMsg ? "1px solid rgba(245,158,11,.12)" : "none",
+                  }}>
+                    {isNegotiation ? (
+                      <NegotiationCard
+                        msg={msg}
+                        iAmSeller={iAmSellerOnThisCard}
+                        onRespond={handleNegotiationRespond}
+                        onApply={handleApplyPrice}
+                      />
+                    ) : (msg.content || msg.text)}
+                  </div>
+                </div>
+
+                {!isMe && !isNegotiation && (
+                  <button
+                    type="button"
+                    onClick={() => setReplyingTo({ _id: msg._id, text: msg.content || msg.text, isOwn: msg.isOwn })}
+                    title="Reply"
+                    style={{ background: "none", border: "none", cursor: "pointer", color: "var(--ink-4)", padding: 4, flexShrink: 0 }}
+                  >
+                    <i className="fas fa-reply" style={{ fontSize: "1.1rem" }} />
+                  </button>
+                )}
               </div>
 
               {/* Timestamp + admin indicator */}
@@ -1073,7 +1166,10 @@ function MsgThread({ convo, onBack }) {
                   </span>
                 )}
                 {isMe && !isAdminMsg && (
-                  <i className="fas fa-check" style={{ fontSize: "0.85rem", color: "var(--ink-4)" }} />
+                  <i
+                    className={`fas ${msg.isRead || msg.deliveredAt ? "fa-check-double" : "fa-check"}`}
+                    style={{ fontSize: "0.85rem", color: msg.isRead ? "#3b82f6" : "var(--ink-4)" }}
+                  />
                 )}
               </div>
             </div>
@@ -1081,6 +1177,32 @@ function MsgThread({ convo, onBack }) {
         })}
         <div ref={bottomRef} />
       </div>
+
+      {/* ── Reply preview strip ── */}
+      {replyingTo && (
+        <div style={{
+          display: "flex", alignItems: "center", gap: 10,
+          padding: "8px 14px", background: "var(--surface)",
+          borderTop: "1px solid var(--line)",
+        }}>
+          <div style={{ flex: 1, minWidth: 0, borderLeft: "3px solid var(--accent)", paddingLeft: 8 }}>
+            <div style={{ fontSize: "1.05rem", fontWeight: 700, color: "var(--accent)" }}>
+              Replying to {replyingTo.isOwn ? "yourself" : (other.name || "them")}
+            </div>
+            <div style={{ fontSize: "1.15rem", color: "var(--ink-3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {replyingTo.text || "Attachment"}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setReplyingTo(null)}
+            style={{ background: "none", border: "none", cursor: "pointer", color: "var(--ink-3)", padding: 6, flexShrink: 0 }}
+            aria-label="Cancel reply"
+          >
+            <i className="fas fa-xmark" style={{ fontSize: "1.3rem" }} />
+          </button>
+        </div>
+      )}
 
       {/* ── Input bar ── */}
       <form onSubmit={send} className="msg-input-bar">

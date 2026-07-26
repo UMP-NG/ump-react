@@ -64,8 +64,9 @@ export const approveIdentityVerification = async (req, res) => {
     if (!verReq) return res.status(404).json({ message: "Request not found or already approved" });
 
     // googleAccount: false ensures the account is no longer treated as limited even if the
-    // user originally signed in with Google.
-    await User.findByIdAndUpdate(verReq.user, { isVerified: true, googleAccount: false });
+    // user originally signed in with Google. identityVerified is the flag that actually
+    // unlocks selling (becomeSeller/becomeServiceProvider check this, not isVerified).
+    await User.findByIdAndUpdate(verReq.user, { isVerified: true, googleAccount: false, identityVerified: true });
 
     res.json({ message: "Verification approved and user account unlocked." });
 

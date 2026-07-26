@@ -49,7 +49,6 @@ import logger from "../utils/logger.js";
 // ===============================
 // SIGNUP WITH OTP
 // ===============================
-const UNILAG_EMAIL = /^[1-9]\d{7,}@live\.unilag\.edu\.ng$/i;
 
 export const signup = async (req, res) => {
   try {
@@ -58,13 +57,6 @@ export const signup = async (req, res) => {
     // Fix #11: enforce minimum password length at the backend
     if (!password || password.length < 8) {
       return res.status(400).json({ message: "Password must be at least 8 characters." });
-    }
-
-    // Enforce UNILAG email at application level (regular signup only)
-    if (!UNILAG_EMAIL.test(email)) {
-      return res.status(400).json({
-        message: "Only UNILAG student emails (@live.unilag.edu.ng) are allowed. Use Google sign-in for other accounts.",
-      });
     }
 
     const maskedEmail = email?.replace(/(?<=.{2}).(?=[^@]*@)/g, "*");
@@ -164,11 +156,6 @@ export const signupProvider = async (req, res) => {
     // Basic validation
     if (!email || !password) {
       return res.status(400).json({ message: "Email and password are required" });
-    }
-
-    // Fix #2: enforce UNILAG email on provider signup the same as regular signup
-    if (!UNILAG_EMAIL.test(email)) {
-      return res.status(400).json({ message: "Only UNILAG student emails (@live.unilag.edu.ng) are allowed." });
     }
 
     // Fix #11: minimum password length
@@ -403,12 +390,13 @@ export const login = async (req, res) => {
         email: existingUser.email,
         avatar: existingUser.avatar,
         isVerified: existingUser.isVerified,
+        identityVerified: existingUser.identityVerified,
         roles: existingUser.roles,
         bio: existingUser.bio,
         createdAt: existingUser.createdAt,
       },
     });
-    
+
   } catch (error) {
     // CRITICAL: Must always send response to avoid ERR_EMPTY_RESPONSE
     if (!res.headersSent) {
@@ -451,6 +439,7 @@ export const getMe = async (req, res) => {
         phone:           u.phone,
         address:         u.address,
         isVerified:      u.isVerified,
+        identityVerified: u.identityVerified,
         googleAccount:   u.googleAccount,
         schoolEmail:     u.schoolEmail,
         schoolEmailVerified: u.schoolEmailVerified,
