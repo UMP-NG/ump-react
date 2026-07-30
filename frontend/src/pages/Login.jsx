@@ -186,7 +186,7 @@ export default function Login() {
       setUser(data.user || data);
       navigate("/");
     } catch (err) {
-      setError(err.message || "Something went wrong");
+      setError(err.message || (tab === "signin" ? "Couldn't sign in. Check your connection and try again." : "Couldn't create your account. Check your connection and try again."));
     } finally {
       setLoading(false);
     }

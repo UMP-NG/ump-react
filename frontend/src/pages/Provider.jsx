@@ -116,7 +116,7 @@ export default function Provider() {
       }
       navigate(tab === "seller" ? "/seller-dashboard" : "/provider-analytics");
     } catch (err) {
-      setError(err.message || "Something went wrong. Please try again.");
+      setError(err.message || "Couldn't submit your application. Please try again.");
     } finally {
       setLoading(false);
     }

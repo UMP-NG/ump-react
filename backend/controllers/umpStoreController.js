@@ -2,6 +2,7 @@ import crypto from "crypto";
 import User from "../models/User.js";
 import Seller from "../models/Seller.js";
 import Product from "../models/Product.js";
+import cloudinary from "../config/cloudinary.js";
 import logger from "../utils/logger.js";
 
 const OFFICIAL_STORE_EMAIL = "official-store@ump.internal";
@@ -74,15 +75,36 @@ export const updateUmpStore = async (req, res) => {
   try {
     const seller = await getOrCreateOfficialSeller();
 
+    // Use typeof (not truthiness) so an intentional clear — admin deletes all
+    // the text and saves — actually takes effect instead of silently no-oping.
+    // Bounded with slice() to match the pattern used elsewhere in this codebase
+    // (see sellerController's pickup/address field updates).
     const { storeName, bio, description } = req.body;
-    if (storeName?.trim()) seller.storeName = storeName.trim();
-    if (bio?.trim()) seller.bio = bio.trim();
-    if (description?.trim()) seller.description = description.trim();
+    if (typeof storeName === "string") seller.storeName = storeName.trim().slice(0, 80);
+    if (typeof bio === "string") seller.bio = bio.trim().slice(0, 300);
+    if (typeof description === "string") seller.description = description.trim().slice(0, 1000);
 
+    // Destroy the previous Cloudinary asset when it's being replaced — otherwise
+    // every re-upload leaves the old logo/banner orphaned in storage forever.
+    // Fire-and-forget: a slow/failed delete shouldn't block saving the new asset.
     const logoFile = req.files?.logo?.[0];
     const bannerFile = req.files?.banner?.[0];
-    if (logoFile) seller.logo = { url: logoFile.path, publicId: logoFile.filename };
-    if (bannerFile) seller.banner = { url: bannerFile.path, publicId: bannerFile.filename };
+    if (logoFile) {
+      const oldPublicId = seller.logo?.publicId;
+      seller.logo = { url: logoFile.path, publicId: logoFile.filename };
+      if (oldPublicId) {
+        cloudinary.uploader.destroy(oldPublicId, { resource_type: "image" })
+          .catch((err) => logger.warn("updateUmpStore: failed to remove old logo asset:", err.message));
+      }
+    }
+    if (bannerFile) {
+      const oldPublicId = seller.banner?.publicId;
+      seller.banner = { url: bannerFile.path, publicId: bannerFile.filename };
+      if (oldPublicId) {
+        cloudinary.uploader.destroy(oldPublicId, { resource_type: "image" })
+          .catch((err) => logger.warn("updateUmpStore: failed to remove old banner asset:", err.message));
+      }
+    }
 
     await seller.save();
     res.json({ success: true, seller });

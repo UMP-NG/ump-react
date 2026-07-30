@@ -208,12 +208,37 @@ function EditStoreModal({ seller, onClose, onSave }) {
   const bannerRef = useRef(null);
   const logoRef = useRef(null);
 
+  // Escape closes the modal like any other dismissible dialog — without this,
+  // keyboard users have no way to back out short of Tab-ing to the X button.
+  // Skipped while the crop overlay is open — ImageCropModal owns Escape then,
+  // and it should cancel just the crop, not lose the whole form underneath.
+  useEffect(() => {
+    function onKeyDown(e) { if (e.key === 'Escape' && !cropSrc) onClose(); }
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [onClose, cropSrc]);
+
   function openCrop(file, target) {
     if (!file) return;
     const reader = new FileReader();
     reader.onload = () => { setCropSrc(reader.result); setCropTarget(target); };
     reader.readAsDataURL(file);
   }
+
+  // Revoke each preview's object URL whenever it's replaced by a new crop, and
+  // on unmount — the cleanup closes over the *previous* render's value, so this
+  // single effect covers both cases without every write site needing its own
+  // revoke call. Without this, every crop leaks a blob: URL for the page's life.
+  useEffect(() => {
+    return () => {
+      if (bannerPreview?.startsWith('blob:')) URL.revokeObjectURL(bannerPreview);
+    };
+  }, [bannerPreview]);
+  useEffect(() => {
+    return () => {
+      if (logoPreview?.startsWith('blob:')) URL.revokeObjectURL(logoPreview);
+    };
+  }, [logoPreview]);
 
   function handleCropConfirm(blob) {
     const file = new File([blob], `ump-store-${cropTarget}.jpg`, { type: 'image/jpeg' });
@@ -229,8 +254,10 @@ function EditStoreModal({ seller, onClose, onSave }) {
     setSaving(true);
     try {
       const fd = new FormData();
-      if (storeName.trim()) fd.append('storeName', storeName.trim());
-      if (bio.trim()) fd.append('bio', bio.trim());
+      // Always send the current value (even if empty) so clearing a field on
+      // purpose actually reaches the server instead of silently no-oping.
+      fd.append('storeName', storeName.trim());
+      fd.append('bio', bio.trim());
       if (bannerFile) fd.append('banner', bannerFile);
       if (logoFile) fd.append('logo', logoFile);
       await apiFetch('/api/admins/ump-store', { method: 'PUT', body: fd });
@@ -254,7 +281,7 @@ function EditStoreModal({ seller, onClose, onSave }) {
         />
       )}
       <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.6)', zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }} onClick={onClose}>
-        <div style={{ background: 'var(--white)', borderRadius: 12, maxWidth: 480, width: '100%', maxHeight: '90vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
+        <div role="dialog" aria-modal="true" aria-label="Edit UMP Store" style={{ background: 'var(--white)', borderRadius: 12, maxWidth: 480, width: '100%', maxHeight: '90vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
           <div style={{ padding: '18px 20px', borderBottom: '1px solid var(--line)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div style={{ fontWeight: 800, fontSize: '1.8rem' }}>Edit UMP Store</div>
             <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.6rem', color: 'var(--ink-3)' }}><i className="fa-solid fa-xmark"></i></button>

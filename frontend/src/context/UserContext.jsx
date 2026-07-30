@@ -28,10 +28,17 @@ export function UserProvider({ children }) {
   useEffect(() => {
     if (user) {
       const uid = user._id || user.id;
+      const register = () => socket.emit("register", uid);
+      // Re-register on every (re)connect — the socket.io client auto-reconnects
+      // after a network blip or tab sleep/wake without re-running this effect,
+      // so without this the client silently stops receiving real-time messages
+      // and notifications until the page is fully reloaded.
+      socket.on("connect", register);
       if (!socket.connected) socket.connect();
-      socket.emit("register", uid);
+      else register();
       // Subscribe to Web Push (asks permission on first login, silent on repeat)
       subscribeToPush().catch(() => {});
+      return () => socket.off("connect", register);
     } else if (user === null) {
       // null = confirmed logged out (not undefined = still loading)
       if (socket.connected) socket.disconnect();

@@ -41,25 +41,38 @@ export const sendMessage = async (req, res) => {
     }));
 
     // Only accept replyTo if the referenced message is actually visible to this
-    // sender — otherwise a crafted ObjectId could pull another user's private
-    // message text/attachments into this thread via the populate below.
+    // sender AND belongs to the conversation this message is being sent into —
+    // otherwise a crafted ObjectId from an unrelated thread the sender is a party
+    // to could pull its text/attachments into a completely different conversation.
     let replyToId = null;
     if (mongoose.isValidObjectId(replyTo)) {
       const parent = await Message.findById(replyTo).select("sender receiver").lean();
       if (parent) {
         const myId = req.user._id.toString();
-        const isDirectParty = parent.sender.toString() === myId || parent.receiver.toString() === myId;
-        let isSharedAdminThread = false;
-        if (!isDirectParty && req.user.roles?.includes("admin")) {
+        const parentSenderId = parent.sender.toString();
+        const parentReceiverId = parent.receiver.toString();
+        const receiverId = receiver.toString();
+        const isDirectParty = parentSenderId === myId || parentReceiverId === myId;
+
+        let belongsToThisConversation = false;
+        if (isDirectParty) {
+          const otherParty = parentSenderId === myId ? parentReceiverId : parentSenderId;
+          belongsToThisConversation = otherParty === receiverId;
+        } else if (req.user.roles?.includes("admin")) {
           // Admins share a support inbox — allow replying within any user↔admin thread,
           // matching the visibility rule already used in getUserMessages/getUserConversations.
+          // The thread's identity is the non-admin party, which must match who this
+          // new message is actually being sent to.
           const [senderIsAdmin, receiverIsAdmin] = await Promise.all([
             User.exists({ _id: parent.sender, roles: "admin" }),
             User.exists({ _id: parent.receiver, roles: "admin" }),
           ]);
-          isSharedAdminThread = !!(senderIsAdmin || receiverIsAdmin);
+          if (senderIsAdmin || receiverIsAdmin) {
+            const nonAdminParty = senderIsAdmin ? parentReceiverId : parentSenderId;
+            belongsToThisConversation = nonAdminParty === receiverId;
+          }
         }
-        if (isDirectParty || isSharedAdminThread) replyToId = replyTo;
+        if (belongsToThisConversation) replyToId = replyTo;
       }
     }
 

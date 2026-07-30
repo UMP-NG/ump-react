@@ -29,7 +29,7 @@ export default function ForgotPassword() {
       setSent(true);
       setCooldown(COOLDOWN);
     } catch (err) {
-      setError(err.message || "Something went wrong");
+      setError(err.message || "Couldn't send the reset link. Check your email address and try again.");
     } finally {
       setLoading(false);
     }

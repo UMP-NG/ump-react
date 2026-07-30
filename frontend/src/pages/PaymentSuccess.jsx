@@ -129,7 +129,7 @@ export default function PaymentSuccess() {
         </div>
         <h1 style={{ fontSize: "2.8rem", fontWeight: 800, letterSpacing: "-0.02em", marginBottom: 8 }}>Payment failed</h1>
         <p style={{ color: "var(--ink-2)", fontSize: "1.4rem", marginBottom: 32 }}>
-          Something went wrong. Your order has been saved — try paying again from your orders page.
+          Payment failed. Your order has been saved — try paying again from your orders page.
         </p>
         <div style={{ maxWidth: 360, width: "100%" }}>
           <button className="btn btn-primary btn-block btn-lg" onClick={() => navigate("/orders")}>View my orders</button>

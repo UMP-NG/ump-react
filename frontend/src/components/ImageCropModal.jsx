@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import Cropper from "react-easy-crop";
 import getCroppedImg from "../utils/cropImage";
 
@@ -7,8 +7,35 @@ export default function ImageCropModal({ src, aspect = 1, onConfirm, onCancel, t
   const [zoom, setZoom]               = useState(1);
   const [croppedArea, setCroppedArea] = useState(null);
   const [busy, setBusy]               = useState(false);
+  const containerRef = useRef(null);
 
   const onCropComplete = useCallback((_, pixels) => setCroppedArea(pixels), []);
+
+  // This overlay covers the whole screen, but without moving focus into it a
+  // keyboard user's focus can be left on a control in the modal underneath
+  // (e.g. the "Save" button) — letting Enter activate it while the crop is
+  // still in progress, even though pointer clicks are visually blocked.
+  // Trapping Tab in here and restoring focus on close closes that gap.
+  useEffect(() => {
+    const el = containerRef.current;
+    const previouslyFocused = document.activeElement;
+    el?.focus();
+    function onKeyDown(e) {
+      if (e.key === "Escape") { onCancel(); return; }
+      if (e.key !== "Tab" || !el) return;
+      const focusable = el.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last  = focusable[focusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      if (previouslyFocused instanceof HTMLElement) previouslyFocused.focus();
+    };
+  }, [onCancel]);
 
   async function handleConfirm() {
     if (!croppedArea) return;
@@ -44,7 +71,14 @@ export default function ImageCropModal({ src, aspect = 1, onConfirm, onCancel, t
   }
 
   return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 500, display: "flex", flexDirection: "column", background: "rgba(0,0,0,.82)" }}>
+    <div
+      ref={containerRef}
+      role="dialog"
+      aria-modal="true"
+      aria-label={title}
+      tabIndex={-1}
+      style={{ position: "fixed", inset: 0, zIndex: 500, display: "flex", flexDirection: "column", background: "rgba(0,0,0,.82)", outline: "none" }}
+    >
       {/* Header */}
       <div style={{ padding: "14px 16px", display: "flex", alignItems: "center", justifyContent: "space-between", background: "var(--navy-900, #0f172a)", flexShrink: 0 }}>
         <div style={{ fontSize: "1.5rem", fontWeight: 700, color: "#fff" }}>{title}</div>

@@ -983,7 +983,7 @@ body {
   flex-shrink: 0;
 }
 .msg-input-pill {
-  flex: 1; display: flex; align-items: center;
+  flex: 1; display: flex; align-items: flex-end;
   background: var(--surface);
   border-radius: 22px; padding: 0 14px;
   border: 1.5px solid var(--line);
@@ -993,11 +993,14 @@ body {
 .msg-input-pill:focus-within { border-color: var(--accent); }
 .msg-input-pill.admin { border-color: rgba(245,158,11,.4); }
 .msg-input-pill.admin:focus-within { border-color: #f59e0b; }
-.msg-input-pill input {
+.msg-input-pill textarea {
   flex: 1; border: none; background: transparent;
-  outline: none; font-size: 1.4rem;
+  outline: none; font-size: 1.4rem; line-height: 1.4;
   font-family: var(--font-sans); color: var(--ink-1);
   padding: 10px 0;
+  resize: none;
+  max-height: 120px;
+  overflow-y: auto;
 }
 .msg-send-btn {
   width: 44px; height: 44px; border-radius: 50%;

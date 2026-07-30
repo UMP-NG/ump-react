@@ -35,7 +35,7 @@ export default function NegotiationModal({ itemType, itemId, itemName, itemImage
       } else if (err?.status === 409) {
         setError("You already have a pending negotiation for this item. Check your messages.");
       } else {
-        setError(err?.body?.message || err?.message || "Something went wrong. Try again.");
+        setError(err?.body?.message || err?.message || "Couldn't send your offer. Check your connection and try again.");
       }
     } finally {
       setLoading(false);

@@ -81,8 +81,13 @@ export default function Home() {
   const [followingFeed, setFollowingFeed] = useState([]);
   const [activeCat, setActiveCat] = useState(0);
   const [slide, setSlide] = useState(0);
+  const [totalProducts, setTotalProducts] = useState(null);
+  const [totalSellers, setTotalSellers] = useState(null);
   const slideTimer = useRef(null);
 
+  // Fallback hero copy only runs when admin hasn't configured real slides (below).
+  // Real counts replace the placeholder numbers once they load, so we never show
+  // a made-up stat — see totalProducts/totalSellers fetches further down.
   const heroSlides = useMemo(() => {
     const active = configSlides?.filter(s => s.on && (s.title || s.image?.url)) || [];
     if (active.length > 0) {
@@ -95,8 +100,16 @@ export default function Home() {
         ctaPath: s.url || '/',
       }));
     }
-    return SLIDES;
-  }, [configSlides]);
+    return SLIDES.map((s, i) => {
+      if (i === 0) {
+        return { ...s, tag: totalProducts ? `UNILAG · ${totalProducts.toLocaleString()} active listings` : "UNILAG · Verified student marketplace" };
+      }
+      if (i === 1) {
+        return { ...s, tag: totalSellers ? `${totalSellers.toLocaleString()} active sellers & providers` : "Verified UNILAG talent" };
+      }
+      return s;
+    });
+  }, [configSlides, totalProducts, totalSellers]);
 
   function goSlide(idx) {
     setSlide(idx);
@@ -123,7 +136,10 @@ export default function Home() {
   // which would reset productsLoading and replace cards with skeletons mid-session.
   useEffect(() => {
     apiFetch("/api/products?limit=8&sort=random")
-      .then((d) => setProducts(d.products || d || []))
+      .then((d) => {
+        setProducts(d.products || d || []);
+        if (typeof d.total === "number") setTotalProducts(d.total);
+      })
       .catch(() => {})
       .finally(() => setProductsLoading(false));
 
@@ -144,6 +160,7 @@ export default function Home() {
     apiFetch("/api/sellers")
       .then((data) => {
         const list = Array.isArray(data) ? data : data?.sellers || [];
+        setTotalSellers(list.length);
         if (list.length > 0) {
           setTopSellers(list.slice(0, 4).map((s) => ({
             name: s.storeName || s.name,
@@ -257,6 +274,26 @@ export default function Home() {
                 : <i className={`fas fa-${c.icon}`} />}
             </div>
             <span>{c.label}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Trust & safety — surfaces the escrow/verification/dispute infra that already
+          exists on the backend but wasn't visible anywhere on the homepage. */}
+      <div style={{ margin: "20px 16px 0", display: "flex", flexWrap: "wrap", gap: 10 }}>
+        {[
+          { icon: "shield-halved", color: "#16a34a", t: "Secure escrow payments", s: "Your money is held safely until you confirm delivery." },
+          { icon: "user-check",    color: "#2563eb", t: "Verified UNILAG students", s: "Every buyer and seller signs up with a real student account." },
+          { icon: "scale-balanced", color: "#f59e0b", t: "Report & dispute support", s: "If something goes wrong, our team steps in to help resolve it." },
+        ].map((f) => (
+          <div key={f.t} className="card" style={{ flex: "1 1 220px", padding: 16, display: "flex", gap: 12, alignItems: "flex-start" }}>
+            <div style={{ width: 38, height: 38, borderRadius: 12, background: `${f.color}1a`, color: f.color, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1.5rem", flexShrink: 0 }}>
+              <i className={`fas fa-${f.icon}`} />
+            </div>
+            <div>
+              <div style={{ fontWeight: 700, fontSize: "1.3rem", marginBottom: 2 }}>{f.t}</div>
+              <div style={{ fontSize: "1.15rem", color: "var(--ink-2)", lineHeight: 1.4 }}>{f.s}</div>
+            </div>
           </div>
         ))}
       </div>

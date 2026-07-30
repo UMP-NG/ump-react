@@ -882,6 +882,7 @@ function MsgThread({ convo, onBack }) {
     setMessages((prev) => [...prev, optimistic]);
     setText("");
     setReplyingTo(null);
+    if (inputRef.current) inputRef.current.style.height = "auto"; // collapse the grown textarea back to one line
     setSending(true);
     try {
       const res = await apiFetch("/api/messages/send", {
@@ -1215,11 +1216,23 @@ function MsgThread({ convo, onBack }) {
           {iAmAdmin && (
             <i className="fa-solid fa-shield-halved" style={{ color: "#f59e0b", fontSize: "1.1rem", marginRight: 8, flexShrink: 0 }} />
           )}
-          <input
+          <textarea
             ref={inputRef}
+            rows={1}
             placeholder={iAmAdmin ? "Message as UMP Admin…" : "Type a message…"}
             value={text}
-            onChange={(e) => setText(e.target.value)}
+            onChange={(e) => {
+              setText(e.target.value);
+              e.target.style.height = "auto";
+              e.target.style.height = Math.min(e.target.scrollHeight, 120) + "px";
+            }}
+            onKeyDown={(e) => {
+              // Enter sends; Shift+Enter inserts a newline (standard chat-app convention)
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                send(e);
+              }
+            }}
           />
         </div>
         <button

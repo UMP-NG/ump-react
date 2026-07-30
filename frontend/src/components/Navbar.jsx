@@ -3,7 +3,6 @@ import { useNavigate, useLocation } from "react-router-dom";
 import Logo from "./Logo";
 import ProfilePopup from "./Profilepopup";
 import { useUser } from "../context/UserContext";
-import { useToast } from "../context/ToastContext";
 import { apiFetch } from "../utils/api";
 import { socket } from "../utils/socket";
 
@@ -77,7 +76,6 @@ export default function Navbar({ frosted = false, dark = false }) {
   const { pathname } = useLocation();
   const { user } = useUser();
   const [showProfile, setShowProfile] = useState(false);
-  const showToast = useToast();
   const [isDark, toggleTheme] = useTheme();
   const [search, setSearch] = useState("");
   const [mobSearch, setMobSearch] = useState(false);
@@ -104,18 +102,18 @@ export default function Navbar({ frosted = false, dark = false }) {
       .catch(() => {});
   }, [user]);
 
-  // Real-time: bump badge and show toast for incoming messages
+  // Real-time: bump the bell badge for incoming notifications.
+  // NotificationBanner (mounted once in App.jsx) already shows the visible
+  // toast/OS notification for every "new_notification" event — showing one
+  // here too produced two overlapping toasts for a single incoming message.
   useEffect(() => {
-    function onNewNotif(notif) {
+    function onNewNotif() {
       if (!user) return;
       setNotifCount((c) => c + 1);
-      if (notif?.type === "message" && !pathname.startsWith("/messages")) {
-        showToast(notif.title || "New message", "info");
-      }
     }
     socket.on("new_notification", onNewNotif);
     return () => socket.off("new_notification", onNewNotif);
-  }, [user, pathname, showToast, socket]);
+  }, [user]);
 
   // Reset badge when user marks all as read on the Notifications page
   useEffect(() => {
