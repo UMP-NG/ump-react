@@ -7,6 +7,7 @@ import Skel from "../components/Skel";
 import { apiFetch } from "../utils/api";
 import { useUser } from "../context/UserContext";
 import { socket } from "../utils/socket";
+import useFocusTrap from "../hooks/useFocusTrap";
 
 // Issue type → supportRole mapping
 const ISSUE_TYPES = [
@@ -19,19 +20,20 @@ const ISSUE_TYPES = [
 function UMPContactPicker({ onSelect, onClose }) {
   const [step, setStep] = useState("pick"); // "pick" | "loading" | "error"
   const [error, setError] = useState("");
+  const dialogRef = useFocusTrap(onClose);
 
-  // Escape closes the modal — without this, keyboard users have no way to back
-  // out short of Tab-ing all the way to the X button.
-  useEffect(() => {
-    function onKeyDown(e) { if (e.key === "Escape") onClose(); }
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [onClose]);
+  // If the user dismisses the modal while `choose` is still awaiting the network,
+  // the request can resolve after unmount — without this guard it would call
+  // onSelect() late and silently open a support thread the user never confirmed,
+  // or set state on an unmounted component.
+  const cancelledRef = useRef(false);
+  useEffect(() => () => { cancelledRef.current = true; }, []);
 
   async function choose(issueType) {
     setStep("loading");
     try {
       const admins = await apiFetch(`/api/admins/support/team?role=${issueType.role}`);
+      if (cancelledRef.current) return;
       const list = Array.isArray(admins) ? admins : [];
       if (list.length === 0) {
         setError(`No ${issueType.label} support admin is currently available. Please try again later.`);
@@ -42,6 +44,7 @@ function UMPContactPicker({ onSelect, onClose }) {
       const admin = list[Math.floor(Math.random() * list.length)];
       onSelect({ _id: admin._id, name: admin.name || "UMP Support", avatar: admin.avatar, issueType: issueType.label });
     } catch {
+      if (cancelledRef.current) return;
       setError("Couldn't reach support. Please try again.");
       setStep("error");
     }
@@ -49,7 +52,7 @@ function UMPContactPicker({ onSelect, onClose }) {
 
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,.45)" }} onClick={onClose}>
-      <div role="dialog" aria-modal="true" aria-label="Contact UMP Support" style={{ background: "var(--paper)", borderRadius: 16, width: "min(420px, 92vw)", overflow: "hidden", boxShadow: "0 20px 60px rgba(0,0,0,.25)" }} onClick={e => e.stopPropagation()}>
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Contact UMP Support" tabIndex={-1} style={{ background: "var(--paper)", borderRadius: 16, width: "min(420px, 92vw)", overflow: "hidden", boxShadow: "0 20px 60px rgba(0,0,0,.25)", outline: "none" }} onClick={e => e.stopPropagation()}>
         {/* Header */}
         <div style={{ background: "#1e293b", padding: "20px 20px 16px", display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
           <div>

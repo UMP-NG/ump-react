@@ -216,7 +216,10 @@ export async function apiFetch(path, options = {}) {
     // /api/messages — without busting this, the cached unread-count/conversations
     // GET responses keep serving the pre-read value for up to a minute (this
     // cache is keyed only by path, with no awareness of read-state changes).
-    _invalidate("/api/messages");
+    // Scoped to actual message writes so an unrelated write elsewhere (e.g.
+    // editing a product) doesn't force a needless refetch of unread-count on
+    // every navigation afterward.
+    if (path.startsWith("/api/messages")) _invalidate("/api/messages");
   }
 
   try {

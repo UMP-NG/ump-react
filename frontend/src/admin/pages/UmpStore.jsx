@@ -3,6 +3,7 @@ import Thumb from '../components/Thumb';
 import { apiFetch } from '../../utils/api';
 import { CreateProductModal } from './Products';
 import ImageCropModal from '../../components/ImageCropModal';
+import useFocusTrap from '../../hooks/useFocusTrap';
 
 export default function UmpStore() {
   const [seller, setSeller]     = useState(null);
@@ -208,15 +209,10 @@ function EditStoreModal({ seller, onClose, onSave }) {
   const bannerRef = useRef(null);
   const logoRef = useRef(null);
 
-  // Escape closes the modal like any other dismissible dialog — without this,
-  // keyboard users have no way to back out short of Tab-ing to the X button.
-  // Skipped while the crop overlay is open — ImageCropModal owns Escape then,
-  // and it should cancel just the crop, not lose the whole form underneath.
-  useEffect(() => {
-    function onKeyDown(e) { if (e.key === 'Escape' && !cropSrc) onClose(); }
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [onClose, cropSrc]);
+  // Traps Tab/Escape inside this modal — disabled while the crop overlay is on
+  // top (ImageCropModal runs its own trap then; both being active at once would
+  // let this modal's trap steal focus back to its own covered controls).
+  const dialogRef = useFocusTrap(onClose, !cropSrc);
 
   function openCrop(file, target) {
     if (!file) return;
@@ -281,7 +277,7 @@ function EditStoreModal({ seller, onClose, onSave }) {
         />
       )}
       <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.6)', zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }} onClick={onClose}>
-        <div role="dialog" aria-modal="true" aria-label="Edit UMP Store" style={{ background: 'var(--white)', borderRadius: 12, maxWidth: 480, width: '100%', maxHeight: '90vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
+        <div ref={dialogRef} role="dialog" aria-modal="true" aria-label="Edit UMP Store" tabIndex={-1} style={{ background: 'var(--white)', borderRadius: 12, maxWidth: 480, width: '100%', maxHeight: '90vh', overflowY: 'auto', outline: 'none' }} onClick={e => e.stopPropagation()}>
           <div style={{ padding: '18px 20px', borderBottom: '1px solid var(--line)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div style={{ fontWeight: 800, fontSize: '1.8rem' }}>Edit UMP Store</div>
             <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.6rem', color: 'var(--ink-3)' }}><i className="fa-solid fa-xmark"></i></button>
