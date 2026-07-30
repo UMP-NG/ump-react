@@ -212,6 +212,11 @@ export async function apiFetch(path, options = {}) {
     _invalidate("/api/listings");
     _invalidate("/api/categories");
     _invalidate("/api/cart");
+    // Marking a conversation read (or sending a message) is a PUT/POST under
+    // /api/messages — without busting this, the cached unread-count/conversations
+    // GET responses keep serving the pre-read value for up to a minute (this
+    // cache is keyed only by path, with no awareness of read-state changes).
+    _invalidate("/api/messages");
   }
 
   try {

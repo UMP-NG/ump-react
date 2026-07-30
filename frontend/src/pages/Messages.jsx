@@ -20,6 +20,14 @@ function UMPContactPicker({ onSelect, onClose }) {
   const [step, setStep] = useState("pick"); // "pick" | "loading" | "error"
   const [error, setError] = useState("");
 
+  // Escape closes the modal — without this, keyboard users have no way to back
+  // out short of Tab-ing all the way to the X button.
+  useEffect(() => {
+    function onKeyDown(e) { if (e.key === "Escape") onClose(); }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
+
   async function choose(issueType) {
     setStep("loading");
     try {
@@ -41,7 +49,7 @@ function UMPContactPicker({ onSelect, onClose }) {
 
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", background: "rgba(0,0,0,.45)" }} onClick={onClose}>
-      <div style={{ background: "var(--paper)", borderRadius: 16, width: "min(420px, 92vw)", overflow: "hidden", boxShadow: "0 20px 60px rgba(0,0,0,.25)" }} onClick={e => e.stopPropagation()}>
+      <div role="dialog" aria-modal="true" aria-label="Contact UMP Support" style={{ background: "var(--paper)", borderRadius: 16, width: "min(420px, 92vw)", overflow: "hidden", boxShadow: "0 20px 60px rgba(0,0,0,.25)" }} onClick={e => e.stopPropagation()}>
         {/* Header */}
         <div style={{ background: "#1e293b", padding: "20px 20px 16px", display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
           <div>

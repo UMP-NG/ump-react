@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useNavigate, Navigate } from "react-router-dom";
 import Logo from "../components/Logo";
 import { apiFetch } from "../utils/api";
@@ -338,6 +338,15 @@ function SellerForm({ seller, setSeller }) {
   function pickBanner(e) { openCrop(e.target.files[0], "banner"); e.target.value = ""; }
   function pickLogo(e)   { openCrop(e.target.files[0], "logo");   e.target.value = ""; }
 
+  // Revoke each preview's object URL whenever it's replaced or this form unmounts —
+  // otherwise every crop leaks a blob: URL for the life of the page.
+  useEffect(() => {
+    return () => { if (bannerPreview) URL.revokeObjectURL(bannerPreview); };
+  }, [bannerPreview]);
+  useEffect(() => {
+    return () => { if (logoPreview) URL.revokeObjectURL(logoPreview); };
+  }, [logoPreview]);
+
   function handleCropConfirm(blob) {
     const url = URL.createObjectURL(blob);
     const file = new File([blob], `${cropTarget}.jpg`, { type: "image/jpeg" });
@@ -502,6 +511,12 @@ function ProviderForm({ service, setService }) {
     reader.readAsDataURL(file);
     e.target.value = "";
   }
+
+  // Revoke the previous preview's object URL whenever it's replaced or this
+  // form unmounts — otherwise every crop leaks a blob: URL for the page's life.
+  useEffect(() => {
+    return () => { if (avatarPreview) URL.revokeObjectURL(avatarPreview); };
+  }, [avatarPreview]);
 
   function handleCropConfirm(blob) {
     setAvatarPreview(URL.createObjectURL(blob));
