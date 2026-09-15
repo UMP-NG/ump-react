@@ -55,7 +55,7 @@ import mongoose from "mongoose";
 import { globalLimiter } from "./middleware/rateLimits.js";
 
 // 🧩 ROUTES
-import authRoutes from "./routes/authroutes.js";
+import authRoutes from "./routes/authRoutes.js";
 import productRoutes from "./routes/productRoutes.js";
 import reviewRoutes from "./routes/reviewRoutes.js";
 import followRoutes from "./routes/followRoutes.js";
@@ -66,7 +66,6 @@ import serviceRoutes from "./routes/serviceRoutes.js";
 import listingRoutes from "./routes/listingRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
 import userRoutes from "./routes/userRoutes.js";
-import searchRoutes from "./routes/searchRoutes.js";
 import roleRoutes from "./routes/userRoleRoutes.js";
 import categoryRoutes from "./routes/categoryRoutes.js";
 import cartRoutes from "./routes/cartRoutes.js";
@@ -88,6 +87,7 @@ import adRoutes       from "./routes/adRoutes.js";
 import deliveryRoutes from "./routes/deliveryRoutes.js";
 import walletRoutes   from "./routes/walletRoutes.js";
 import visitRoutes    from "./routes/visitRoutes.js";
+import feedbackRoutes from "./routes/feedbackRoutes.js";
 
 const app = express();
 const __filename = fileURLToPath(import.meta.url);
@@ -120,8 +120,14 @@ const allowedOrigins = [
   "https://myump.com.ng",
 ];
 
-// Allow all Vercel preview + production deployments for this project
-const VERCEL_PATTERN = /^https:\/\/ump-react[\w-]*\.vercel\.app$/;
+// Removed: a wildcard `*.vercel.app` CORS allowance used to live here. Vercel
+// subdomains are allocated first-come-first-served by project name, so anyone
+// could register a matching name and pass it — combined with credentials:true
+// and a cross-site auth cookie, that let an attacker's own page read
+// authenticated API responses. None of the hardcoded allowedOrigins below are
+// actually vercel.app, so it wasn't in active use. If a Vercel deployment is
+// ever needed, add its exact, known origin to allowedOrigins instead of a
+// pattern.
 
 // 🗜️ Enable gzip compression for all responses
 app.use(compression());
@@ -136,9 +142,7 @@ app.use(
       } else {
         // Normalize origin by removing trailing slash for comparison
         const normalizedOrigin = origin.replace(/\/$/, '');
-        const isAllowed =
-          VERCEL_PATTERN.test(normalizedOrigin) ||
-          allowedOrigins.some(allowed => allowed.replace(/\/$/, '') === normalizedOrigin);
+        const isAllowed = allowedOrigins.some(allowed => allowed.replace(/\/$/, '') === normalizedOrigin);
 
         if (isAllowed) {
           logger.debug("✅ CORS allowed:", origin);
@@ -313,7 +317,6 @@ app.use("/api/sellers", sellerRoutes);
 app.use("/api/services", serviceRoutes);
 app.use("/api/listings", listingRoutes);
 app.use("/api/users", userRoutes);
-app.use("/api/search", searchRoutes);
 app.use("/api/users", roleRoutes);
 app.use("/api/categories", categoryRoutes);
 app.use("/api/cart", cartRoutes);
@@ -332,6 +335,7 @@ app.use("/api/ads",         adRoutes);
 app.use("/api/delivery",    deliveryRoutes);
 app.use("/api/wallet",      walletRoutes);
 app.use("/api/track",       visitRoutes);
+app.use("/api/feedback",    feedbackRoutes);
 
 // ── Health check ─────────────────────────────────────────────────────────────
 // Used by Render's health-check pings and uptime monitors.
@@ -346,12 +350,6 @@ app.get("/api/health", (req, res) => {
     ts:     new Date().toISOString(),
   });
 });
-
-// Sentry must capture errors before the generic error handler
-if (process.env.SENTRY_DSN) Sentry.setupExpressErrorHandler(app);
-
-// 🧯 Centralized error handler
-app.use(errorHandler);
 
 // ----------------------------
 // 🔗 CATCH-ALL ROUTES
@@ -491,4 +489,11 @@ app.get(/./, (req, res) => {
   }
   res.status(404).json({ message: "Not found" });
 });
+
+// Error-handling middleware must be registered LAST — Express only routes an
+// error to handlers registered after the point where it was thrown/next(err)'d.
+// Sentry must still capture it before the generic handler formats the response.
+if (process.env.SENTRY_DSN) Sentry.setupExpressErrorHandler(app);
+app.use(errorHandler);
+
 export default app;

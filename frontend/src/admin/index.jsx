@@ -25,6 +25,7 @@ import Verifications from './pages/Verifications';
 import Placeholder from './pages/Placeholder';
 import Coupons from './pages/Coupons';
 import Ads from './pages/Ads';
+import Feedback from './pages/Feedback';
 
 export default function AdminRoutes() {
   return (
@@ -54,6 +55,7 @@ export default function AdminRoutes() {
           <Route path="admins"     element={<Admins />} />
           <Route path="coupons"    element={<Coupons />} />
           <Route path="ads"        element={<Ads />} />
+          <Route path="feedback"   element={<Feedback />} />
         </Route>
       </Route>
     </Routes>

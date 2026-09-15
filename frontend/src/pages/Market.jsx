@@ -7,6 +7,8 @@ import ProductCard from "../components/ProductCard";
 import Ph from "../components/Ph";
 import { apiFetch } from "../utils/api";
 import Skel from "../components/Skel";
+import DiscoverySurveyModal from "../components/DiscoverySurveyModal";
+import { useDiscoverySurvey } from "../hooks/useDiscoverySurvey";
 
 
 const SORT_OPTIONS = [
@@ -39,6 +41,7 @@ export default function Market() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const PAGE_SIZE = 52;
+  const { show: showSurvey, dismiss: dismissSurvey } = useDiscoverySurvey();
   // Track previous filter values so we can detect changes and reset page atomically
   // within a single effect, avoiding a redundant fetch at the stale page number.
   const prevFilterRef = useRef({ cat, sort, condition });
@@ -400,6 +403,7 @@ export default function Market() {
 
       <Footer />
       <BottomNav />
+      {showSurvey && <DiscoverySurveyModal context="market" onClose={dismissSurvey} />}
     </div>
   );
 }

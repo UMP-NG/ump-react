@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import Payout from "../models/Payout.js";
 import Order from "../models/Order.js";
 import User from "../models/User.js";
@@ -44,8 +45,9 @@ export const requestPayout = async (req, res) => {
 
     const userId = req.user._id;
     const roles = req.user.roles || [];
-    const { amount, method, accountDetails } = req.body;
-    if (!amount || amount <= 0)
+    const { method, accountDetails } = req.body;
+    const amount = Number(req.body.amount);
+    if (!Number.isFinite(amount) || amount <= 0)
       return res.status(400).json({ message: "Invalid amount" });
 
     const config = await Config.findOne().select("fees").lean();
@@ -62,33 +64,54 @@ export const requestPayout = async (req, res) => {
 
     if (roles.includes("seller")) {
       payoutData.seller = userId;
-
-      const seller = await Seller.findOne({ user: userId });
-      if (!seller) return res.status(404).json({ message: "Seller profile not found" });
-      if ((seller.pendingPayout || 0) < amount)
-        return res.status(400).json({ message: "Insufficient wallet balance" });
-
-      // Deduct from wallet immediately
-      await Seller.findOneAndUpdate(
-        { user: userId },
-        { $inc: { pendingPayout: -amount } }
-      );
-
-      // Payout is always saved as "pending" — admin reviews and processes manually
     } else if (roles.includes("service_provider")) {
-      // Atomic check-and-deduct — prevents race condition double-spend
-      const updated = await User.findOneAndUpdate(
-        { _id: userId, earningsBalance: { $gte: amount } },
-        { $inc: { earningsBalance: -amount } },
-        { new: false }
-      );
-      if (!updated) return res.status(400).json({ message: "Insufficient earnings balance" });
       payoutData.provider = userId;
     } else {
       return res.status(403).json({ message: "Unauthorized role" });
     }
 
-    const payout = await Payout.create(payoutData);
+    // Deduct the balance and create the Payout record together in one
+    // transaction — otherwise a failure in Payout.create() (e.g. a
+    // validation error) after the balance was already deducted would leave
+    // the seller's money gone with no payout record to show for it.
+    const session = await mongoose.startSession();
+    let payout;
+    try {
+      await session.withTransaction(async () => {
+        if (roles.includes("seller")) {
+          const updatedSeller = await Seller.findOneAndUpdate(
+            { user: userId, pendingPayout: { $gte: amount } },
+            { $inc: { pendingPayout: -amount } },
+            { new: false, session }
+          );
+          if (!updatedSeller) {
+            const exists = await Seller.exists({ user: userId }).session(session);
+            const err = new Error(exists ? "Insufficient wallet balance" : "Seller profile not found");
+            err.statusCode = exists ? 400 : 404;
+            throw err;
+          }
+        } else {
+          const updated = await User.findOneAndUpdate(
+            { _id: userId, earningsBalance: { $gte: amount } },
+            { $inc: { earningsBalance: -amount } },
+            { new: false, session }
+          );
+          if (!updated) {
+            const err = new Error("Insufficient earnings balance");
+            err.statusCode = 400;
+            throw err;
+          }
+        }
+
+        const created = await Payout.create([payoutData], { session });
+        payout = created[0];
+      });
+    } catch (txErr) {
+      if (txErr.statusCode) return res.status(txErr.statusCode).json({ message: txErr.message });
+      throw txErr;
+    } finally {
+      await session.endSession();
+    }
 
     // Notify the seller
     notify(userId, {
@@ -174,11 +197,7 @@ export const getPayoutSummary = async (req, res) => {
     }
 
     // For other roles: fall back to aggregation with a timeout guard
-    const role = roles.includes("walker")
-      ? "walker"
-      : roles.includes("service_provider")
-      ? "provider"
-      : null;
+    const role = roles.includes("service_provider") ? "provider" : null;
 
     if (!role) return res.status(403).json({ message: "Unauthorized role" });
 

@@ -26,7 +26,7 @@ export default function HostelDetail() {
   const [loading, setLoading] = useState(true);
   const [activeImg, setActiveImg] = useState(0);
   const [bookingOpen, setBookingOpen] = useState(false);
-  const [booking, setBooking] = useState({ name: "", phone: "", message: "", date: "" });
+  const [booking, setBooking] = useState({ name: "", phone: "", message: "", date: "", timeSlot: "" });
   const [booking_loading, setBookingLoading] = useState(false);
   const [saved, setSaved] = useState(false);
   const [showReport, setShowReport] = useState(false);
@@ -46,11 +46,15 @@ export default function HostelDetail() {
     e.preventDefault();
     setBookingLoading(true);
     try {
-      await apiFetch("/api/bookings", { method: "POST", body: { listingId: id, ...booking } });
+      const notes = [`Contact: ${booking.name} (${booking.phone})`, booking.message].filter(Boolean).join("\n");
+      await apiFetch("/api/bookings", {
+        method: "POST",
+        body: { itemId: id, itemType: "listing", date: booking.date, timeSlot: booking.timeSlot, notes },
+      });
       setBookingOpen(false);
       showToast("Booking request sent! The landlord will contact you shortly.", "success");
-    } catch {
-      showToast("Failed to send booking. Please try again.", "error");
+    } catch (err) {
+      showToast(err?.message || "Failed to send booking. Please try again.", "error");
     } finally {
       setBookingLoading(false);
     }
@@ -279,6 +283,14 @@ export default function HostelDetail() {
               <div style={{ height: 12 }} />
               <div className="label">Preferred date</div>
               <input className="input" type="date" value={booking.date} onChange={(e) => setBooking({ ...booking, date: e.target.value })} required />
+              <div style={{ height: 12 }} />
+              <div className="label">Preferred time</div>
+              <select className="input" value={booking.timeSlot} onChange={(e) => setBooking({ ...booking, timeSlot: e.target.value })} required>
+                <option value="" disabled>Select a time slot</option>
+                <option value="Morning (9am–12pm)">Morning (9am–12pm)</option>
+                <option value="Afternoon (12pm–4pm)">Afternoon (12pm–4pm)</option>
+                <option value="Evening (4pm–7pm)">Evening (4pm–7pm)</option>
+              </select>
               <div style={{ height: 12 }} />
               <div className="label">Message (optional)</div>
               <textarea className="textarea" placeholder="Any specific questions for the landlord?" value={booking.message} onChange={(e) => setBooking({ ...booking, message: e.target.value })} />

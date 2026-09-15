@@ -34,6 +34,9 @@ const productSchema = new mongoose.Schema(
       },
     ],
 
+    // Optional — vendor's choice. Products with a video get a small ranking boost.
+    video: { url: String, publicId: String },
+
     seller: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User", // ✅ seller is a User
@@ -110,6 +113,7 @@ const productSchema = new mongoose.Schema(
     stock: {
       type: Number,
       default: 1,
+      min: 0,
     },
 
     // Optional hostel/real estate fields

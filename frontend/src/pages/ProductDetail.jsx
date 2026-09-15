@@ -4,6 +4,7 @@ import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
 import Ph from "../components/Ph";
 import { getImageUrl, naira } from "../components/ProductCard";
+import { cloudVideo } from "../utils/cloudinary";
 import { apiFetch } from "../utils/api";
 import { useCart } from "../context/CartContext";
 import { useUser } from "../context/UserContext";
@@ -419,6 +420,16 @@ export default function ProductDetail() {
               {img ? <img src={getImageUrl(img)} alt="" style={{ width: "100%", height: "100%", objectFit: "contain" }} /> : <Ph kind={categorySlug} label="" />}
             </button>
           ))}
+        </div>
+      )}
+      {product.video?.url && (
+        <div style={{ marginTop: 10 }}>
+          <div style={{ fontSize: "1.15rem", fontWeight: 700, color: "var(--ink-2)", marginBottom: 6 }}>
+            <i className="fas fa-video" style={{ marginRight: 6, color: "var(--accent)" }} />Product video
+          </div>
+          <video controls playsInline preload="metadata" style={{ width: "100%", borderRadius: "var(--r-lg)", maxHeight: 260, background: "#000", display: "block" }}>
+            <source src={cloudVideo(product.video.url)} type="video/mp4" />
+          </video>
         </div>
       )}
     </div>

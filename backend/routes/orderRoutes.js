@@ -23,7 +23,7 @@ import { deliveryCodeLimiter } from "../middleware/rateLimits.js";
 
 const router = express.Router();
 
-// ✅ Create order (user, seller, walker, admin)
+// ✅ Create order (user, seller, admin)
 router.post(
   "/",
   protect,
@@ -58,7 +58,7 @@ router.post(
   confirmTransfer
 );
 
-// ✅ Walker/Seller incoming orders
+// ✅ Seller incoming orders
 router.get(
   "/incoming",
   protect,

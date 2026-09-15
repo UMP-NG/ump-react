@@ -32,7 +32,7 @@ function UMPContactPicker({ onSelect, onClose }) {
   async function choose(issueType) {
     setStep("loading");
     try {
-      const admins = await apiFetch(`/api/admins/support/team?role=${issueType.role}`);
+      const admins = await apiFetch(`/api/messages/support-team?role=${issueType.role}`);
       if (cancelledRef.current) return;
       const list = Array.isArray(admins) ? admins : [];
       if (list.length === 0) {

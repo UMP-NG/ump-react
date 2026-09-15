@@ -180,6 +180,18 @@ export const verifyAdPayment = async (req, res) => {
     const data = flwRes.data?.data;
     if (!data) return res.status(400).json({ message: "Invalid Flutterwave response" });
 
+    // Ownership check — transaction_id is caller-supplied, so without this any
+    // authenticated user who knew/guessed another user's Flutterwave
+    // transaction_id could view that campaign's details and trigger the same
+    // idempotent activation a webhook would. Checked read-only, before the
+    // atomic status claim below, so a mismatched request never touches
+    // someone else's Payment record at all.
+    const owner = await Payment.findOne({ reference: data.tx_ref }).select("user").lean();
+    const isAdmin = req.user?.roles?.includes("admin");
+    if (owner && !isAdmin && owner.user?.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ message: "Not authorized to view this payment" });
+    }
+
     // Flutterwave returns the original tx_ref so we can look up the Payment record
     const payment = await Payment.findOneAndUpdate(
       { reference: data.tx_ref, status: "pending" },

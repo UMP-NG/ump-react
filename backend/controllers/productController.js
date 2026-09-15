@@ -83,6 +83,10 @@ export const createProduct = async (req, res) => {
     if (!images.length)
       return res.status(400).json({ message: "At least one product image is required" });
 
+    // --- 🎥 Optional video — seller's choice, boosts ranking when present
+    const videoFile = req.files?.videos?.[0];
+    const video = videoFile ? { url: videoFile.path, publicId: videoFile.filename } : undefined;
+
     // Derive price from variants when provided; fall back to the explicit price field
     const effectivePrice = parsedVariants.length > 0
       ? Math.min(...parsedVariants.map((v) => v.price))
@@ -103,6 +107,7 @@ export const createProduct = async (req, res) => {
       types: parsedTypes,
       specs,
       images,
+      video,
       variants: parsedVariants,
       seller: req.user?._id,
       stock: parsedVariants.length > 0
@@ -163,7 +168,7 @@ export const createProduct = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Failed to create product",
-      error: error.message,
+      error: process.env.NODE_ENV === "production" ? undefined : error.message,
     });
   }
 };
@@ -256,12 +261,25 @@ export const getAllProducts = async (req, res) => {
     let products;
 
     if (isRandom) {
-      // Use $sample for true random selection across the full matching dataset
+      // Weighted-random selection across the full matching dataset — each product
+      // gets a random score, with a small bump for listings that include a video,
+      // so video listings surface a little more often without dominating the feed.
+      const VIDEO_BOOST = 0.15;
       const [sampled, total] = await Promise.all([
         Product.aggregate([
           { $match: query },
-          { $sample: { size: safeLimit } },
-          { $project: { viewedBy: 0, reviews: 0 } },
+          { $addFields: {
+              _rank: {
+                $add: [
+                  { $rand: {} },
+                  { $cond: [{ $ifNull: ["$video.url", false] }, VIDEO_BOOST, 0] },
+                ],
+              },
+            },
+          },
+          { $sort: { _rank: -1 } },
+          { $limit: safeLimit },
+          { $project: { viewedBy: 0, reviews: 0, _rank: 0 } },
         ]),
         Product.countDocuments(query),
       ]);
@@ -306,16 +324,31 @@ export const getAllProducts = async (req, res) => {
 export const getProductsByCategory = async (req, res) => {
   try {
     const { categoryId } = req.params;
-    
-    const products = await Product.find({ category: categoryId })
-      .populate("seller", "name email storeName")
-      .populate("category", "name")
-      .populate("reviews")
-      .lean();
+    const sort  = typeof req.query.sort === "string" ? req.query.sort : "newest";
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 100, 1), 200);
+    const skip  = Math.max(parseInt(req.query.skip, 10) || 0, 0);
+
+    let sortObj = { createdAt: -1, _id: -1 };
+    if (sort === "oldest")                                    sortObj = { createdAt:  1, _id:  1 };
+    else if (sort === "price-asc"  || sort === "price_asc")  sortObj = { price:      1, _id: -1 };
+    else if (sort === "price-desc" || sort === "price_desc") sortObj = { price:     -1, _id: -1 };
+
+    const query = { category: categoryId };
+    const [products, total] = await Promise.all([
+      Product.find(query)
+        .populate("seller", "name email storeName")
+        .populate("category", "name")
+        .sort(sortObj)
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      Product.countDocuments(query),
+    ]);
 
     res.status(200).json({
       success: true,
       count: products.length,
+      total,
       products,
     });
   } catch (error) {
@@ -554,13 +587,20 @@ export const updateProduct = async (req, res) => {
           .filter(Boolean);
       }
 
+      // Only ever destroy publicIds that were actually attached to THIS product —
+      // otherwise a caller could pass another seller's publicId (visible on any
+      // public product page) and delete their Cloudinary asset.
+      const toDestroy = product.images
+        .filter((img) => removeImages.includes(img.publicId))
+        .map((img) => img.publicId);
+
       // Remove from DB
       product.images = product.images.filter(
         (img) => !removeImages.includes(img.publicId)
       );
 
       // Remove from Cloudinary
-      for (const publicId of removeImages) {
+      for (const publicId of toDestroy) {
         await cloudinary.uploader.destroy(publicId, {
           resource_type: "image",
         });
@@ -582,8 +622,24 @@ export const updateProduct = async (req, res) => {
         ? uploadedImages
         : [...product.images, ...uploadedImages];
 
+    // --- Handle video (single, optional — new upload replaces the old one)
+    const newVideoFile = req.files?.videos?.[0];
+    const removeVideo = req.body.removeVideo === "true" || req.body.removeVideo === true;
+    let oldVideoPublicId = null;
+    if (newVideoFile || removeVideo) {
+      oldVideoPublicId = product.video?.publicId || null;
+      product.video = newVideoFile ? { url: newVideoFile.path, publicId: newVideoFile.filename } : undefined;
+    }
+
     // --- Save
     const updatedProduct = await product.save();
+
+    // Only destroy the old Cloudinary video once the DB write actually
+    // succeeded — deleting it beforehand would lose it with no way to
+    // recover if save() then failed validation.
+    if (oldVideoPublicId) {
+      await cloudinary.uploader.destroy(oldVideoPublicId, { resource_type: "video" }).catch(() => {});
+    }
 
     // Notify price-drop watchers if effective price dropped
     const newEffective = updatedProduct.salePrice != null && updatedProduct.salePrice < updatedProduct.price
@@ -631,7 +687,7 @@ export const updateProduct = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Failed to update product",
-      error: error.message,
+      error: process.env.NODE_ENV === "production" ? undefined : error.message,
     });
   }
 };
@@ -763,7 +819,7 @@ export const filterAndSortProducts = async (req, res) => {
     // 🔍 CATEGORY FILTER
     // ---------------------------
     if (categories) {
-      const catArray = categories.split(",").map((c) => new RegExp(c, "i"));
+      const catArray = categories.split(",").map((c) => new RegExp(escapeRegex(c), "i"));
       query.category = { $in: catArray };
     }
 
@@ -771,7 +827,7 @@ export const filterAndSortProducts = async (req, res) => {
     // ⚙️ CONDITION FILTER
     // ---------------------------
     if (conditions) {
-      const condArray = conditions.split(",").map((c) => new RegExp(c, "i"));
+      const condArray = conditions.split(",").map((c) => new RegExp(escapeRegex(c), "i"));
       query.condition = { $in: condArray };
     }
 
@@ -808,10 +864,14 @@ export const filterAndSortProducts = async (req, res) => {
     // ---------------------------
     // 📦 GET PRODUCTS
     // ---------------------------
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 100, 1), 200);
+    const skip  = Math.max(parseInt(req.query.skip, 10) || 0, 0);
     const products = await Product.find(query)
       .populate("seller", "name email storeName")
       .populate("category", "name")
-      .sort(sortQuery);
+      .sort(sortQuery)
+      .skip(skip)
+      .limit(limit);
 
     res.status(200).json(products);
   } catch (error) {

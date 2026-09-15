@@ -11,4 +11,5 @@ export * from "./adminModerationController.js";
 export * from "./adminBroadcastController.js";
 export * from "./adminConfigController.js";
 export * from "./adminVerificationController.js";
+export * from "./adminFeedbackController.js";
 export { getUmpStore, updateUmpStore } from "./umpStoreController.js";

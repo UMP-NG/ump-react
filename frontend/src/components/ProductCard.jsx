@@ -123,6 +123,14 @@ function ProductCard({ product, variant = "always", onAddToCart }) {
         ) : (
           <Ph kind={product.category?.name?.toLowerCase() || "default"} />
         )}
+        {product.video?.url && (
+          <span
+            title="Video available"
+            style={{ position: "absolute", bottom: 8, left: 8, width: 26, height: 26, borderRadius: "50%", background: "rgba(15,23,42,.72)", color: "#fff", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: "1rem", zIndex: 2 }}
+          >
+            <i className="fas fa-video" />
+          </span>
+        )}
       </div>
       <div className="product-meta">
         <div className="product-name">{product.name}</div>

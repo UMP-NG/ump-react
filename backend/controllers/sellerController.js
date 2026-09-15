@@ -6,6 +6,20 @@ import PushSub from "../models/PushSub.js";
 import logger from "../utils/logger.js";
 import { notify } from "../utils/notify.js";
 
+// Profile fields the seller may set themselves. Trust/financial/ownership
+// fields (isVerified, isOfficial, isSuspended, isSubscribed, pendingPayout,
+// bankDetails, totalRevenue, products, user, ...) are never settable here —
+// they're either admin-managed or driven by their own dedicated, guarded flows.
+const SELLER_PROFILE_FIELDS = ["name", "storeName", "businessName", "bio", "category", "story", "description", "location", "address"];
+
+function pickSellerFields(body) {
+  const out = {};
+  for (const key of SELLER_PROFILE_FIELDS) {
+    if (body[key] !== undefined) out[key] = body[key];
+  }
+  return out;
+}
+
 export const becomeSeller = async (req, res) => {
   try {
     if (!req.user) {
@@ -38,9 +52,11 @@ export const becomeSeller = async (req, res) => {
       await User.findByIdAndUpdate(req.user._id, { $addToSet: { roles: "seller" } });
     }
 
+    const safeFields = pickSellerFields(req.body);
+
     if (seller) {
       // Update seller
-      Object.assign(seller, req.body);
+      Object.assign(seller, safeFields);
       if (logo) seller.logo = logo;
       if (banner) seller.banner = banner;
       await seller.save();
@@ -48,7 +64,8 @@ export const becomeSeller = async (req, res) => {
       // Create seller
       seller = await Seller.create({
         user: req.user._id,
-        ...req.body,
+        name: req.user.name,
+        ...safeFields,
         logo: logo || { url: "/images/guy.png", publicId: "" },
         banner: banner || { url: "/images/banner-default.jpg", publicId: "" },
       });
@@ -136,7 +153,8 @@ export const getAllSellers = async (req, res) => {
     }
 
     const sellers = await Seller.find(query)
-      .populate("user", "email role")
+      .select("-bankDetails -payoutHistory")
+      .populate("user", "name avatar")
       .populate(
         "products",
         "name price image images description category stock rating"
@@ -151,8 +169,8 @@ export const getSellerById = async (req, res) => {
   try {
     // Accept both Seller _id and User _id in the URL
     let seller =
-      (await Seller.findById(req.params.id).populate("user", "email role")) ||
-      (await Seller.findOne({ user: req.params.id }).populate("user", "email role"));
+      (await Seller.findById(req.params.id).populate("user", "name avatar")) ||
+      (await Seller.findOne({ user: req.params.id }).populate("user", "name avatar"));
 
     if (!seller) return res.status(404).json({ message: "Seller not found" });
 
@@ -169,7 +187,7 @@ export const getSellerById = async (req, res) => {
     const currentUserId = req.user?._id?.toString();
     const followersArr = seller.followers || [];
 
-    const { bankDetails: _bd, paystackRecipientCode: _rc, ...sellerData } = seller.toObject();
+    const { bankDetails: _bd, paystackRecipientCode: _rc, payoutHistory: _ph, ...sellerData } = seller.toObject();
     res.json({
       ...sellerData,
       products,

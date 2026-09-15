@@ -5,7 +5,7 @@ const listingSchema = new mongoose.Schema(
     name: { type: String, required: true }, // e.g., "Luxury 2BR Apartment"
     type: { type: String, enum: ["Apartment", "Hostel"], required: true },
     description: { type: String }, // full description of the listing
-    price: { type: Number, required: true },
+    price: { type: Number, required: true, min: [0, "Price cannot be negative"] },
     rate: { type: String, default: "per Year" }, // e.g., "per Month", "per Year"
     location: { type: String, required: true },
     beds: { type: Number, default: 1 },
@@ -29,10 +29,10 @@ const listingSchema = new mongoose.Schema(
     pricePerHalfYear: { type: Number, default: null, min: [0, "Half-year price cannot be negative"] },
 
     // Lagos-specific agent fees — optional, shown as move-in cost breakdown
-    agreementFee:  { type: Number, default: 0 },
-    commissionFee: { type: Number, default: 0 },
-    agentFee:      { type: Number, default: 0 },
-    cautionFee:    { type: Number, default: 0 },
+    agreementFee:  { type: Number, default: 0, min: 0 },
+    commissionFee: { type: Number, default: 0, min: 0 },
+    agentFee:      { type: Number, default: 0, min: 0 },
+    cautionFee:    { type: Number, default: 0, min: 0 },
 
     available: { type: Boolean, default: true },
     furnished: { type: Boolean, default: false },

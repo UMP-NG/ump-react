@@ -76,6 +76,7 @@ export const signup = async (req, res) => {
       logger.debug("🔄 [SIGNUP] User exists but not verified, resending OTP:", maskedEmail);
       if (name) existingUser.name = name;
       existingUser.password = password; // pre-save hook will hash it correctly
+      existingUser.passwordManuallySet = true;
       const otp = existingUser.createOTP();
       await existingUser.save({ validateBeforeSave: false });
 
@@ -108,6 +109,7 @@ export const signup = async (req, res) => {
       email,
       password,
       isVerified: false,
+      passwordManuallySet: true,
       ...(referrerId && { referredBy: referrerId }),
     });
 
@@ -175,7 +177,7 @@ export const verifyOTP = async (req, res) => {
     }
 
     // Issue auth cookie so the user is immediately logged in
-    const token = generateToken(user._id);
+    const token = generateToken(user._id, user.tokenVersion);
     res.cookie("token", token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
@@ -229,6 +231,10 @@ export const login = async (req, res) => {
       return res.status(429).json({ message: `Account temporarily locked. Try again in ${remainingMins} minute(s).` });
     }
 
+    if (existingUser.status === "banned") {
+      return res.status(403).json({ message: "This account has been suspended." });
+    }
+
     // Check email verification
     if (!existingUser.isVerified) {
       return res
@@ -254,7 +260,7 @@ export const login = async (req, res) => {
 
     let token;
     try {
-      token = generateToken(existingUser._id);
+      token = generateToken(existingUser._id, existingUser.tokenVersion);
       if (!token) {
         throw new Error("generateToken returned null or undefined");
       }
@@ -434,6 +440,10 @@ export const resetPassword = async (req, res) => {
     user.password = req.body.password;
     user.resetPasswordToken = undefined;
     user.resetPasswordExpire = undefined;
+    user.passwordManuallySet = true;
+    // Invalidate every existing session/token — this is the exact moment a
+    // compromised-account recovery relies on actually locking the attacker out.
+    user.tokenVersion = (user.tokenVersion || 0) + 1;
 
     await user.save();
 
@@ -588,7 +598,7 @@ export const googleSignIn = async (req, res) => {
     }
 
     const isLimitedAccount = user.googleAccount && !user.isVerified;
-    const token = generateToken(user._id);
+    const token = generateToken(user._id, user.tokenVersion);
     res.cookie("token", token, {
       httpOnly: true,
       secure:   process.env.NODE_ENV === "production",
@@ -744,6 +754,9 @@ export const linkSchoolEmail = async (req, res) => {
     if (!LINK_UNILAG_EMAIL.test(schoolEmail)) {
       return res.status(400).json({ message: "Please enter a valid UNILAG student email (@live.unilag.edu.ng)" });
     }
+    if (req.user.schoolEmailVerified) {
+      return res.status(400).json({ message: "Your school email is already verified." });
+    }
     const taken = await User.findOne({ email: schoolEmail.toLowerCase() });
     if (taken) {
       if (taken._id.equals(req.user._id)) {
@@ -788,17 +801,36 @@ export const verifySchoolEmail = async (req, res) => {
       return res.status(400).json({ message: "OTP has expired. Please request a new one." });
     }
     const hashedOtpInput = crypto.createHash("sha256").update(String(otp)).digest("hex");
-    const storedBuf      = Buffer.from(user.schoolEmailOtp);
+    const storedOtpAtReadTime = user.schoolEmailOtp;
+    const storedBuf      = Buffer.from(storedOtpAtReadTime);
     const inputBuf       = Buffer.from(hashedOtpInput);
     const match = storedBuf.length === inputBuf.length && crypto.timingSafeEqual(storedBuf, inputBuf);
     if (!match) {
       return res.status(400).json({ message: "Incorrect OTP." });
     }
-    user.schoolEmailVerified  = true;
-    user.isVerified           = true;
-    user.schoolEmailOtp       = undefined;
-    user.schoolEmailOtpExpire = undefined;
-    await user.save({ validateModifiedOnly: true });
+    // Atomic claim, bound to the exact OTP hash just verified above — not
+    // just "not already verified". Without pinning schoolEmailOtp too, a
+    // concurrent linkSchoolEmail call (changing schoolEmail + issuing a new
+    // OTP for a DIFFERENT email) between the read above and this write could
+    // still flip schoolEmailVerified to true against whatever schoolEmail
+    // currently sits on the document — verifying an email that was never
+    // actually proven via its own OTP.
+    const claimed = await User.findOneAndUpdate(
+      { _id: user._id, schoolEmailVerified: { $ne: true }, schoolEmailOtp: storedOtpAtReadTime },
+      {
+        $set: { isVerified: true, schoolEmailVerified: true },
+        $unset: { schoolEmailOtp: 1, schoolEmailOtpExpire: 1 },
+      },
+      { new: true }
+    );
+    if (!claimed) {
+      // Either a concurrent request already completed verification, or the
+      // pending email/OTP changed underneath us — never treat either case as
+      // a success for whatever schoolEmail happens to be on the account now.
+      return res.status(409).json({ message: "Verification could not be completed — please request a new OTP and try again." });
+    }
+    user.schoolEmailVerified = true;
+    user.isVerified = true;
 
     // If the school email was a full account, merge it into this (Google) account
     let merged = false;
@@ -837,7 +869,9 @@ export const verifySchoolEmail = async (req, res) => {
       user: { _id: user._id, isVerified: true, schoolEmail: user.schoolEmail, schoolEmailVerified: true, isLimitedAccount: false },
     });
 
-    // Award the remaining ₦50 to whoever referred this user (they got ₦50 at signup)
+    // Award the remaining ₦50 to whoever referred this user (they got ₦50 at signup).
+    // Reaching this point means the atomic claim above succeeded, so this can
+    // only run once per account — never on a concurrent replay.
     if (user.referredBy && user.googleAccount && !user.referredBy.equals(user._id)) {
       setImmediate(() => awardReferralCredit(
         user.referredBy,
@@ -1049,9 +1083,27 @@ export const setPassword = async (req, res) => {
     const user = await User.findById(req.user._id);
     if (!user.schoolEmailVerified)
       return res.status(403).json({ message: "Verify your school email first to set a password." });
+    if (user.passwordManuallySet)
+      return res.status(403).json({ message: "You already have a password set. Use 'Change password' instead." });
     user.password = newPassword;
+    user.passwordManuallySet = true;
+    // Invalidate every other existing token. Issue a fresh one for this same
+    // session below so the user isn't logged out by the very request that
+    // just succeeded.
+    user.tokenVersion = (user.tokenVersion || 0) + 1;
     await user.save();
-    res.json({ success: true, message: "Password set. You can now log in with your school email and this password." });
+    const token = generateToken(user._id, user.tokenVersion);
+    // The cookie carries the old tokenVersion until refreshed — without this,
+    // any request that falls back to cookie auth (e.g. a direct-link GET)
+    // would be rejected as "session expired" right after this succeeds.
+    res.cookie("token", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+      path: "/",
+    });
+    res.json({ success: true, message: "Password set. You can now log in with your school email and this password.", token });
   } catch (err) {
     res.status(500).json({ message: "Server error" });
   }
@@ -1069,8 +1121,20 @@ export const changePassword = async (req, res) => {
     if (!match) return res.status(401).json({ message: "Current password is incorrect" });
 
     user.password = newPassword;
+    // Invalidate every other existing session/token (e.g. a stolen one) —
+    // issue a fresh token for this same session so this request's own
+    // credential isn't logged out by the change it just made.
+    user.tokenVersion = (user.tokenVersion || 0) + 1;
     await user.save();
-    res.json({ success: true, message: "Password updated successfully" });
+    const token = generateToken(user._id, user.tokenVersion);
+    res.cookie("token", token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+      path: "/",
+    });
+    res.json({ success: true, message: "Password updated successfully", token });
   } catch (err) {
     res.status(500).json({ message: "Server error" });
   }

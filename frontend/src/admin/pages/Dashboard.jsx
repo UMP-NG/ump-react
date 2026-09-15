@@ -18,6 +18,16 @@ const METRIC_COLORS = {
   users:   '#22c55e',
 };
 
+function formatDuration(totalSeconds) {
+  const s = Math.max(0, Math.round(totalSeconds || 0));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  if (h > 0) return `${h}h ${m}m`;
+  if (m > 0) return `${m}m ${sec}s`;
+  return `${sec}s`;
+}
+
 function downloadCSV(rows, filename) {
   const csv = rows.map(r => r.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',')).join('\n');
   const a = Object.assign(document.createElement('a'), {
@@ -196,6 +206,24 @@ export default function Dashboard() {
           value={val(visitStats?.totalVisits?.toLocaleString())}
           delta={visitStats?.uniqueVisitors != null ? `${visitStats.uniqueVisitors.toLocaleString()} unique` : '—'}
           icon="fa-eye"
+        />
+        <StatCard
+          label={`Active users (${periodShort})`}
+          value={val(visitStats?.activeUsers?.toLocaleString())}
+          delta={stats?.totalUsers ? `of ${stats.totalUsers.toLocaleString()} registered` : '—'}
+          icon="fa-user-check"
+        />
+        <StatCard
+          label={`Not logged in (${periodShort})`}
+          value={val(visitStats?.anonymousVisitors?.toLocaleString())}
+          delta="browsed while signed out"
+          icon="fa-user-large-slash"
+        />
+        <StatCard
+          label="Avg. time on app"
+          value={visitStats ? formatDuration(visitStats.avgSessionSeconds) : val(null)}
+          delta="per visit"
+          icon="fa-clock"
         />
         <StatCard
           label="Flagged content"

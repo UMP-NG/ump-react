@@ -3,6 +3,14 @@ import Listing from "../models/Listing.js";
 import cloudinary from "../config/cloudinary.js";
 import logger from "../utils/logger.js";
 
+// Coerces to a non-negative, finite number — `Number("1e400") || 0` would
+// otherwise pass Infinity straight through (Infinity is truthy and satisfies
+// a plain `>= 0`/`min: 0` schema check), corrupting a stored money field.
+function clampMoney(value, fallback = 0) {
+  const n = Number(value);
+  return Number.isFinite(n) && n >= 0 ? n : fallback;
+}
+
 // ===============================
 // Create Listing
 // ===============================
@@ -27,6 +35,19 @@ export const createListing = async (req, res) => {
       agentFee,
       cautionFee,
     } = req.body;
+
+    // Reject missing/empty/null/whitespace-only before Number() coercion —
+    // Number(null), Number(""), and Number("   ") all evaluate to 0, which
+    // would otherwise silently pass a finite/non-negative check as a "valid"
+    // price instead of being caught as a missing required field.
+    const trimmedPrice = typeof price === "string" ? price.trim() : price;
+    if (trimmedPrice === undefined || trimmedPrice === null || trimmedPrice === "") {
+      return res.status(400).json({ message: "Price is required" });
+    }
+    const numericPrice = Number(trimmedPrice);
+    if (!Number.isFinite(numericPrice) || numericPrice < 0) {
+      return res.status(400).json({ message: "A valid, non-negative price is required" });
+    }
 
     // ✅ Ensure `type` is always a string
     const listingType = Array.isArray(type) ? type[0] : type;
@@ -58,8 +79,8 @@ export const createListing = async (req, res) => {
       name,
       type: listingType,
       description,
-      price,
-      pricePerHalfYear: pricePerHalfYear != null && pricePerHalfYear !== "" && !isNaN(Number(pricePerHalfYear)) ? Math.max(0, Number(pricePerHalfYear)) : null,
+      price: numericPrice,
+      pricePerHalfYear: pricePerHalfYear != null && pricePerHalfYear !== "" ? clampMoney(pricePerHalfYear, null) : null,
       rate,
       location,
       beds,
@@ -70,17 +91,17 @@ export const createListing = async (req, res) => {
       videos,
       furnished,
       available,
-      agreementFee:  Number(agreementFee)  || 0,
-      commissionFee: Number(commissionFee) || 0,
-      agentFee:      Number(agentFee)      || 0,
-      cautionFee:    Number(cautionFee)    || 0,
+      agreementFee:  clampMoney(agreementFee),
+      commissionFee: clampMoney(commissionFee),
+      agentFee:      clampMoney(agentFee),
+      cautionFee:    clampMoney(cautionFee),
       owner: req.user._id,
     });
 
     res.status(201).json({ success: true, listing });
   } catch (error) {
     logger.error("Error creating listing:", error);
-    res.status(500).json({ message: "Server error", error: error.message });
+    res.status(500).json({ message: "Server error", error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 };
 
@@ -126,8 +147,39 @@ export const updateListing = async (req, res) => {
       ? req.body.type[0]
       : req.body.type || listing.type;
 
+    // Whitelist — "owner" must never be settable here, and every fee/price
+    // field is clamped to a non-negative number rather than trusted raw.
+    const LISTING_EDITABLE_FIELDS = [
+      "name", "description", "price", "pricePerHalfYear", "rate", "location",
+      "beds", "baths", "distance", "furnished", "available",
+      "agreementFee", "commissionFee", "agentFee", "cautionFee",
+    ];
+    const CLAMPED_FEE_FIELDS = ["agreementFee", "commissionFee", "agentFee", "cautionFee"];
+    const safeUpdates = {};
+    for (const key of LISTING_EDITABLE_FIELDS) {
+      if (req.body[key] === undefined) continue;
+      safeUpdates[key] = CLAMPED_FEE_FIELDS.includes(key)
+        ? clampMoney(req.body[key])
+        : req.body[key];
+    }
+    if (req.body.price !== undefined) {
+      // Reject missing/empty/null/whitespace-only before Number() coercion —
+      // Number(null), Number(""), and Number("   ") all evaluate to 0, which
+      // would otherwise silently pass as a "valid" price update instead of
+      // being caught as invalid input.
+      const trimmedPrice = typeof req.body.price === "string" ? req.body.price.trim() : req.body.price;
+      if (trimmedPrice === null || trimmedPrice === "") {
+        return res.status(400).json({ message: "Price cannot be empty" });
+      }
+      const p = Number(trimmedPrice);
+      if (!Number.isFinite(p) || p < 0) {
+        return res.status(400).json({ message: "A valid, non-negative price is required" });
+      }
+      safeUpdates.price = p;
+    }
+
     Object.assign(listing, {
-      ...req.body,
+      ...safeUpdates,
       type: listingType,
       images: [...listing.images, ...newImages],
       videos: [...listing.videos, ...newVideos],
@@ -138,7 +190,7 @@ export const updateListing = async (req, res) => {
     res.json({ success: true, listing });
   } catch (error) {
     logger.error("Error updating listing:", error);
-    res.status(500).json({ message: "Server error", error: error.message });
+    res.status(500).json({ message: "Server error", error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 };
 

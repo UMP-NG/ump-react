@@ -20,6 +20,17 @@ const userSchema = new mongoose.Schema(
       minlength: [8, "Password must be at least 8 characters"],
     },
 
+    // Bumped whenever the password changes (change-password, set-password,
+    // reset-password) so every previously-issued JWT — including a stolen
+    // one — stops working immediately, not just at natural expiry.
+    tokenVersion: { type: Number, default: 0 },
+
+    // True once a Google-signup user has completed the one-time "set a
+    // password" flow. setPassword is meant to run exactly once — after that,
+    // changing the password must go through changePassword, which requires
+    // knowing the current one.
+    passwordManuallySet: { type: Boolean, default: false },
+
     // ===============================
     // ROLES
     // ===============================
@@ -119,7 +130,7 @@ const userSchema = new mongoose.Schema(
     cart: [
       {
         product: { type: mongoose.Schema.Types.ObjectId, ref: "Product" },
-        quantity: { type: Number, default: 1 },
+        quantity: { type: Number, default: 1, min: 1 },
       },
     ],
     orders: [{ type: mongoose.Schema.Types.ObjectId, ref: "Order" }],

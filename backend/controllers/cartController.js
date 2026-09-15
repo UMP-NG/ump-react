@@ -1,6 +1,5 @@
 import mongoose from "mongoose";
 import Cart from "../models/Cart.js";
-import Order from "../models/Order.js";
 import Product from "../models/Product.js";
 import Seller from "../models/Seller.js";
 import logger from "../utils/logger.js";
@@ -196,45 +195,6 @@ export const removeFromCart = async (req, res) => {
   } catch (error) {
     logger.error("❌ Error removing item:", error);
     res.status(500).json({ message: "Failed to remove item" });
-  }
-};
-
-// ✅ Checkout and create order
-export const checkoutCart = async (req, res) => {
-  try {
-    const userId = req.user._id;
-    const cart = await Cart.findOne({ user: userId }).populate("items.product");
-
-    if (!cart || cart.items.length === 0) {
-      return res.status(400).json({ message: "🛒 Cart is empty" });
-    }
-
-    const orderItems = cart.items.map((item) => ({
-      product: item.product._id,
-      quantity: item.quantity,
-      price: item.negotiatedPrice ?? item.product?.price ?? item.price,
-    }));
-
-    const totalAmount = orderItems.reduce(
-      (sum, item) => sum + item.price * item.quantity,
-      0
-    );
-
-    const newOrder = new Order({
-      buyer: userId,
-      seller: cart.items[0]?.product?.seller || null,
-      items: orderItems,
-      totalAmount,
-      shippingAddress: req.body.shippingAddress || "",
-    });
-
-    await newOrder.save();
-    await Cart.deleteOne({ user: userId }); // ✅ clear cart after order
-
-    res.json({ message: "✅ Order created successfully", order: newOrder });
-  } catch (error) {
-    logger.error("❌ Checkout failed:", error);
-    res.status(500).json({ message: "Checkout failed" });
   }
 };
 

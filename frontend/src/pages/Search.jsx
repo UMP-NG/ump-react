@@ -7,6 +7,8 @@ import ProductCard from "../components/ProductCard";
 import Ph from "../components/Ph";
 import { apiFetch } from "../utils/api";
 import Skel from "../components/Skel";
+import DiscoverySurveyModal from "../components/DiscoverySurveyModal";
+import { useDiscoverySurvey } from "../hooks/useDiscoverySurvey";
 
 const TABS = ["All", "Products", "Services", "Stores", "Hostels"];
 
@@ -20,6 +22,7 @@ export default function Search() {
   const [sellers, setSellers] = useState([]);
   const [hostels, setHostels] = useState([]);
   const [loading, setLoading] = useState(false);
+  const { show: showSurvey, dismiss: dismissSurvey } = useDiscoverySurvey();
 
   useEffect(() => {
     if (!q) return;
@@ -207,6 +210,7 @@ export default function Search() {
 
       <Footer />
       <BottomNav />
+      {showSurvey && <DiscoverySurveyModal context="search" searchQuery={q} onClose={dismissSurvey} />}
     </div>
   );
 }

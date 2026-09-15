@@ -79,7 +79,7 @@ export const becomeServiceProvider = async (req, res) => {
     res.status(200).json({ success: true, message: "Provider profile saved. You can now add services from your dashboard.", user });
   } catch (error) {
     logger.error("❌ becomeServiceProvider error:", error);
-    res.status(500).json({ success: false, message: "Server error", error: error.message });
+    res.status(500).json({ success: false, message: "Server error", error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 };
 
@@ -171,7 +171,7 @@ export const createService = async (req, res) => {
     logger.error("❌ Error creating service:", error);
     res
       .status(500)
-      .json({ success: false, message: "Server error", error: error.message });
+      .json({ success: false, message: "Server error", error: process.env.NODE_ENV === "production" ? undefined : error.message });
   }
 };
 
@@ -366,16 +366,34 @@ export const updateService = async (req, res) => {
         .json({ success: false, message: "Not authorized" });
     }
 
-    const updates = { ...req.body };
+    // Whitelist — never let a provider set ownership ("provider") or
+    // trust/quality-signal fields (verified, verificationRequested, rating,
+    // reviewsCount) directly; those are admin- or system-controlled.
+    const SERVICE_EDITABLE_FIELDS = [
+      "name", "title", "pricingType", "rate", "currency", "major", "desc",
+      "about", "certifications", "portfolio", "policies", "tags",
+      "timeSlots", "available", "duration",
+    ];
+    const updates = {};
+    for (const key of SERVICE_EDITABLE_FIELDS) {
+      if (req.body[key] !== undefined) updates[key] = req.body[key];
+    }
     if (req.files && req.files.images) {
       updates.images = req.files.images.map((file) => ({
         url: file.path,
         publicId: file.filename,
       }));
-    } else if (Array.isArray(updates.images)) {
-      // Normalize: accept [{url, publicId}] objects or plain URL strings
-      updates.images = updates.images.map((img) =>
-        typeof img === "string" ? { url: img, publicId: "" } : { url: img.url, publicId: img.publicId || "" }
+    } else if (Array.isArray(req.body.images)) {
+      // Normalize: accept [{url, publicId}] objects or plain URL strings. A
+      // plain string is a *retained* existing image echoed back by the
+      // client — look up its real publicId from the current document rather
+      // than blanking it, or the cleanup below would treat it as orphaned
+      // and destroy the asset a still-referenced URL points to.
+      const existingByUrl = new Map((service.images || []).map((img) => [img.url, img.publicId]));
+      updates.images = req.body.images.map((img) =>
+        typeof img === "string"
+          ? { url: img, publicId: existingByUrl.get(img) || "" }
+          : { url: img.url, publicId: img.publicId || "" }
       );
     }
 
@@ -387,6 +405,17 @@ export const updateService = async (req, res) => {
         runValidators: true,
       }
     );
+
+    // Only destroy old Cloudinary assets once the DB write actually succeeded —
+    // doing this beforehand would delete images with no way to recover them
+    // if the update itself then failed validation.
+    if (updates.images) {
+      const keptIds = new Set(updates.images.map((img) => img.publicId).filter(Boolean));
+      const toDestroy = (service.images || []).filter((img) => img.publicId && !keptIds.has(img.publicId));
+      for (const img of toDestroy) {
+        await cloudinary.uploader.destroy(img.publicId, { resource_type: "image" }).catch(() => {});
+      }
+    }
 
     res.json({ success: true, service: updatedService });
   } catch (error) {

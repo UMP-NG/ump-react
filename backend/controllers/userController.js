@@ -446,35 +446,4 @@ export const becomeServiceProvider = async (req, res) => {
   }
 };
 
-export const updateWalkerProfile = async (req, res) => {
-  try {
-    const user = await User.findById(req.params.id);
-    if (!user) return res.status(404).json({ message: "User not found" });
-
-    // Update name if provided and not blank
-    const name = req.body.name?.trim();
-    if (name) {
-      user.name = name; // top-level name for display
-      user.walkerInfo.name = name; // walker-specific name
-    }
-
-    // Update avatar if file uploaded
-    if (req.file) {
-      const avatarPath = { url: req.file.path, publicId: req.file.filename };
-      user.avatar = avatarPath; // top-level avatar
-      user.walkerInfo.avatar = avatarPath;
-    }
-
-    await user.save();
-
-    res.status(200).json({
-      walkerInfo: user.walkerInfo,
-      name: user.name,
-      avatar: user.avatar,
-    });
-  } catch (err) {
-    logger.error("❌ updateWalkerProfile error:", err);
-    res.status(500).json({ message: "Server error" });
-  }
-};
 

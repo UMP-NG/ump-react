@@ -71,7 +71,7 @@ export const getFollowers = async (req, res) => {
     const { userId } = req.params;
     const followers = await Follow.find({ following: userId }).populate(
       "follower",
-      "email role"
+      "name avatar"
     );
 
     res.json({ count: followers.length, followers });
@@ -87,7 +87,7 @@ export const getFollowing = async (req, res) => {
     const { userId } = req.params;
     const following = await Follow.find({ follower: userId }).populate(
       "following",
-      "email role"
+      "name avatar"
     );
 
     res.json({ count: following.length, following });

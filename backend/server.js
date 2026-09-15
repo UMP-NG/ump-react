@@ -12,6 +12,8 @@ import { setIO } from "./utils/socket.js";
 import { startAutoCancelJob } from "./utils/autoCancel.js";
 import { notify } from "./utils/notify.js";
 import { getOrCreateOfficialSeller } from "./controllers/umpStoreController.js";
+import { backfillPasswordManuallySet } from "./utils/backfillPasswordState.js";
+import { resumePendingBroadcastEmails } from "./controllers/adminBroadcastController.js";
 
 dotenv.config();
 
@@ -33,10 +35,39 @@ if (ENABLE_CLUSTER && cluster.isPrimary) {
     parseInt(process.env.WEB_CONCURRENCY || "2", 10)
   );
   console.log(`[Cluster] Primary ${process.pid} — starting ${count} workers`);
-  for (let i = 0; i < count; i++) cluster.fork();
+
+  // Explicitly designate exactly one worker to run cron-style singleton jobs
+  // (auto-cancel, keep-alive ping, official-store provisioning). Worker ids
+  // are a monotonically-increasing counter that's never reused, so pinning
+  // this to a fixed id (e.g. "worker 1") permanently loses the job the first
+  // time that worker restarts. Re-assigning it here on every fork/replace
+  // means the job always has exactly one live owner.
+  let cronWorkerId = null;
+  function forkAndTrack(isCronWorker) {
+    const worker = cluster.fork();
+    if (isCronWorker) {
+      cronWorkerId = worker.id;
+      worker.on("online", () => worker.send({ type: "cron-worker" }));
+    }
+    return worker;
+  }
+  for (let i = 0; i < count; i++) forkAndTrack(i === 0);
+
+  // Once the primary itself is being torn down (Render sends SIGTERM to the
+  // whole process group on redeploy/scale), workers exiting as part of that
+  // shutdown must NOT be replaced — without this flag the primary would keep
+  // forking new workers while trying to shut down, fighting its own exit.
+  let shuttingDown = false;
+  process.on("SIGTERM", () => { shuttingDown = true; });
+  process.on("SIGINT",  () => { shuttingDown = true; });
+
   cluster.on("exit", (worker, code) => {
+    if (shuttingDown) {
+      console.log(`[Cluster] Worker ${worker.process.pid} exited (code ${code}) during shutdown — not replacing`);
+      return;
+    }
     console.warn(`[Cluster] Worker ${worker.process.pid} exited (code ${code}) — replacing`);
-    cluster.fork();
+    forkAndTrack(worker.id === cronWorkerId);
   });
 } else {
   // ── Worker (or single-process when CLUSTER is off) ────────────────────────
@@ -62,6 +93,17 @@ if (ENABLE_CLUSTER && cluster.isPrimary) {
   console.log(`✅ MONGO_URI configured`);
 
   if (!process.env.NODE_ENV) {
+    // On Render (RENDER_EXTERNAL_URL is set automatically for every service),
+    // a missing NODE_ENV means someone reset env vars and forgot to pin it —
+    // that silently weakens cookie flags (secure/sameSite) and error-message
+    // redaction in what is actually a live deployment, so fail fast instead
+    // of limping along as "development". Local dev (no RENDER_EXTERNAL_URL)
+    // keeps the soft default so the existing workflow isn't disrupted.
+    if (process.env.RENDER_EXTERNAL_URL) {
+      console.error("\n❌ [CRITICAL] NODE_ENV is not defined on what looks like a Render deployment!");
+      console.error("   Fix: set NODE_ENV=production in the Render dashboard.");
+      process.exit(1);
+    }
     console.warn("\n⚠️  [WARN] NODE_ENV is not defined — defaulting to 'development'");
     process.env.NODE_ENV = "development";
   }
@@ -76,6 +118,18 @@ if (ENABLE_CLUSTER && cluster.isPrimary) {
   }
   console.log(`✅ FIELD_ENCRYPTION_KEY configured`);
   console.log(`✅ Environment validation passed\n`);
+
+  // Whether this worker owns cron-style singleton jobs — see the primary's
+  // forkAndTrack() above. In single-process mode (no cluster) this worker is
+  // trivially the only one, so it always owns them. Registered synchronously
+  // so it can't miss the primary's message, which arrives well before the
+  // Mongo connection below resolves.
+  let isCronWorker = !cluster.isWorker;
+  if (cluster.isWorker) {
+    process.on("message", (msg) => {
+      if (msg?.type === "cron-worker") isCronWorker = true;
+    });
+  }
 
   // 🧩 Create HTTP server first (Socket.io needs the server object before DB connects)
   const server = http.createServer(app);
@@ -250,18 +304,49 @@ if (ENABLE_CLUSTER && cluster.isPrimary) {
     .then(() => {
       console.log("✅ MongoDB connected");
 
-      // Run the auto-cancel job only in the first worker (or in single-process mode)
-      // to avoid N duplicate cron runs when cluster mode is active.
-      const isFirstWorker = !cluster.isWorker || cluster.worker?.id === 1;
-      if (isFirstWorker) startAutoCancelJob();
+      // Run the auto-cancel job only in the designated cron worker (or in
+      // single-process mode) to avoid N duplicate cron runs when cluster mode
+      // is active.
+      if (isCronWorker) startAutoCancelJob();
 
       // Ensure the official UMP Store exists so it shows up on /store immediately —
       // doesn't depend on an admin first opening the admin UMP Store page.
-      if (isFirstWorker) {
+      if (isCronWorker) {
         getOrCreateOfficialSeller()
           .then(() => console.log("✅ Official UMP Store ready"))
           .catch((err) => console.error("❌ Failed to provision official UMP Store:", err.message));
+
+        backfillPasswordManuallySet()
+          .catch((err) => console.error("❌ passwordManuallySet backfill failed:", err.message));
+
+        resumePendingBroadcastEmails()
+          .catch((err) => console.error("❌ Failed to resume pending broadcast emails:", err.message));
       }
+
+      // Graceful shutdown — Render sends SIGTERM on every redeploy/restart/
+      // scale event; the default behaviour is an immediate hard kill, which
+      // can cut off an in-flight webhook mid-processing (e.g. a Payment left
+      // stuck in "processing" forever). Stop accepting new connections, let
+      // in-flight ones finish (bounded by a timeout so a stuck request can't
+      // block shutdown forever), then close the Mongo connection.
+      let shuttingDown = false;
+      function gracefulShutdown(signal) {
+        if (shuttingDown) return;
+        shuttingDown = true;
+        console.log(`\n🛑 ${signal} received — shutting down gracefully...`);
+        const forceExit = setTimeout(() => {
+          console.warn("⚠️  Graceful shutdown timed out — forcing exit");
+          process.exit(1);
+        }, 10000);
+        server.close(async () => {
+          try { await mongoose.connection.close(); } catch { /* ignore */ }
+          clearTimeout(forceExit);
+          console.log("✅ Shutdown complete");
+          process.exit(0);
+        });
+      }
+      process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+      process.on("SIGINT",  () => gracefulShutdown("SIGINT"));
 
       server.listen(PORT, () => {
         const workerTag = cluster.isWorker ? ` [worker ${cluster.worker.id}]` : "";
@@ -270,7 +355,7 @@ if (ENABLE_CLUSTER && cluster.isPrimary) {
         // Keep-alive ping for Render free tier (spins down after 15min inactivity).
         // Only the first worker pings — no point in N workers all pinging.
         const SELF_URL = process.env.RENDER_EXTERNAL_URL;
-        if (SELF_URL && isFirstWorker) {
+        if (SELF_URL && isCronWorker) {
           let pingTimer = null;
           const scheduleNextPing = () => {
             const delay = Math.floor(Math.random() * (10 - 4 + 1) + 4) * 60 * 1000;

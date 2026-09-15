@@ -69,12 +69,19 @@ export const initializeFlwPayment = async (req, res) => {
     if (!orders.length)
       return res.status(404).json({ success: false, message: "Orders not found" });
 
-    // Idempotency — return the existing pending payment on retry / double-click
+    // Idempotency — return the existing reserved payment on retry / double-click.
+    // "processing" counts as reserved too: the verify handler flips a payment
+    // to "processing" while it calls out to Flutterwave, and it's still very
+    // much in flight during that window. Require an authorizationUrl too —
+    // a reservation whose Flutterwave call hasn't completed (or failed and is
+    // about to be deleted) has nothing to hand back yet, so it must not be
+    // treated as reusable.
     const existingPayment = await Payment.findOne({
       orders: { $all: orders.map((o) => o._id), $size: orders.length },
       user: req.user._id,
-      status: "pending",
+      status: { $in: ["pending", "processing"] },
       provider: "Flutterwave",
+      authorizationUrl: { $nin: [null, ""] },
     });
     if (existingPayment) {
       return res.json({
@@ -88,41 +95,83 @@ export const initializeFlwPayment = async (req, res) => {
     const reference = `UMP_FLW_${Date.now()}`;
     const base = clientUrl();
 
-    const response = await axios.post(
-      `${FLW_BASE}/payments`,
-      {
-        tx_ref: reference,
+    // Reserve the order set BEFORE calling out to Flutterwave — creating the
+    // Payment first (not after) means a concurrent double-submit is caught
+    // by the DB's unique index right away, instead of both requests first
+    // paying the cost of a real external API call and only colliding
+    // afterwards (which would also leave an orphaned, unreferenced
+    // Flutterwave transaction behind).
+    let reservation;
+    try {
+      reservation = await Payment.create({
+        orders: orders.map((o) => o._id),
+        user: req.user._id,
+        provider: "Flutterwave",
         amount: totalAmount,
-        currency: "NGN",
-        redirect_url: `${base}/payment-success`,
-        customer: {
-          email: req.user.email,
-          name: req.user.name || req.user.email,
-          phonenumber: req.user.phone || "",
-        },
-        meta: { orderIds: orders.map((o) => o._id.toString()).join(",") },
-        customizations: {
-          title: "UMP Marketplace",
-          description: "Secure escrow payment",
-          logo: `${base}/images/ump-apple-touch-icon.png`,
-        },
-      },
-      { headers: flwHeaders() }
-    );
+        reference,
+        status: "pending",
+        authorizationUrl: null,
+      });
+    } catch (createErr) {
+      if (createErr.code === 11000) {
+        // Match the exact same order set, not merely an overlap — the unique
+        // index rejects any shared order, but a differently-shaped
+        // pending/processing payment that only partially overlaps is for a
+        // different amount entirely and must never be handed back as if it
+        // were this one.
+        const racedPayment = await Payment.findOne({
+          orders: { $all: orders.map((o) => o._id), $size: orders.length },
+          user: req.user._id,
+          status: { $in: ["pending", "processing"] },
+          authorizationUrl: { $nin: [null, ""] },
+        });
+        if (racedPayment) {
+          return res.json({
+            success: true,
+            payment_link: racedPayment.authorizationUrl,
+            reference: racedPayment.reference,
+          });
+        }
+      }
+      throw createErr;
+    }
 
-    const paymentLink = response.data?.data?.link;
-    if (!paymentLink)
-      throw new Error("No payment link returned from Flutterwave");
+    let paymentLink;
+    try {
+      const response = await axios.post(
+        `${FLW_BASE}/payments`,
+        {
+          tx_ref: reference,
+          amount: totalAmount,
+          currency: "NGN",
+          redirect_url: `${base}/payment-success`,
+          customer: {
+            email: req.user.email,
+            name: req.user.name || req.user.email,
+            phonenumber: req.user.phone || "",
+          },
+          meta: { orderIds: orders.map((o) => o._id.toString()).join(",") },
+          customizations: {
+            title: "UMP Marketplace",
+            description: "Secure escrow payment",
+            logo: `${base}/images/ump-apple-touch-icon.png`,
+          },
+        },
+        { headers: flwHeaders() }
+      );
+      paymentLink = response.data?.data?.link;
+      if (!paymentLink) throw new Error("No payment link returned from Flutterwave");
+    } catch (flwErr) {
+      // The reservation must not outlive a failed provider call — otherwise
+      // the buyer is stuck unable to retry (the unique index would keep
+      // rejecting new attempts for these orders) for a payment that never
+      // actually got a checkout link.
+      await Payment.deleteOne({ _id: reservation._id }).catch(() => {});
+      throw flwErr;
+    }
 
-    await Payment.create({
-      orders: orders.map((o) => o._id),
-      user: req.user._id,
-      provider: "Flutterwave",
-      amount: totalAmount,
-      reference,
-      status: "pending",
-      authorizationUrl: paymentLink,
-    });
+    reservation.authorizationUrl = paymentLink;
+    await reservation.save();
 
     return res.json({ success: true, payment_link: paymentLink, reference });
   } catch (err) {
@@ -492,10 +541,13 @@ export const payCartLink = async (req, res) => {
     if (new Date() > new Date(cartReq.expiresAt))
       return res.status(410).json({ success: false, message: "This payment link has expired." });
 
-    // Idempotency — return the existing pending payment if the payer retries
+    // Idempotency — return the existing pending payment if the payer retries.
+    // Require an authorizationUrl so a reservation with no link yet is never
+    // handed back.
     const existingCartPayment = await Payment.findOne({
       "metadata.cartPaymentToken": token,
       status: "pending",
+      authorizationUrl: { $nin: [null, ""] },
     });
     if (existingCartPayment) {
       return res.json({

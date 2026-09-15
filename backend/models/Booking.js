@@ -30,7 +30,10 @@ const bookingSchema = new mongoose.Schema(
     providerModel: {
       type: String,
       required: true,
-      enum: ["User", "service_provider"], // depends on type of item
+      // Both Service.provider and Listing.owner resolve to a User document —
+      // "service_provider" isn't a registered Mongoose model and was never
+      // actually set by bookingController; removed to match real usage.
+      enum: ["User"],
     },
 
     // Booking details

@@ -120,12 +120,40 @@ export const getVisitStats = async (req, res) => {
     // Counts are computed server-side via $group/$count — visitor IDs themselves
     // are never pulled into the Node process, only aggregate counts (unlike
     // Visit.distinct(...) or $addToSet, which would materialize every ID).
-    const [totalVisits, uniqueAgg, dailyBuckets] = await Promise.all([
+    const [totalVisits, uniqueAgg, activeUserAgg, anonymousAgg, durationAgg, dailyBuckets] = await Promise.all([
       Visit.countDocuments({ createdAt: { $gte: since } }),
       Visit.aggregate([
         { $match: { createdAt: { $gte: since } } },
         { $group: { _id: "$visitorId" } },
         { $count: "count" },
+      ]),
+      // Distinct logged-in accounts (not anonymous visitors) seen in the
+      // period — the "how many real users are actively using the app" figure.
+      Visit.aggregate([
+        { $match: { createdAt: { $gte: since }, userId: { $ne: null } } },
+        { $group: { _id: "$userId" } },
+        { $count: "count" },
+      ]),
+      // Distinct browsers/devices that recorded at least one visit while NOT
+      // logged in during the period — this measures logged-out browsing, not
+      // account ownership. A visitorId here may well belong to a registered
+      // user who simply hadn't signed in yet on that visit (or was signed
+      // out); it says nothing about whether an account exists. A separate
+      // field from activeUsers/uniqueVisitors: it's keyed by visitorId, and a
+      // visitorId that visited both logged-out and logged-in in the same
+      // period counts in both this and activeUsers — the two are deliberately
+      // not a strict partition, each answers a different question on its own.
+      Visit.aggregate([
+        { $match: { createdAt: { $gte: since }, userId: null } },
+        { $group: { _id: "$visitorId" } },
+        { $count: "count" },
+      ]),
+      // Average time-on-app per session, in seconds. Includes zero-duration
+      // sessions (a visit with no heartbeat yet, i.e. a genuine quick bounce)
+      // so the figure reflects real usage rather than only "engaged" sessions.
+      Visit.aggregate([
+        { $match: { createdAt: { $gte: since } } },
+        { $group: { _id: null, avgSeconds: { $avg: "$durationSeconds" } } },
       ]),
       Visit.aggregate([
         { $match: { createdAt: { $gte: since } } },
@@ -142,7 +170,13 @@ export const getVisitStats = async (req, res) => {
       visits.push(dailyMap[key]?.count || 0);
       uniques.push(dailyMap[key]?.unique || 0);
     }
-    const result = { days, totalVisits, uniqueVisitors: uniqueAgg[0]?.count || 0, labels, visits, uniques };
+    const result = {
+      days, totalVisits, uniqueVisitors: uniqueAgg[0]?.count || 0,
+      activeUsers: activeUserAgg[0]?.count || 0,
+      anonymousVisitors: anonymousAgg[0]?.count || 0,
+      avgSessionSeconds: Math.round(durationAgg[0]?.avgSeconds || 0),
+      labels, visits, uniques,
+    };
     scSet(`visits:${days}`, result);
     res.json(result);
   } catch (err) {

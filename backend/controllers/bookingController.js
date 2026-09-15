@@ -36,7 +36,7 @@ export const createBooking = async (req, res) => {
     } else if (itemType === "listing") {
       item = await Listing.findById(itemId);
       if (!item) return res.status(404).json({ message: "Listing not found." });
-      provider = item.seller; // accommodation seller
+      provider = item.owner; // accommodation owner/landlord — Listing has no "seller" field
       providerModel = "User";
     } else {
       return res.status(400).json({ message: "Invalid booking type." });

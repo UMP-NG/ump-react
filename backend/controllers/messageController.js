@@ -28,7 +28,7 @@ export const sendMessage = async (req, res) => {
     const receiverRoles = receiverUser.roles || [];
 
     // Example: basic messaging rule
-    if (!senderRoles.some((r) => ["seller", "service_provider", "walker", "admin"].includes(r)) && !receiverRoles.some((r) => ["seller", "service_provider", "admin"].includes(r))) {
+    if (!senderRoles.some((r) => ["seller", "service_provider", "admin"].includes(r)) && !receiverRoles.some((r) => ["seller", "service_provider", "admin"].includes(r))) {
       return res.status(403).json({
         message: "Users can only message sellers or admins",
       });

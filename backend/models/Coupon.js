@@ -14,6 +14,9 @@ const couponSchema = new mongoose.Schema(
     minOrderAmount:{ type: Number, default: 0, min: 0 },
     maxUses:       { type: Number, default: null },
     usedCount:     { type: Number, default: 0 },
+    // One redemption per user — tracked so a single account can't consume the
+    // entire maxUses allocation meant for many distinct customers.
+    usedBy:        [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
     expiresAt:     { type: Date,   default: null },
     active:        { type: Boolean, default: true },
     createdBy:     { type: mongoose.Schema.Types.ObjectId, ref: "User" },

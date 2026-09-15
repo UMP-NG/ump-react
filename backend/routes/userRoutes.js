@@ -14,7 +14,6 @@ import {
   removeFromCart,
   markNotificationRead,
   becomeServiceProvider,
-  updateWalkerProfile,
 } from "../controllers/userController.js";
 import { becomeSeller } from "../controllers/sellerController.js";
 import { protect, requireRole } from "../middleware/authMiddleware.js";

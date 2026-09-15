@@ -35,5 +35,9 @@ const reviewSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// Enforces "one review per user per item" atomically at the DB level —
+// the controller's findOne-then-create check alone is a TOCTOU race.
+reviewSchema.index({ refModel: 1, refId: 1, author: 1 }, { unique: true });
+
 export default mongoose.model("Review", reviewSchema);
 

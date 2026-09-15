@@ -218,12 +218,26 @@ export const initializePayment = async (req, res) => {
         .json({ success: false, message: "Unsupported provider" });
     }
 
-    // Idempotency — if a pending payment already exists for these exact orders,
-    // return it instead of creating a second Paystack transaction on retry/double-click.
+    if (method !== "card" && method !== "transfer") {
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid payment method" });
+    }
+
+    // Idempotency — if a reserved payment already exists for these exact
+    // orders, return it instead of creating a second Paystack transaction on
+    // retry/double-click. "processing" counts as reserved too — the verify
+    // handler flips a payment there while it calls out to Paystack. Scoped by
+    // provider so a Flutterwave reservation for the same orders is never
+    // handed back for a Paystack request, and requires authorization data
+    // (authorizationUrl for card, virtualAccount for transfer) so a
+    // reservation whose Paystack call hasn't completed yet is never reused.
     const existingPayment = await Payment.findOne({
       orders: { $all: orders.map((o) => o._id), $size: orders.length },
       user: req.user._id,
-      status: "pending",
+      status: { $in: ["pending", "processing"] },
+      provider,
+      $or: [{ authorizationUrl: { $nin: [null, ""] } }, { virtualAccount: { $ne: null } }],
     });
     if (existingPayment) {
       return res.status(200).json({
@@ -238,58 +252,94 @@ export const initializePayment = async (req, res) => {
     const amountKobo = Math.round(totalAmount * 100);
     const reference = `UMP_${Date.now()}`;
 
+    // Reserve the order set BEFORE calling out to Paystack — creating the
+    // Payment first means a concurrent double-submit is caught by the DB's
+    // unique index right away, instead of both requests first paying the
+    // cost of a real external API call and colliding only afterwards.
+    let reservation;
+    try {
+      reservation = await Payment.create({
+        orders: orders.map((o) => o._id),
+        user: req.user._id,
+        provider,
+        amount: totalAmount,
+        reference,
+        status: "pending",
+        method,
+        authorizationUrl: null,
+      });
+    } catch (createErr) {
+      // A concurrent request (rapid double-submit) won the race and already
+      // reserved these orders — return that one instead of leaving the buyer
+      // with two live checkout sessions.
+      if (createErr.code === 11000) {
+        // Match the exact same order set, not merely an overlap — a
+        // differently-shaped pending/processing payment that only partially
+        // overlaps is for a different amount entirely and must never be
+        // handed back as if it were this one.
+        const racedPayment = await Payment.findOne({
+          orders: { $all: orders.map((o) => o._id), $size: orders.length },
+          user: req.user._id,
+          status: { $in: ["pending", "processing"] },
+          provider,
+          $or: [{ authorizationUrl: { $nin: [null, ""] } }, { virtualAccount: { $ne: null } }],
+        });
+        if (racedPayment) {
+          return res.status(200).json({
+            success: true,
+            message: "Payment already initialised",
+            authorization_url: racedPayment.authorizationUrl || null,
+            reference: racedPayment.reference,
+          });
+        }
+      }
+      throw createErr;
+    }
+
     let authorization_url = null;
     let virtualAccount = null;
-
-    // ----------------------------
-    // Card Payment
-    // ----------------------------
-    if (method === "card") {
-      const response = await paystack.post("/transaction/initialize", {
-        email: req.user.email,
-        amount: amountKobo,
-        reference,
-        callback_url: `${process.env.NODE_ENV === "production" ? (process.env.CLIENT_URL || "https://myump.com.ng") : "http://localhost:5173"}/payment-success`,
-        metadata: { orderIds: orders.map((o) => o._id.toString()) },
-      });
-
-      authorization_url = response.data.data.authorization_url;
+    try {
+      // ----------------------------
+      // Card Payment
+      // ----------------------------
+      if (method === "card") {
+        const response = await paystack.post("/transaction/initialize", {
+          email: req.user.email,
+          amount: amountKobo,
+          reference,
+          callback_url: `${process.env.NODE_ENV === "production" ? (process.env.CLIENT_URL || "https://myump.com.ng") : "http://localhost:5173"}/payment-success`,
+          metadata: { orderIds: orders.map((o) => o._id.toString()) },
+        });
+        authorization_url = response.data.data.authorization_url;
+      }
+      // ----------------------------
+      // Bank Transfer via Virtual Account
+      // ----------------------------
+      else {
+        const response = await paystack.post("/dedicated_account", {
+          customer: req.user.email,
+          preferred_bank: "wema-bank", // choose your preferred bank
+          metadata: { orderIds: orders.map((o) => o._id.toString()) },
+        });
+        const accountData = response.data.data;
+        virtualAccount = {
+          account_number: accountData.account_number,
+          bank: accountData.bank,
+          account_name: accountData.account_name,
+        };
+      }
+    } catch (paystackErr) {
+      // The reservation must not outlive a failed provider call — otherwise
+      // the buyer is stuck unable to retry (the unique index would keep
+      // rejecting new attempts for these orders) for a payment that never
+      // actually got a checkout link/account.
+      await Payment.deleteOne({ _id: reservation._id }).catch(() => {});
+      throw paystackErr;
     }
 
-    // ----------------------------
-    // Bank Transfer via Virtual Account
-    // ----------------------------
-    else if (method === "transfer") {
-      const response = await paystack.post("/dedicated_account", {
-        customer: req.user.email,
-        preferred_bank: "wema-bank", // choose your preferred bank
-        metadata: { orderId },
-      });
-
-      const accountData = response.data.data;
-      virtualAccount = {
-        account_number: accountData.account_number,
-        bank: accountData.bank,
-        account_name: accountData.account_name,
-      };
-    } else {
-      return res
-        .status(400)
-        .json({ success: false, message: "Invalid payment method" });
-    }
-
-    // Save payment record — store authorizationUrl so retries can replay it
-    await Payment.create({
-      orders: orders.map((o) => o._id),
-      user: req.user._id,
-      provider,
-      amount: totalAmount,
-      reference,
-      status: "pending",
-      method,
-      virtualAccount,
-      authorizationUrl: authorization_url || null,
-    });
+    reservation.authorizationUrl = authorization_url || null;
+    reservation.virtualAccount = virtualAccount;
+    await reservation.save();
 
     return res.status(200).json({
       success: true,
@@ -503,7 +553,12 @@ export const paystackWebhook = async (req, res) => {
       .update(rawBody)
       .digest("hex");
 
-    if (hash !== req.headers["x-paystack-signature"]) {
+    // Constant-time comparison to prevent timing side-channel leaks — matches
+    // the pattern already used in flutterwaveController's webhook handler.
+    const signature = req.headers["x-paystack-signature"];
+    if (!signature ||
+        signature.length !== hash.length ||
+        !crypto.timingSafeEqual(Buffer.from(hash), Buffer.from(signature))) {
       return res.status(401).send("Invalid signature");
     }
 

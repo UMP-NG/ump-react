@@ -7,65 +7,13 @@ import Order from "../models/Order.js";
 import PushSub from "../models/PushSub.js";
 import fs from "fs";
 import csv from "csv-parser";
-import bcrypt from "bcryptjs";
-import generateToken from "../utils/generateToken.js";
-import cloudinary from "../config/cloudinary.js";
 import logger from "../utils/logger.js";
 
-// ===============================
-// LOGIN
-// ===============================
-export const adminLogin = async (req, res) => {
-  try {
-    const { email, password } = req.body;
-
-    const existingUser = await User.findOne({ email });
-    if (!existingUser) {
-      return res.status(400).json({ message: "Invalid credentials" });
-    }
-
-    // ✅ Place your verification check here
-    if (!existingUser.isVerified) {
-      return res
-        .status(403)
-        .json({ message: "Please verify your email with the OTP first." });
-    }
-
-    const isPasswordCorrect = await bcrypt.compare(
-      password,
-      existingUser.password
-    );
-    if (!isPasswordCorrect) {
-      return res.status(400).json({ message: "Invalid credentials" });
-    }
-
-    const token = generateToken(existingUser._id);
-
-    res.status(200).json({
-      message: "Login successful",
-      token,
-      user: {
-        id: existingUser._id,
-        email: existingUser.email,
-      },
-    });
-  } catch (error) {
-    logger.error("Login error:", error);
-    res.status(500).json({ message: "Server error" });
-  }
-};
-
-// ===============================
-// USERS MANAGEMENT
-// ===============================
-export const getAllUsers = async (req, res) => {
-  try {
-    const users = await User.find().select("-password");
-    res.json(users);
-  } catch (error) {
-    res.status(500).json({ message: "Server error" });
-  }
-};
+// Note: this file used to also export adminLogin, getAllUsers, getAllSellers,
+// getAllProducts, getAllListings, getAllServices, and getAllOrders — none of
+// them were imported by any route (superseded by the domain-specific
+// controllers under adminUserController.js / adminSellerController.js / etc.,
+// mounted in adminRoutes.js). Removed as dead code.
 
 const ASSIGNABLE_ROLES = ["user", "seller", "service_provider"];
 
@@ -121,15 +69,6 @@ export const deleteUser = async (req, res) => {
 // ===============================
 // SELLERS MANAGEMENT
 // ===============================
-export const getAllSellers = async (req, res) => {
-  try {
-    const sellers = await Seller.find().populate("user", "email name");
-    res.json(sellers);
-  } catch (error) {
-    res.status(500).json({ message: "Server error" });
-  }
-};
-
 export const updateSellerStatus = async (req, res) => {
   try {
     const seller = await Seller.findById(req.params.sellerId);
@@ -168,21 +107,20 @@ export const deleteSeller = async (req, res) => {
 // ===============================
 // PRODUCTS MANAGEMENT
 // ===============================
-export const getAllProducts = async (req, res) => {
-  try {
-    const products = await Product.find().populate("seller", "name email");
-    res.json(products);
-  } catch (error) {
-    res.status(500).json({ message: "Server error" });
-  }
-};
+// Moderation-only fields — full product edits go through the seller's own
+// PUT /api/products/:id (productController.updateProduct), which already
+// whitelists fields correctly. This admin endpoint only ever needs to
+// flag/remove/promote a listing, never touch ownership, price, or stock.
+const ADMIN_PRODUCT_FIELDS = ["isFlagged", "isRemoved", "isAdvertised"];
 
 export const updateProduct = async (req, res) => {
   try {
     const product = await Product.findById(req.params.productId);
     if (!product) return res.status(404).json({ message: "Product not found" });
 
-    Object.assign(product, req.body);
+    for (const key of ADMIN_PRODUCT_FIELDS) {
+      if (req.body[key] !== undefined) product[key] = req.body[key];
+    }
     await product.save();
     res.json(product);
   } catch (error) {
@@ -206,21 +144,19 @@ export const deleteProduct = async (req, res) => {
 // ===============================
 // LISTINGS MANAGEMENT
 // ===============================
-export const getAllListings = async (req, res) => {
-  try {
-    const listings = await Listing.find();
-    res.json(listings);
-  } catch (error) {
-    res.status(500).json({ message: "Server error" });
-  }
-};
+// Moderation-only — ownership ("owner") and pricing/fee fields must never be
+// settable from the admin panel's raw update; full edits belong to the owner
+// via PUT /api/listings/:id.
+const ADMIN_LISTING_FIELDS = ["available", "furnished"];
 
 export const updateListing = async (req, res) => {
   try {
     const listing = await Listing.findById(req.params.listingId);
     if (!listing) return res.status(404).json({ message: "Listing not found" });
 
-    Object.assign(listing, req.body);
+    for (const key of ADMIN_LISTING_FIELDS) {
+      if (req.body[key] !== undefined) listing[key] = req.body[key];
+    }
     await listing.save();
     res.json(listing);
   } catch (error) {
@@ -244,21 +180,18 @@ export const deleteListing = async (req, res) => {
 // ===============================
 // SERVICES MANAGEMENT
 // ===============================
-export const getAllServices = async (req, res) => {
-  try {
-    const services = await Service.find().populate("seller", "name email");
-    res.json(services);
-  } catch (error) {
-    res.status(500).json({ message: "Server error" });
-  }
-};
+// "verified" is legitimately admin-settable here — this IS the verification-
+// approval workflow. Ownership ("provider") and rating fields are not.
+const ADMIN_SERVICE_FIELDS = ["available", "verified"];
 
 export const updateService = async (req, res) => {
   try {
     const service = await Service.findById(req.params.serviceId);
     if (!service) return res.status(404).json({ message: "Service not found" });
 
-    Object.assign(service, req.body);
+    for (const key of ADMIN_SERVICE_FIELDS) {
+      if (req.body[key] !== undefined) service[key] = req.body[key];
+    }
     await service.save();
     res.json(service);
   } catch (error) {
@@ -282,21 +215,27 @@ export const deleteService = async (req, res) => {
 // ===============================
 // ORDERS MANAGEMENT
 // ===============================
-export const getAllOrders = async (req, res) => {
-  try {
-    const orders = await Order.find().populate("buyer seller items.product");
-    res.json(orders);
-  } catch (error) {
-    res.status(500).json({ message: "Server error" });
-  }
-};
+// Never expose buyer/seller/items/totalAmount/paymentStatus/paymentInfo/
+// deliveryCode/deliveryCodeUsed/escrowReleasedAt/refund here — those are only
+// safe to change through the guarded state machine in
+// orderController.updateOrderStatus / confirmDelivery.
+const ADMIN_ORDER_STATUSES = ["processing", "shipped", "delivered", "completed", "cancelled"];
 
 export const updateOrder = async (req, res) => {
   try {
     const order = await Order.findById(req.params.orderId);
     if (!order) return res.status(404).json({ message: "Order not found" });
 
-    Object.assign(order, req.body);
+    if (req.body.status !== undefined) {
+      if (!ADMIN_ORDER_STATUSES.includes(req.body.status)) {
+        return res.status(400).json({ message: "Invalid status" });
+      }
+      order.status = req.body.status;
+    }
+    if (req.body.trackingNumber !== undefined) order.trackingNumber = req.body.trackingNumber;
+    if (req.body.notes !== undefined) order.notes = req.body.notes;
+    if (req.body.disputeNote !== undefined) order.disputeNote = req.body.disputeNote;
+
     await order.save();
     res.json(order);
   } catch (error) {

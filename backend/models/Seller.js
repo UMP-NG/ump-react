@@ -60,7 +60,7 @@ const sellerSchema = new mongoose.Schema(
     totalRevenue: { type: Number, default: 0 },
     totalOrders: { type: Number, default: 0 },
     totalProducts: { type: Number, default: 0 },
-    pendingPayout: { type: Number, default: 0 },
+    pendingPayout: { type: Number, default: 0, min: 0 },
     views: { type: Number, default: 0 },
     address: { type: String, trim: true },
 

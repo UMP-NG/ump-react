@@ -53,8 +53,8 @@ router.put ("/change-password",           protect, changePassword);
 router.put ("/set-password",              protect, setPassword);
 
 // ── School email linking ──────────────────────────────────────────────────────
-router.post("/link-school-email",         protect, linkSchoolEmail);
-router.post("/verify-school-email",       protect, verifySchoolEmail);
+router.post("/link-school-email",         protect, otpLimiter, linkSchoolEmail);
+router.post("/verify-school-email",       protect, otpLimiter, verifySchoolEmail);
 
 // ── Referral stats (MUST be before /referral/:code to avoid param capture) ───
 router.get ("/referral/stats",            protect, getReferralStats);

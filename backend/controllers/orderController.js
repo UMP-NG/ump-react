@@ -16,6 +16,20 @@ import { notify } from "../utils/notify.js";
 import logger from "../utils/logger.js";
 import { spendWalletBalance, refundWalletBalance } from "./walletController.js";
 
+// Atomic, guarded stock decrement — the order itself is already placed/paid
+// by the time this runs (completion/delivery-confirm), so an oversold item
+// can't be un-sold here; this only stops the counter itself from going
+// negative under concurrent fulfillment and surfaces it for follow-up.
+async function decrementStock(productId, qty) {
+  const guarded = await Product.findOneAndUpdate(
+    { _id: productId, stock: { $gte: qty } },
+    { $inc: { stock: -qty, sold: qty, purchases: qty } }
+  );
+  if (guarded) return;
+  logger.warn(`⚠️ Oversold: product ${productId} had insufficient stock for a ${qty}-unit fulfillment — clamping to 0`);
+  await Product.findByIdAndUpdate(productId, { $set: { stock: 0 }, $inc: { sold: qty, purchases: qty } });
+}
+
 // Read platform fee settings from Config once per request (cached in local var)
 async function getFeeConfig() {
   const config = await Config.findOne().select("fees").lean();
@@ -151,6 +165,17 @@ export const checkoutCart = async (req, res) => {
       await User.findOneAndUpdate({ _id: userId }, { $inc: { referralCredit: spent.referralCredit } }).catch(() => {});
       spent.referralCredit = 0;
     }
+  }
+
+  // Tracks the coupon this request atomically claimed (if any) so it can be
+  // released — same sibling-scope reasoning as rollbackCredit above — if
+  // checkout fails after the claim but before the order(s) it was meant to
+  // discount actually exist.
+  let claimedCouponId = null;
+  async function releaseCoupon() {
+    if (!claimedCouponId) return;
+    await Coupon.findByIdAndUpdate(claimedCouponId, { $inc: { usedCount: -1 }, $pull: { usedBy: userId } }).catch(() => {});
+    claimedCouponId = null;
   }
 
   try {
@@ -295,26 +320,35 @@ export const checkoutCart = async (req, res) => {
         await rollbackCredit();
         return res.status(400).json({ message: "This coupon has expired" });
       }
-      // Atomic check: claim one usage slot before any orders are created
+      // Already used by this user? Check before claiming (fast, friendly error;
+      // the claim below is still the atomic, race-safe guard against reuse).
+      if (couponDoc.usedBy?.some((u) => u.toString() === userId.toString())) {
+        await rollbackCredit();
+        return res.status(400).json({ message: "You've already used this coupon" });
+      }
+
+      // Atomic check: claim one usage slot (and this user's one-time redemption)
+      // before any orders are created.
       const claimed = await Coupon.findOneAndUpdate(
         {
           _id: couponDoc._id,
           active: true,
+          usedBy: { $ne: userId },
           $or: [{ maxUses: null }, { $expr: { $lt: ["$usedCount", "$maxUses"] } }],
         },
-        { $inc: { usedCount: 1 } },
+        { $inc: { usedCount: 1 }, $push: { usedBy: userId } },
         { new: false }
       );
       if (!claimed) {
         await rollbackCredit();
         return res.status(400).json({ message: "This coupon has reached its usage limit" });
       }
+      claimedCouponId = claimed._id;
       couponDoc = claimed; // pre-increment snapshot still holds the valid doc
       // Re-compute discount on the cart total (never trust the client-sent value)
       const amount = cartTotal;
       if (amount < (couponDoc.minOrderAmount || 0)) {
-        // Roll back the slot we just claimed
-        await Coupon.findByIdAndUpdate(couponDoc._id, { $inc: { usedCount: -1 } });
+        await releaseCoupon();
         await rollbackCredit();
         return res.status(400).json({ message: `Minimum order amount for this coupon is ₦${couponDoc.minOrderAmount.toLocaleString("en-NG")}` });
       }
@@ -409,9 +443,11 @@ export const checkoutCart = async (req, res) => {
     return res.status(201).json({ success: true, orders: createdOrders, order: createdOrders[0] });
   } catch (err) {
     logger.error("❌ Checkout error:", err);
-    // Covers failures after credit was already deducted but before any order
-    // was created (e.g. order.save() validation failure) — without this,
-    // wallet/referral credit stays spent with nothing to show for it.
+    // Covers failures after credit/coupon were already claimed but before any
+    // order was created (e.g. order.save() validation failure) — without
+    // this, wallet/referral credit and the coupon's usage slot stay spent
+    // with no order to show for them.
+    await releaseCoupon();
     await rollbackCredit();
     return res.status(500).json({ success: false, message: err.message });
   }
@@ -633,13 +669,7 @@ export const updateOrderStatus = async (req, res) => {
       for (const item of order.items) {
         const productId = item.product?._id || item.product;
         if (productId) {
-          await Product.findByIdAndUpdate(productId, {
-            $inc: {
-              stock: -Math.abs(item.quantity),
-              sold: item.quantity,
-              purchases: item.quantity,
-            },
-          });
+          await decrementStock(productId, Math.abs(item.quantity));
         }
       }
     }
@@ -647,8 +677,17 @@ export const updateOrderStatus = async (req, res) => {
     // ── On CANCELLED: initiate refund if payment was received ────────────────
     if (status === "cancelled" && order.paymentStatus === "paid") {
       order.paymentStatus = "refunded";
+      // If some items were already delivered (a "partial" order being cancelled
+      // for its remaining items), only refund the still-outstanding portion —
+      // the delivered portion's payout was already credited to the seller in
+      // confirmDelivery and must not also be refunded to the buyer.
+      const allItemsSubtotal = order.items.reduce((s, i) => s + i.price * i.quantity, 0);
+      const outstandingSubtotal = order.items
+        .filter((i) => i.status !== "completed")
+        .reduce((s, i) => s + i.price * i.quantity, 0);
+      const refundFraction = allItemsSubtotal > 0 ? outstandingSubtotal / allItemsSubtotal : 1;
       order.refund = {
-        amount: order.totalAmount,
+        amount: Math.round(order.totalAmount * refundFraction),
         reason: "Order cancelled by seller",
         status: "requested",
         initiatedAt: new Date(),
@@ -975,14 +1014,10 @@ export const confirmDelivery = async (req, res) => {
     if (order.deliveryCodeUsed)
       return res.status(400).json({ message: "Delivery already confirmed for this order" });
 
-    // Constant-time delivery code comparison — prevents timing-based enumeration
-    const storedBuf = Buffer.from(order.deliveryCode || "");
-    const inputBuf  = Buffer.from(code);
-    const codeMatch = storedBuf.length === inputBuf.length && crypto.timingSafeEqual(storedBuf, inputBuf);
-    if (!codeMatch)
-      return res.status(400).json({ message: "Invalid delivery code" });
-
-    // Verify seller ownership before the atomic gate
+    // Verify seller ownership BEFORE comparing the code — checking the code
+    // first would let a non-owner distinguish "wrong code" from "not your
+    // order" (a 400 vs 403 oracle), which lets someone probe a code via an
+    // unrelated account instead of the one this order's rate limit tracks.
     const userId = req.user._id.toString();
     const isAdmin = req.user.roles?.includes("admin");
     if (!isAdmin) {
@@ -995,6 +1030,13 @@ export const confirmDelivery = async (req, res) => {
         if (!ownsItem) return res.status(403).json({ message: "Not authorized" });
       }
     }
+
+    // Constant-time delivery code comparison — prevents timing-based enumeration
+    const storedBuf = Buffer.from(order.deliveryCode || "");
+    const inputBuf  = Buffer.from(code);
+    const codeMatch = storedBuf.length === inputBuf.length && crypto.timingSafeEqual(storedBuf, inputBuf);
+    if (!codeMatch)
+      return res.status(400).json({ message: "Invalid delivery code" });
 
     // ── Atomic gate: exactly one concurrent request wins ─────────────────────
     // findOneAndUpdate with deliveryCodeUsed:false ensures this is a test-and-set.
@@ -1080,9 +1122,7 @@ export const confirmDelivery = async (req, res) => {
     for (const item of toDeliver) {
       const productId = item.product?._id || item.product;
       if (productId) {
-        await Product.findByIdAndUpdate(productId, {
-          $inc: { stock: -Math.abs(item.quantity), sold: item.quantity, purchases: item.quantity },
-        });
+        await decrementStock(productId, Math.abs(item.quantity));
       }
     }
 

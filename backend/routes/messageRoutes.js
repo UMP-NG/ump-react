@@ -11,6 +11,7 @@ import {
   getMessageById,
   getUnreadMessages,
 } from "../controllers/messageController.js";
+import { getSupportTeam } from "../controllers/adminUserController.js";
 import { protect, requireRole } from "../middleware/authMiddleware.js";
 import { uploadAttachments } from "../middleware/upload.js";
 import { messageLimiter } from "../middleware/rateLimits.js";
@@ -65,6 +66,15 @@ router.get(
   protect,
   requireRole(...ALL_CHAT_ROLES),
   getUnreadMessages
+);
+// Any logged-in user can see who's on the support team (name/avatar/role only —
+// the same safe shape as the admin-only /api/admins/support/team) to start a
+// support conversation. Must stay above the dynamic /:messageId route.
+router.get(
+  "/support-team",
+  protect,
+  requireRole(...ALL_CHAT_ROLES),
+  getSupportTeam
 );
 router.get(
   "/:messageId",

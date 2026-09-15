@@ -13,6 +13,9 @@ export const applyCoupon = async (req, res) => {
     if (!coupon) return res.status(404).json({ message: "Invalid or expired coupon code" });
     if (coupon.expiresAt && coupon.expiresAt < new Date()) return res.status(400).json({ message: "This coupon has expired" });
     if (coupon.maxUses !== null && coupon.usedCount >= coupon.maxUses) return res.status(400).json({ message: "This coupon has reached its usage limit" });
+    if (req.user && coupon.usedBy?.some((u) => u.toString() === req.user._id.toString())) {
+      return res.status(400).json({ message: "You've already used this coupon" });
+    }
     if (amount < (coupon.minOrderAmount || 0)) return res.status(400).json({ message: `Minimum order amount for this coupon is ₦${coupon.minOrderAmount.toLocaleString("en-NG")}` });
 
     const discount = coupon.discountType === "percent"

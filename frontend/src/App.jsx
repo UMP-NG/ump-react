@@ -178,34 +178,94 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    // Record one site-visit ping per browser tab session (not per route change).
-    // Uses a plain fetch — not apiFetch — so this fire-and-forget ping never
-    // triggers apiFetch's write-path cache invalidation (which nukes admin/
+    // Record one site-visit ping per browser tab session (not per route change),
+    // then keep a periodic heartbeat going for as long as the tab stays open so
+    // admins can see real time-on-app, not just visit counts (used for investor/
+    // funding reporting — see admin Dashboard "Active users" / "Avg. time on app").
+    // Uses a plain fetch — not apiFetch — so these fire-and-forget pings never
+    // trigger apiFetch's write-path cache invalidation (which nukes admin/
     // products/sellers caches on every non-GET call).
     try {
-      if (sessionStorage.getItem("ump_visit_tracked")) return;
       let visitorId = localStorage.getItem("ump_visitor_id");
       if (!visitorId) {
         visitorId = crypto.randomUUID();
         localStorage.setItem("ump_visitor_id", visitorId);
       }
-      const token = getToken();
-      fetch(`${API_BASE}/api/track/visit`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        credentials: "include",
-        body: JSON.stringify({ visitorId }),
-      })
-        .then((res) => {
-          // Only mark this tab session as tracked once the ping actually succeeds —
-          // a transient network failure should be retried on the next reload rather
-          // than silently never counting this visit for the rest of the session.
-          if (res.ok) sessionStorage.setItem("ump_visit_tracked", "1");
+      // One id per tab session, reused by the initial ping and every heartbeat
+      // so they all accumulate onto the same Visit record. Persisted in
+      // sessionStorage (not localStorage) so a same-tab refresh continues the
+      // same session instead of fragmenting time-on-app across reloads, but a
+      // new tab/window still starts fresh.
+      let sessionId = sessionStorage.getItem("ump_session_id");
+      if (!sessionId) {
+        sessionId = crypto.randomUUID();
+        sessionStorage.setItem("ump_session_id", sessionId);
+      }
+
+      if (!sessionStorage.getItem("ump_visit_tracked")) {
+        const token = getToken();
+        fetch(`${API_BASE}/api/track/visit`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          credentials: "include",
+          body: JSON.stringify({ visitorId, sessionId }),
         })
-        .catch(() => {});
+          .then((res) => {
+            // Only mark this tab session as tracked once the ping actually succeeds —
+            // a transient network failure should be retried on the next reload rather
+            // than silently never counting this visit for the rest of the session.
+            if (res.ok) sessionStorage.setItem("ump_visit_tracked", "1");
+          })
+          .catch(() => {});
+      }
+
+      // Heartbeat every 30s (matches the backend's fixed per-beat increment)
+      // while this tab is open, but only counted when actually visible/
+      // foregrounded — a backgrounded tab shouldn't inflate time-on-app with
+      // idle time sitting behind other windows. The timer is fully stopped
+      // (not just skipped-in-place) while hidden, and restarted with an
+      // immediate heartbeat on regaining visibility so a long-backgrounded
+      // tab doesn't wait up to 30s for its first beat to count again.
+      const HEARTBEAT_MS = 30000;
+      let heartbeatTimer = null;
+
+      const sendHeartbeat = () => {
+        fetch(`${API_BASE}/api/track/heartbeat`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionId }),
+        }).catch(() => {});
+      };
+
+      const startHeartbeat = () => {
+        if (heartbeatTimer) return;
+        heartbeatTimer = setInterval(sendHeartbeat, HEARTBEAT_MS);
+      };
+
+      const stopHeartbeat = () => {
+        clearInterval(heartbeatTimer);
+        heartbeatTimer = null;
+      };
+
+      const handleVisibilityChange = () => {
+        if (document.visibilityState === "visible") {
+          sendHeartbeat();
+          startHeartbeat();
+        } else {
+          stopHeartbeat();
+        }
+      };
+
+      if (document.visibilityState === "visible") startHeartbeat();
+      document.addEventListener("visibilitychange", handleVisibilityChange);
+
+      return () => {
+        stopHeartbeat();
+        document.removeEventListener("visibilitychange", handleVisibilityChange);
+      };
     } catch {
       // Storage may be unavailable (private browsing) — skip tracking silently
     }

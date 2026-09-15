@@ -839,6 +839,8 @@ function AddProductModal({ onClose, onSave, showToast }) {
   const [imageFiles, setImageFiles] = useState([]);
   const [imagePreviews, setImagePreviews] = useState([]);
   const [mainImageIdx, setMainImageIdx] = useState(0);
+  const [videoFile, setVideoFile] = useState(null);
+  const [videoPreview, setVideoPreview] = useState(null);
   const [categories, setCategories] = useState([]);
   const [staged, setStaged] = useState([]);
   const [saving, setSaving] = useState(false);
@@ -874,6 +876,8 @@ function AddProductModal({ onClose, onSave, showToast }) {
     setImageFiles(item.imageFiles || []);
     setImagePreviews(item.imagePreviews || []);
     setMainImageIdx(item.mainImageIdx || 0);
+    setVideoFile(item.videoFile || null);
+    setVideoPreview(item.videoPreview || null);
     setVariantInput({ label: "", price: "", stock: "1" });
     setAddError("");
     modalRef.current?.scrollTo({ top: 0, behavior: "smooth" });
@@ -918,6 +922,12 @@ function AddProductModal({ onClose, onSave, showToast }) {
     setMainImageIdx((m) => { if (i < m) return m - 1; if (i === m) return 0; return m; });
   }
 
+  function handleVideoPick(e) {
+    const f = e.target.files?.[0];
+    if (f) { setVideoFile(f); setVideoPreview(URL.createObjectURL(f)); }
+    e.target.value = "";
+  }
+
   const addColor = () => { if (!colorInput.name.trim()) return; setForm((f) => ({ ...f, colors: [...f.colors, { ...colorInput }] })); setColorInput({ name: "", code: "#e0e0e0" }); };
   const removeColor = (i) => setForm((f) => ({ ...f, colors: f.colors.filter((_, idx) => idx !== i) }));
   const addSize = () => { const s = sizeInput.trim().toUpperCase(); if (!s) return; setForm((f) => ({ ...f, sizes: f.sizes.includes(s) ? f.sizes : [...f.sizes, s] })); setSizeInput(""); };
@@ -947,6 +957,7 @@ function AddProductModal({ onClose, onSave, showToast }) {
     // Keep condition, status, category — sellers usually list similar products back-to-back
     setForm(f => ({ ...f, name: "", price: "", stock: "", desc: "", colors: [], sizes: [], types: [], specs: [], variants: [] }));
     setImageFiles([]); setImagePreviews([]); setMainImageIdx(0);
+    setVideoFile(null); setVideoPreview(null);
     setColorInput({ name: "", code: "#e0e0e0" });
     setSizeInput(""); setTypeInput(""); setSpecInput({ k: "", v: "" });
     setVariantInput({ label: "", price: "", stock: "1" });
@@ -956,7 +967,7 @@ function AddProductModal({ onClose, onSave, showToast }) {
   function queueProduct() {
     setAddError("");
     if (!validate()) return;
-    setStaged(s => [...s, { form: { ...form }, imageFiles: [...imageFiles], imagePreviews: [...imagePreviews], mainImageIdx }]);
+    setStaged(s => [...s, { form: { ...form }, imageFiles: [...imageFiles], imagePreviews: [...imagePreviews], mainImageIdx, videoFile, videoPreview }]);
     resetFields();
   }
 
@@ -981,6 +992,7 @@ function AddProductModal({ onClose, onSave, showToast }) {
       ? item.imageFiles
       : [item.imageFiles[item.mainImageIdx], ...item.imageFiles.filter((_, i) => i !== item.mainImageIdx)];
     orderedFiles.forEach((file) => fd.append("images", file));
+    if (item.videoFile) fd.append("videos", item.videoFile);
     return fd;
   }
 
@@ -989,7 +1001,7 @@ function AddProductModal({ onClose, onSave, showToast }) {
     const allToSubmit = [...staged];
     if (form.name.trim() || imageFiles.length) {
       if (!validate()) return;
-      allToSubmit.push({ form: { ...form }, imageFiles: [...imageFiles], imagePreviews: [...imagePreviews], mainImageIdx });
+      allToSubmit.push({ form: { ...form }, imageFiles: [...imageFiles], imagePreviews: [...imagePreviews], mainImageIdx, videoFile, videoPreview });
     }
     if (!allToSubmit.length) { showError("Please fill in at least one product."); return; }
     setSaving(true);
@@ -1148,6 +1160,27 @@ function AddProductModal({ onClose, onSave, showToast }) {
               <p style={{ margin: "5px 0 0", fontSize: "1.1rem", color: "var(--ink-3)" }}>
                 <i className="fas fa-circle-info" style={{ marginRight: 4 }} />Tap an image to set it as the cover
               </p>
+            )}
+          </div>
+
+          {/* Video */}
+          <div style={{ marginBottom: 14 }}>
+            <label style={lSty}>Product video <span style={{ fontWeight: 400, color: "var(--ink-4)" }}>(optional — a short clip gets your listing more visibility)</span></label>
+            {videoPreview ? (
+              <div style={{ position: "relative", width: "fit-content" }}>
+                <video controls playsInline preload="metadata" style={{ width: 160, borderRadius: 8, maxHeight: 160 }}>
+                  <source src={videoPreview} type={videoFile?.type || "video/mp4"} />
+                </video>
+                <button type="button" onClick={() => { setVideoFile(null); setVideoPreview(null); }} style={{ position: "absolute", top: 4, right: 4, width: 22, height: 22, borderRadius: "50%", background: "rgba(0,0,0,.65)", color: "#fff", border: "none", cursor: "pointer", fontSize: "0.9rem", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}>
+                  <i className="fas fa-xmark" />
+                </button>
+              </div>
+            ) : (
+              <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", padding: "8px 14px", borderRadius: "var(--r-md)", border: "1px dashed var(--line)", background: "var(--surface)", width: "fit-content" }}>
+                <i className="fas fa-video" style={{ color: "var(--accent)" }} />
+                <span style={{ fontSize: "1.2rem", color: "var(--ink-2)" }}>Add a video</span>
+                <input type="file" accept="video/*" style={{ display: "none" }} onChange={handleVideoPick} />
+              </label>
             )}
           </div>
 

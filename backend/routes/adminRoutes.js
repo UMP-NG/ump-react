@@ -62,6 +62,8 @@ import {
   rejectIdentityVerification,
   getUmpStore,
   updateUmpStore,
+  getAdminFeedback,
+  markFeedbackReviewed,
 } from "../controllers/adminDashboardController.js";
 
 const router = express.Router();
@@ -146,6 +148,10 @@ router.delete("/reviews/:reviewId",  ...adm, deleteReview);
 // ── Reported content ───────────────────────────────────────────────────────
 router.get ("/reports",                      ...adm, getAdminReports);
 router.post("/reports/:reportId/resolve",    ...adm, resolveReport);
+
+// ── Demand feedback (browse/search "can't find it" survey) ──────────────────
+router.get ("/feedback",                         ...adm, getAdminFeedback);
+router.post("/feedback/:feedbackId/review",      ...adm, markFeedbackReviewed);
 
 // ── Disputes ───────────────────────────────────────────────────────────────
 router.get ("/disputes",                      ...adm, getAdminDisputes);

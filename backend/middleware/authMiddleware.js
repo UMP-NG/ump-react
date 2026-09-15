@@ -3,13 +3,21 @@ import mongoose from "mongoose";
 import User from "../models/User.js";
 import cookie from "cookie";
 
+// Cookie-based auth is only trusted for safe (read-only) requests. The
+// frontend always sends the Authorization header itself (see utils/api.js),
+// so this only ever matters for direct-link GETs (e.g. an invoice download
+// opened in a new tab) or non-browser clients. Accepting the ambient cookie
+// on state-changing requests would let a forged cross-site request ride it —
+// there is no CSRF token anywhere in this app, so this is the actual defense.
+const SAFE_METHODS = new Set(["GET", "HEAD"]);
+
 export const protect = async (req, res, next) => {
   try {
     // ===== 1️⃣ Check Authorization header =====
     let token = req.header("Authorization")?.replace("Bearer ", "");
 
-    // ===== 2️⃣ Check cookie if header missing =====
-    if (!token && req.headers.cookie) {
+    // ===== 2️⃣ Check cookie if header missing (safe methods only — see above) =====
+    if (!token && SAFE_METHODS.has(req.method) && req.headers.cookie) {
       const cookies = cookie.parse(req.headers.cookie || "");
       token = cookies.token;
     }
@@ -40,9 +48,21 @@ export const protect = async (req, res, next) => {
         .select("-password -wishlist -cart -orders -services -following -otp -otpExpire -resetPasswordToken -resetPasswordExpire -schoolEmailOtp -schoolEmailOtpExpire -fcmToken")
         .maxTimeMS(8000)
         .lean();
-      
+
       if (!user) {
         return res.status(404).json({ message: "User not found" });
+      }
+
+      if (user.status === "banned") {
+        return res.status(403).json({ message: "This account has been suspended." });
+      }
+
+      // Tokens issued before this field existed carry no "v" claim — treat
+      // that as version 0, matching the schema default, so existing sessions
+      // aren't logged out by this change. A password change bumps
+      // tokenVersion, which invalidates every token still holding the old value.
+      if ((decoded.v ?? 0) !== (user.tokenVersion || 0)) {
+        return res.status(401).json({ message: "Session expired — please log in again." });
       }
 
       req.user = user;
@@ -65,7 +85,7 @@ export const optionalAuth = async (req, res, next) => {
   try {
     if (req.user) return next();
     let token = req.header("Authorization")?.replace("Bearer ", "");
-    if (!token && req.headers.cookie) {
+    if (!token && SAFE_METHODS.has(req.method) && req.headers.cookie) {
       token = cookie.parse(req.headers.cookie || "").token;
     }
     if (!token) return next();
@@ -75,7 +95,9 @@ export const optionalAuth = async (req, res, next) => {
       .select("-password -wishlist -cart -orders -services -following -otp -otpExpire -resetPasswordToken -resetPasswordExpire -schoolEmailOtp -schoolEmailOtpExpire -fcmToken")
       .maxTimeMS(5000)
       .lean();
-    if (user) req.user = user;
+    if (user && user.status !== "banned" && (decoded.v ?? 0) === (user.tokenVersion || 0)) {
+      req.user = user;
+    }
   } catch { /* ignore */ }
   next();
 };

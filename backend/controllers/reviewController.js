@@ -3,6 +3,7 @@ import Product from "../models/Product.js";
 import Listing from "../models/Listing.js";
 import Service from "../models/Service.js";
 import Order from "../models/Order.js";
+import Booking from "../models/Booking.js";
 import { notify } from "../utils/notify.js";
 import logger from "../utils/logger.js";
 
@@ -44,12 +45,24 @@ export const addReview = async (req, res) => {
       if (service?.provider?.toString() === req.user._id.toString()) {
         return res.status(403).json({ success: false, message: "You cannot review your own service." });
       }
+      const hasBooking = await Booking.findOne({
+        user: req.user._id, item: refId, itemModel: "Service", status: "completed",
+      }).select("_id").lean();
+      if (!hasBooking) {
+        return res.status(403).json({ success: false, message: "Only customers with a completed booking can review this service." });
+      }
     }
 
     if (refModel === "Listing") {
       const listing = await Listing.findById(refId).select("owner").lean();
       if (listing?.owner?.toString() === req.user._id.toString()) {
         return res.status(403).json({ success: false, message: "You cannot review your own listing." });
+      }
+      const hasBooking = await Booking.findOne({
+        user: req.user._id, item: refId, itemModel: "Listing", status: "completed",
+      }).select("_id").lean();
+      if (!hasBooking) {
+        return res.status(403).json({ success: false, message: "Only customers with a completed booking can review this listing." });
       }
     }
 
@@ -82,6 +95,9 @@ export const addReview = async (req, res) => {
 
     res.status(201).json({ success: true, review });
   } catch (error) {
+    if (error.code === 11000) {
+      return res.status(409).json({ success: false, message: "You have already reviewed this item." });
+    }
     logger.error("Error adding review:", error);
     res.status(500).json({ success: false, message: "Server error" });
   }
@@ -201,11 +217,19 @@ export const replyToReview = async (req, res) => {
 // ✅ Get all reviews (admin/public)
 export const getAllReviews = async (req, res) => {
   try {
-    const reviews = await Review.find()
-      .populate("author", "name avatar")
-      .sort({ createdAt: -1 });
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 100);
+    const skip  = Math.max(parseInt(req.query.skip, 10) || 0, 0);
 
-    res.json({ success: true, count: reviews.length, reviews });
+    const [reviews, total] = await Promise.all([
+      Review.find()
+        .populate("author", "name avatar")
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit),
+      Review.countDocuments(),
+    ]);
+
+    res.json({ success: true, count: reviews.length, total, reviews });
   } catch (error) {
     logger.error("Error fetching all reviews:", error);
     res.status(500).json({ success: false, message: "Server error" });

@@ -4,7 +4,7 @@ import Navbar from "../components/Navbar";
 import BottomNav from "../components/BottomNav";
 import { useUser } from "../context/UserContext";
 import { useToast } from "../context/ToastContext";
-import { apiFetch } from "../utils/api";
+import { apiFetch, setToken } from "../utils/api";
 import { isPushSupported } from "../utils/pushNotification";
 import { subscribeToPush, unsubscribeFromPush } from "../utils/push";
 import ImageCropModal from "../components/ImageCropModal";
@@ -434,10 +434,14 @@ function SecurityTab({ user, showToast, onAccountDeleted }) {
     if (form.newPassword !== form.confirm) return showToast("New passwords don't match", "error");
     setSaving(true);
     try {
-      await apiFetch("/api/auth/change-password", {
+      const res = await apiFetch("/api/auth/change-password", {
         method: "PUT",
         body: { currentPassword: form.currentPassword, newPassword: form.newPassword },
       });
+      // Changing your password invalidates every other session's token,
+      // including — briefly — this one; store the fresh one the server issues
+      // so this device stays signed in.
+      if (res?.token) setToken(res.token);
       showToast("Password changed successfully", "success");
       setForm({ currentPassword: "", newPassword: "", confirm: "" });
     } catch (err) {
@@ -453,10 +457,11 @@ function SecurityTab({ user, showToast, onAccountDeleted }) {
     if (pwSetForm.newPassword !== pwSetForm.confirm) return showToast("Passwords don't match", "error");
     setSavingSet(true);
     try {
-      await apiFetch("/api/auth/set-password", {
+      const res = await apiFetch("/api/auth/set-password", {
         method: "PUT",
         body: { newPassword: pwSetForm.newPassword },
       });
+      if (res?.token) setToken(res.token);
       showToast("Password set! You can now log in with your school email.", "success");
       setPwSetForm({ newPassword: "", confirm: "" });
     } catch (err) {
