@@ -204,6 +204,18 @@ export const createBroadcast = async (req, res) => {
       reach = Math.max(reach, pushed);
     }
 
+    // Count the email channel's intended audience synchronously — actual
+    // delivery happens in the background (see deliverBroadcastEmail below)
+    // and can take minutes, so if reach only reflected confirmed sends the
+    // admin's immediate response (and the "Recent broadcasts" list right
+    // after) would show "reached 0 users" for an email-only broadcast even
+    // though sending had just started. Matches inapp's counting: audience
+    // size, not confirmed opens/deliveries.
+    if (ch.email) {
+      const emailAudienceCount = await User.countDocuments(roleFilter);
+      reach = Math.max(reach, emailAudienceCount);
+    }
+
     // Mark the email channel "pending" durably, in the same write as the
     // reach update, BEFORE responding — this is the record that survives a
     // crash and lets resumePendingBroadcastEmails() pick delivery back up.
