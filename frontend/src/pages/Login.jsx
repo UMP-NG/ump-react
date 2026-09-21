@@ -179,7 +179,7 @@ export default function Login() {
       const data = await apiFetch(endpoint, { method: "POST", body });
       if (tab === "signup") {
         try { sessionStorage.setItem("ump_otp_email", trimmedEmail); } catch { /* ignore */ }
-        navigate("/auth", { state: { email: trimmedEmail } });
+        navigate("/auth", { state: { email: trimmedEmail, deliveryFailed: !!data?.deliveryFailed } });
         return;
       }
       if (data.token) setToken(data.token);

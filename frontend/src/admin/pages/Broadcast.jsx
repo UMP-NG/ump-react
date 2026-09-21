@@ -9,6 +9,27 @@ const AUDIENCES = [
   { id: 'providers', icon: 'fa-briefcase',     label: 'Providers' },
 ];
 
+const EMAIL_STATUS_STYLES = {
+  sent:    { bg: 'rgba(34,197,94,.12)',  color: '#16a34a', label: 'Sent' },
+  partial: { bg: 'rgba(234,179,8,.14)',  color: '#a16207', label: 'Partial' },
+  failed:  { bg: 'rgba(239,68,68,.12)',  color: '#ef4444', label: 'Failed' },
+  pending: { bg: 'rgba(148,163,184,.15)', color: '#64748b', label: 'Sending…' },
+  sending: { bg: 'rgba(148,163,184,.15)', color: '#64748b', label: 'Sending…' },
+};
+
+// Actual email delivery happens in the background, separately from the rest
+// of the broadcast — this surfaces the true outcome (sent/partial/failed/
+// still sending) instead of leaving the admin to infer it from "reach" alone.
+function emailStatusBadge(b) {
+  if (!b.channels?.email) return <span className="muted">—</span>;
+  const s = EMAIL_STATUS_STYLES[b.emailStatus] || EMAIL_STATUS_STYLES.pending;
+  return (
+    <span style={{ background: s.bg, color: s.color, padding: '2px 8px', borderRadius: 999, fontSize: '1.1rem', fontWeight: 600 }}>
+      {s.label}
+    </span>
+  );
+}
+
 export default function Broadcast() {
   const [audience, setAudience] = useState('all');
   const [channels, setChannels] = useState({ inapp: true, push: true, email: false });
@@ -33,9 +54,19 @@ export default function Broadcast() {
         method: 'POST',
         body: { audience, channels, ...form },
       });
-      setSendSuccess(`Broadcast sent — reached ${res?.broadcast?.reach ?? 0} user(s).`);
+      const b = res?.broadcast;
+      // Email delivery happens in the background after this response, so
+      // never claim it's "sent" here — that's only known once emailStatus
+      // resolves, which the Recent broadcasts table below reflects.
+      const emailNote = channels.email ? ' Email delivery is in progress — check the table below for its status.' : '';
+      setSendSuccess(`Broadcast sent — reached ${b?.reach ?? 0} user(s).${emailNote}`);
       setForm({ title: '', body: '', ctaLabel: '', ctaLink: '', sendAt: '', expires: '' });
-      apiFetch('/api/admins/broadcasts?limit=5').then(d => setRecent(d?.broadcasts || [])).catch(() => {});
+      const refreshRecent = () => apiFetch('/api/admins/broadcasts?limit=5').then(d => setRecent(d?.broadcasts || [])).catch(() => {});
+      refreshRecent();
+      // A second refresh shortly after — long enough for a small/medium
+      // audience's chunked send to finish — so the admin sees the real
+      // emailStatus without needing to reload the page.
+      if (channels.email) setTimeout(refreshRecent, 6000);
     } catch (err) {
       setSendError(err?.message || 'Failed to send broadcast. Please try again.');
     } finally {
@@ -195,13 +226,14 @@ export default function Broadcast() {
             <div className="adm-card-head"><h3>Recent broadcasts</h3></div>
             <div className="adm-scroll-x">
               <table className="adm-table">
-                <thead><tr><th>Title</th><th>Sent</th><th>Reach</th><th>Opens</th><th></th></tr></thead>
+                <thead><tr><th>Title</th><th>Sent</th><th>Reach</th><th>Email</th><th>Opens</th><th></th></tr></thead>
                 <tbody>
                   {recent.length > 0 ? recent.map(b => (
                     <tr key={b._id}>
                       <td>{b.title}</td>
                       <td className="muted">{b.sentAt ? new Date(b.sentAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : '—'}</td>
                       <td className="amount">{(b.reach || 0).toLocaleString()}</td>
+                      <td>{emailStatusBadge(b)}</td>
                       <td className="amount">{b.opens > 0 ? b.opens : '—'}</td>
                       <td>
                         <button
@@ -214,7 +246,7 @@ export default function Broadcast() {
                       </td>
                     </tr>
                   )) : (
-                    <tr><td colSpan="5" style={{ textAlign: 'center', color: '#94a3b8', padding: '24px 0' }}>No broadcasts sent yet</td></tr>
+                    <tr><td colSpan="6" style={{ textAlign: 'center', color: '#94a3b8', padding: '24px 0' }}>No broadcasts sent yet</td></tr>
                   )}
                 </tbody>
               </table>

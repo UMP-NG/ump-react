@@ -11,7 +11,9 @@ export default function Auth() {
   const [digits, setDigits] = useState(["", "", "", "", "", ""]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [resendMsg, setResendMsg] = useState("");
+  const [resendMsg, setResendMsg] = useState(
+    state?.deliveryFailed ? "We couldn't send your OTP email — tap Resend below to try again." : ""
+  );
   const [resendCooldown, setResendCooldown] = useState(0);
   const cooldownRef = useRef(null);
   const refs = useRef([]);

@@ -90,7 +90,13 @@ export const signup = async (req, res) => {
         logger.debug("📧 [SIGNUP] OTP sent to existing unverified user:", maskedEmail);
       } catch (err) {
         logger.error("❌ [SIGNUP] Error sending OTP:", err.message);
-        // Error logged at mail service level
+        // The OTP was generated and saved — only delivery failed. Say so
+        // instead of the generic "OTP sent successfully", so the user knows
+        // to retry rather than wait forever for an email that never went out.
+        return res.status(200).json({
+          message: "OTP generated but email delivery failed — check your spam folder or try 'Resend OTP' shortly.",
+          deliveryFailed: true,
+        });
       }
 
       return res.status(200).json({ message: "OTP sent successfully" });
@@ -127,7 +133,14 @@ export const signup = async (req, res) => {
       logger.debug("📧 [SIGNUP] OTP sent to new user:", maskedEmail);
     } catch (err) {
       logger.error("❌ [SIGNUP] Error sending OTP to new user:", err.message);
-      // Error logged at mail service level
+      // The account was created and the OTP saved — only delivery failed.
+      // Say so instead of claiming success, so the user knows to use
+      // "Resend OTP" rather than wait indefinitely for an email that never
+      // went out.
+      return res.status(201).json({
+        message: "Account created, but the OTP email failed to send — check your spam folder or use 'Resend OTP'.",
+        deliveryFailed: true,
+      });
     }
 
     res.status(201).json({ message: "User created. OTP sent to your email." });
