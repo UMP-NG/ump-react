@@ -8,16 +8,23 @@ export default function Auth() {
   const { state } = useLocation();
   const { setUser } = useUser();
   const email = state?.email || (() => { try { return sessionStorage.getItem("ump_otp_email") || ""; } catch { return ""; } })();
+  // Persisted the same way as `email` — router state alone doesn't survive a
+  // page reload (a fresh tab, or the user reopening this page later), and
+  // without this fallback a reload would silently drop the "delivery
+  // failed" warning while still claiming "We sent a 6-digit code to...".
+  const initialDeliveryFailed = state?.deliveryFailed ?? (() => {
+    try { return sessionStorage.getItem("ump_otp_delivery_failed") === "1"; } catch { return false; }
+  })();
   const [digits, setDigits] = useState(["", "", "", "", "", ""]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [resendMsg, setResendMsg] = useState(
-    state?.deliveryFailed ? "We couldn't send your OTP email — tap Resend below to try again." : ""
+    initialDeliveryFailed ? "We couldn't send your OTP email — tap Resend below to try again." : ""
   );
   // Tracked explicitly rather than inferred from resendMsg's text — the
   // initial failure message above doesn't contain the word "failed", so a
   // string-match against it would misclassify it as a success message.
-  const [resendIsError, setResendIsError] = useState(!!state?.deliveryFailed);
+  const [resendIsError, setResendIsError] = useState(initialDeliveryFailed);
   const [resendCooldown, setResendCooldown] = useState(0);
   const cooldownRef = useRef(null);
   const refs = useRef([]);
@@ -46,7 +53,10 @@ export default function Auth() {
     try {
       const data = await apiFetch("/api/auth/verify-otp", { method: "POST", body: { email, otp: code } });
       if (data.token) setToken(data.token);
-      try { sessionStorage.removeItem("ump_otp_email"); } catch { /* ignore */ }
+      try {
+        sessionStorage.removeItem("ump_otp_email");
+        sessionStorage.removeItem("ump_otp_delivery_failed");
+      } catch { /* ignore */ }
       navigate("/login", { state: { verified: true, email } });
     } catch (err) {
       setError(err.message || "Invalid code, try again");
@@ -67,6 +77,7 @@ export default function Auth() {
       setResendMsg(failed
         ? "OTP generated but email failed — check spam or try again."
         : "Code sent! Check your inbox.");
+      try { sessionStorage.setItem("ump_otp_delivery_failed", failed ? "1" : "0"); } catch { /* ignore */ }
       let secs = 30;
       setResendCooldown(secs);
       cooldownRef.current = setInterval(() => {

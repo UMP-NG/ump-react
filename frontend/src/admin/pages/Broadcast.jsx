@@ -67,17 +67,26 @@ export default function Broadcast() {
         body: { audience, channels, ...form },
       });
       const b = res?.broadcast;
-      // Email delivery happens in the background after this response, so
-      // never claim it's "sent" here — that's only known once emailStatus
-      // resolves, which the Recent broadcasts table below reflects.
-      const emailNote = channels.email ? ' Email delivery is in progress — check the table below for its status.' : '';
-      setSendSuccess(`Broadcast sent — reached ${b?.reach ?? 0} user(s).${emailNote}`);
+      const isScheduled = b?.status === 'scheduled';
+      if (isScheduled) {
+        // Nothing has been dispatched yet — the server only stores the
+        // record and returns early for a future sendAt, so there's no reach
+        // or email delivery to report (or to refresh for) at this point.
+        setSendSuccess(`Broadcast scheduled for ${b?.sendAt ? new Date(b.sendAt).toLocaleString() : 'later'}.`);
+      } else {
+        // Email delivery happens in the background after this response, so
+        // never claim it's "sent" here — that's only known once emailStatus
+        // resolves, which the Recent broadcasts table below reflects.
+        const emailNote = channels.email ? ' Email delivery is in progress — check the table below for its status.' : '';
+        setSendSuccess(`Broadcast sent — reached ${b?.reach ?? 0} user(s).${emailNote}`);
+      }
       setForm({ title: '', body: '', ctaLabel: '', ctaLink: '', sendAt: '', expires: '' });
       refreshRecent();
       // A second refresh shortly after — long enough for a small/medium
       // audience's chunked send to finish — so the admin sees the real
-      // emailStatus without needing to reload the page.
-      if (channels.email) setTimeout(refreshRecent, 6000);
+      // emailStatus without needing to reload the page. Only meaningful once
+      // delivery has actually started, which a scheduled broadcast hasn't.
+      if (channels.email && !isScheduled) setTimeout(refreshRecent, 6000);
     } catch (err) {
       setSendError(err?.message || 'Failed to send broadcast. Please try again.');
     } finally {

@@ -178,8 +178,14 @@ export default function Login() {
         : { name, email: trimmedEmail, password, ...(referralCode.trim() && { referralCode: referralCode.trim().toUpperCase() }) };
       const data = await apiFetch(endpoint, { method: "POST", body });
       if (tab === "signup") {
-        try { sessionStorage.setItem("ump_otp_email", trimmedEmail); } catch { /* ignore */ }
-        navigate("/auth", { state: { email: trimmedEmail, deliveryFailed: !!data?.deliveryFailed } });
+        const deliveryFailed = !!data?.deliveryFailed;
+        try {
+          sessionStorage.setItem("ump_otp_email", trimmedEmail);
+          // Persisted alongside the email so the Auth page's "delivery
+          // failed" warning survives a reload — router state alone doesn't.
+          sessionStorage.setItem("ump_otp_delivery_failed", deliveryFailed ? "1" : "0");
+        } catch { /* ignore */ }
+        navigate("/auth", { state: { email: trimmedEmail, deliveryFailed } });
         return;
       }
       if (data.token) setToken(data.token);
