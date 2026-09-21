@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { apiFetch } from '../../utils/api';
 import { subscribeToPush } from '../../utils/push';
 
@@ -39,9 +39,21 @@ export default function Broadcast() {
   const [sendError, setSendError] = useState('');
   const [sendSuccess, setSendSuccess] = useState('');
   const [recent, setRecent] = useState([]);
+  // Guards against an older in-flight fetch resolving after a newer one and
+  // clobbering it with stale data — sendBroadcast can trigger two refreshes
+  // in quick succession (immediate + a delayed one to catch email delivery
+  // finishing), and network timing gives no guarantee they resolve in order.
+  const recentReqId = useRef(0);
+
+  function refreshRecent() {
+    const id = ++recentReqId.current;
+    apiFetch('/api/admins/broadcasts?limit=5')
+      .then(d => { if (id === recentReqId.current) setRecent(d?.broadcasts || []); })
+      .catch(() => {});
+  }
 
   useEffect(() => {
-    apiFetch('/api/admins/broadcasts?limit=5').then(d => setRecent(d?.broadcasts || [])).catch(() => {});
+    refreshRecent();
   }, []);
 
   async function sendBroadcast() {
@@ -61,7 +73,6 @@ export default function Broadcast() {
       const emailNote = channels.email ? ' Email delivery is in progress — check the table below for its status.' : '';
       setSendSuccess(`Broadcast sent — reached ${b?.reach ?? 0} user(s).${emailNote}`);
       setForm({ title: '', body: '', ctaLabel: '', ctaLink: '', sendAt: '', expires: '' });
-      const refreshRecent = () => apiFetch('/api/admins/broadcasts?limit=5').then(d => setRecent(d?.broadcasts || [])).catch(() => {});
       refreshRecent();
       // A second refresh shortly after — long enough for a small/medium
       // audience's chunked send to finish — so the admin sees the real

@@ -14,6 +14,10 @@ export default function Auth() {
   const [resendMsg, setResendMsg] = useState(
     state?.deliveryFailed ? "We couldn't send your OTP email — tap Resend below to try again." : ""
   );
+  // Tracked explicitly rather than inferred from resendMsg's text — the
+  // initial failure message above doesn't contain the word "failed", so a
+  // string-match against it would misclassify it as a success message.
+  const [resendIsError, setResendIsError] = useState(!!state?.deliveryFailed);
   const [resendCooldown, setResendCooldown] = useState(0);
   const cooldownRef = useRef(null);
   const refs = useRef([]);
@@ -54,10 +58,13 @@ export default function Auth() {
   async function handleResend() {
     if (resendCooldown > 0) return;
     setResendMsg("");
+    setResendIsError(false);
     setError("");
     try {
       const result = await apiFetch("/api/auth/resend-otp", { method: "POST", body: { email } });
-      setResendMsg(result?.deliveryFailed
+      const failed = !!result?.deliveryFailed;
+      setResendIsError(failed);
+      setResendMsg(failed
         ? "OTP generated but email failed — check spam or try again."
         : "Code sent! Check your inbox.");
       let secs = 30;
@@ -105,7 +112,7 @@ export default function Auth() {
       </div>
       {error && <div style={{ margin: "12px 24px 0", padding: 10, background: "#fef2f2", color: "#dc2626", borderRadius: "var(--r-md)", fontSize: "1.3rem", textAlign: "center" }}>{error}</div>}
       {resendMsg && (
-        <div style={{ margin: "12px 24px 0", padding: 10, background: resendMsg.includes("failed") ? "#fefce8" : "#f0fdf4", color: resendMsg.includes("failed") ? "#92400e" : "#16a34a", borderRadius: "var(--r-md)", fontSize: "1.3rem", textAlign: "center" }}>
+        <div style={{ margin: "12px 24px 0", padding: 10, background: resendIsError ? "#fefce8" : "#f0fdf4", color: resendIsError ? "#92400e" : "#16a34a", borderRadius: "var(--r-md)", fontSize: "1.3rem", textAlign: "center" }}>
           {resendMsg}
         </div>
       )}
