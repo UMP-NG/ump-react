@@ -324,15 +324,17 @@ export default function Market() {
             ref={filterBtnRef}
             onClick={openFilter}
             style={{
-              display: "flex", alignItems: "center", gap: 6,
-              padding: "8px 14px", borderRadius: "var(--r-pill)",
+              display: "flex", alignItems: "center", gap: 10,
+              padding: "12px 24px", borderRadius: "var(--r-pill)",
               background: activeFilterCount > 0 ? "var(--navy-800)" : "var(--surface)",
               color: activeFilterCount > 0 ? "#fff" : "var(--ink-1)",
-              border: "none", cursor: "pointer", fontSize: "1.3rem", fontWeight: 600,
+              border: activeFilterCount > 0 ? "none" : "1.5px solid var(--accent)",
+              cursor: "pointer", fontSize: "1.5rem", fontWeight: 700,
               fontFamily: "var(--font-sans)",
+              boxShadow: "0 2px 10px rgba(0,0,0,.08)",
             }}
           >
-            <i className="fas fa-sliders" />
+            <i className="fas fa-sliders" style={{ fontSize: "1.4rem" }} />
             Filter{activeFilterCount > 0 ? ` (${activeFilterCount})` : ""}
           </button>
         </div>

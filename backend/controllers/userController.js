@@ -170,57 +170,6 @@ export const deleteUser = async (req, res) => {
 };
 
 // ===============================
-// FOLLOW / UNFOLLOW users
-// ===============================
-export const followUser = async (req, res) => {
-  try {
-    if (req.user._id.toString() === req.params.id)
-      return res.status(400).json({ message: "You cannot follow yourself" });
-
-    const user = await User.findById(req.params.id);
-    const currentUser = await User.findById(req.user._id);
-
-    if (!user) return res.status(404).json({ message: "User not found" });
-
-    if (user.followers.includes(currentUser._id))
-      return res.status(400).json({ message: "Already following this user" });
-
-    user.followers.push(currentUser._id);
-    currentUser.following.push(user._id);
-
-    await user.save();
-    await currentUser.save();
-
-    res.json({ message: "User followed successfully" });
-  } catch (error) {
-    res.status(500).json({ message: "Server error" });
-  }
-};
-
-export const unfollowUser = async (req, res) => {
-  try {
-    const user = await User.findById(req.params.id);
-    const currentUser = await User.findById(req.user._id);
-
-    if (!user) return res.status(404).json({ message: "User not found" });
-
-    user.followers = user.followers.filter(
-      (followerId) => followerId.toString() !== currentUser._id.toString()
-    );
-    currentUser.following = currentUser.following.filter(
-      (followingId) => followingId.toString() !== user._id.toString()
-    );
-
-    await user.save();
-    await currentUser.save();
-
-    res.json({ message: "User unfollowed successfully" });
-  } catch (error) {
-    res.status(500).json({ message: "Server error" });
-  }
-};
-
-// ===============================
 // WISHLIST
 // ===============================
 export const addToWishlist = async (req, res) => {

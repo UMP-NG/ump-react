@@ -41,11 +41,12 @@ export default function Provider() {
     whatsapp: "", portfolioUrl: "", instagram: "", twitter: "",
   });
 
+
   // Only gate first-time seller/provider signup on identity verification — existing
   // sellers/providers still need this page to edit their profile (becomeSeller /
   // becomeServiceProvider double as the profile-update endpoints), and the backend
   // itself only blocks the initial role grant, not subsequent edits.
-  const alreadyPartner = user?.roles?.includes("seller") || user?.roles?.includes("service_provider");
+  const alreadyPartner = user?.roles?.includes("seller") || user?.roles?.includes("service_provider") || user?.roles?.includes("agent");
   if (!alreadyPartner && !user?.identityVerified) {
     return <Navigate to="/settings?tab=verify" replace />;
   }
@@ -62,6 +63,12 @@ export default function Provider() {
     setLoading(true);
     setError("");
     try {
+      if (tab === "agent") {
+        await apiFetch("/api/agents/profile", { method: "POST" });
+        setUser((u) => ({ ...u, roles: [...new Set([...(u?.roles || []), "agent"])] }));
+        navigate("/agent-dashboard");
+        return;
+      }
       if (tab === "seller") {
         if (!seller.bannerFile) {
           setError("Store banner image is required — please upload a banner.");
@@ -195,10 +202,10 @@ export default function Provider() {
                   <span style={{ fontSize: "1.15rem", fontWeight: 700, color: "var(--accent)" }}>Open applications</span>
                 </div>
                 <h2 style={{ fontSize: "2.6rem", fontWeight: 900, letterSpacing: "-0.03em", margin: "0 0 6px", color: "var(--ink-1)" }}>
-                  {tab === "seller" ? "🚀 Launch Your Store" : "🧰 Offer Your Expertise"}
+                  {tab === "seller" ? "🚀 Launch Your Store" : tab === "agent" ? "🏠 Become an Agent" : "🧰 Offer Your Expertise"}
                 </h2>
                 <p style={{ margin: 0, fontSize: "1.4rem", color: "var(--ink-2)" }}>
-                  Free to join · Paid within 24 hrs after each {tab === "seller" ? "sale" : "session"}
+                  {tab === "agent" ? "Free to join · List hostels & apartments for UNILAG students" : `Free to join · Paid within 24 hrs after each ${tab === "seller" ? "sale" : "session"}`}
                 </p>
               </div>
 
@@ -207,6 +214,7 @@ export default function Provider() {
                 {[
                   { key: "seller",   icon: "store",             label: "Become a Seller" },
                   { key: "provider", icon: "hand-holding-heart", label: "Service Provider" },
+                  { key: "agent",    icon: "building",          label: "Become an Agent" },
                 ].map((t) => (
                   <button
                     key={t.key}
@@ -233,9 +241,32 @@ export default function Provider() {
                 </div>
               )}
 
-              <form onSubmit={handleSubmit} style={{ display: tab === "seller" && Array.isArray(user?.roles) && user.roles.includes("seller") ? "none" : undefined }}>
+              {tab === "agent" && Array.isArray(user?.roles) && user.roles.includes("agent") && (
+                <div style={{ padding: "24px 20px", background: "#fefce8", border: "1px solid #fde68a", borderRadius: "var(--r-lg)", marginBottom: 24, textAlign: "center" }}>
+                  <i className="fas fa-building" style={{ fontSize: "2.8rem", color: "#d97706", marginBottom: 12, display: "block" }} />
+                  <div style={{ fontWeight: 800, fontSize: "1.8rem", color: "var(--ink-1)", marginBottom: 6 }}>You're already an agent</div>
+                  <p style={{ fontSize: "1.3rem", color: "var(--ink-2)", margin: "0 0 18px" }}>
+                    Manage your accommodation listings from your Agent Dashboard.
+                  </p>
+                  <button type="button" className="btn btn-primary" onClick={() => navigate("/agent-dashboard")}>
+                    <i className="fas fa-chart-line" /> Go to My Dashboard
+                  </button>
+                </div>
+              )}
+
+              <form
+                onSubmit={handleSubmit}
+                style={{
+                  display:
+                    (tab === "seller" && Array.isArray(user?.roles) && user.roles.includes("seller")) ||
+                    (tab === "agent" && Array.isArray(user?.roles) && user.roles.includes("agent"))
+                      ? "none" : undefined,
+                }}
+              >
                 {tab === "seller"
                   ? <SellerForm seller={seller} setSeller={setSeller} />
+                  : tab === "agent"
+                  ? <AgentForm />
                   : <ProviderForm service={service} setService={setService} />
                 }
 
@@ -276,7 +307,7 @@ export default function Provider() {
                 <button className="btn btn-primary btn-block btn-lg" type="submit" disabled={loading || !termsAgreed} style={{ marginTop: 16, borderRadius: "var(--r-pill)" }}>
                   {loading
                     ? <i className="fas fa-spinner fa-spin" />
-                    : <><i className="fas fa-paper-plane" /> {tab === "seller" ? "Submit Seller Application" : "Submit Provider Application"} <i className="fas fa-arrow-right" /></>}
+                    : <><i className="fas fa-paper-plane" /> {tab === "seller" ? "Submit Seller Application" : tab === "agent" ? "Become an Agent" : "Submit Provider Application"} <i className="fas fa-arrow-right" /></>}
                 </button>
 
                 <p style={{ textAlign: "center", marginTop: 14, fontSize: "1.2rem", color: "var(--ink-3)" }}>
@@ -489,6 +520,34 @@ function SellerForm({ seller, setSeller }) {
             </span>
           </div>
         </Field>
+      </FormSection>
+    </>
+  );
+}
+
+function AgentForm() {
+  return (
+    <>
+      <div style={{ marginBottom: 6, padding: "12px 14px", background: "rgba(99,102,241,.07)", border: "1px solid rgba(99,102,241,.2)", borderRadius: "var(--r-md)", fontSize: "1.25rem", color: "#4338ca" }}>
+        <i className="fas fa-circle-info" style={{ marginRight: 6 }} />
+        Agents manage <strong>hostel and apartment listings</strong> from a dedicated Agent Dashboard — separate from the Seller Dashboard's product catalog. You can hold both roles at once.
+      </div>
+
+      <FormSection title="What agents do">
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {[
+            { icon: "building", text: "List hostels and apartments near campus" },
+            { icon: "naira-sign", text: "Set rent, agreement, commission and caution fees" },
+            { icon: "chart-line", text: "Track listings from your own Agent Dashboard" },
+          ].map((p) => (
+            <div key={p.icon} style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <div style={{ width: 32, height: 32, borderRadius: 10, background: "rgba(249,115,22,.15)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                <i className={`fas fa-${p.icon}`} style={{ color: "var(--accent)", fontSize: "1.2rem" }} />
+              </div>
+              <span style={{ fontSize: "1.3rem", color: "var(--ink-2)" }}>{p.text}</span>
+            </div>
+          ))}
+        </div>
       </FormSection>
     </>
   );

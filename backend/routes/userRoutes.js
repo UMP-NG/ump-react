@@ -5,8 +5,6 @@ import {
   deleteUser,
   getAllUsers,
   getUserById,
-  followUser,
-  unfollowUser,
   addToWishlist,
   removeFromWishlist,
   addToCart,
@@ -37,9 +35,9 @@ router.post("/me/cart/:productId", protect, addToCart);
 router.put("/me/cart/:productId", protect, updateCartItem); // e.g., change quantity
 router.delete("/me/cart/:productId", protect, removeFromCart);
 
-// Follow/Unfollow users
-router.post("/me/follow/:userId", protect, followUser);
-router.post("/me/unfollow/:userId", protect, unfollowUser);
+// Follow/Unfollow users — see routes/followRoutes.js (POST /api/follows/:userId)
+// for the real, working implementation. A duplicate pair used to live here
+// but read the wrong req.params key and always 404'd — removed as dead code.
 
 // Notifications
 router.put(

@@ -40,7 +40,7 @@ router.delete(
 router.put(
   "/:reviewId/reply",
   protect,
-  requireRole("seller", "service_provider", "admin"),
+  requireRole("seller", "service_provider", "agent", "admin"),
   replyToReview
 );
 

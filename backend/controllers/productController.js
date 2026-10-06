@@ -1,11 +1,12 @@
+import mongoose from "mongoose";
 import Product from "../models/Product.js";
-import Review from "../models/Review.js";
 import Seller from "../models/Seller.js";
 import cloudinary from "../config/cloudinary.js";
 import logger from "../utils/logger.js";
 import { notify } from "../utils/notify.js";
 
 const escapeRegex = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const filterValidObjectIds = (arr) => (arr === null ? null : (arr || []).filter((id) => mongoose.Types.ObjectId.isValid(id)));
 
 export const createProduct = async (req, res) => {
   try {
@@ -54,6 +55,7 @@ export const createProduct = async (req, res) => {
     };
     const parsedSizes = parseSArray(sizes);
     const parsedTypes = parseSArray(types);
+    const parsedSections = filterValidObjectIds(parseSArray(req.body.sections));
 
     // --- 🧩 Build Specs safely ---
     let specs = {};
@@ -105,6 +107,7 @@ export const createProduct = async (req, res) => {
       colors: parsedColors,
       sizes: parsedSizes,
       types: parsedTypes,
+      sections: parsedSections,
       specs,
       images,
       video,
@@ -557,8 +560,10 @@ export const updateProduct = async (req, res) => {
     };
     const newSizes = parseSArray(req.body.sizes);
     const newTypes = parseSArray(req.body.types);
+    const newSections = filterValidObjectIds(parseSArray(req.body.sections));
     if (newSizes !== null) product.sizes = newSizes;
     if (newTypes !== null) product.types = newTypes;
+    if (newSections !== null) product.sections = newSections;
 
     // --- Variants
     if (req.body.variants !== undefined) {
@@ -723,35 +728,6 @@ export const deleteProduct = async (req, res) => {
     res
       .status(500)
       .json({ success: false, message: "Failed to delete product" });
-  }
-};
-
-// ✅ Add review to product
-export const addReview = async (req, res) => {
-  try {
-    const { rating, comment } = req.body;
-    const productId = req.params.id;
-
-    const product = await Product.findById(productId);
-    if (!product)
-      return res
-        .status(404)
-        .json({ success: false, message: "Product not found" });
-
-    const review = await Review.create({
-      user: req.user._id,
-      product: productId,
-      rating,
-      comment,
-    });
-
-    product.reviews.push(review._id);
-    await product.save();
-
-    res.status(201).json({ success: true, message: "Review added", review });
-  } catch (error) {
-    logger.error("❌ Error adding review:", error);
-    res.status(500).json({ success: false, message: "Failed to add review" });
   }
 };
 

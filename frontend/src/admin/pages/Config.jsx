@@ -70,6 +70,27 @@ export default function Config() {
     apiFetch('/api/admins/events').then(d => setEventsState(d?.events || [])).catch(() => {});
   }, []);
 
+  // Curated Sections (e.g. "Back to school") — separate from Category.
+  // Sellers can also tag their own products into a section when listing.
+  const [sections, setSections] = useState([]);
+  const [newSection, setNewSection] = useState({ name: '' });
+  const [sectionSaving, setSectionSaving] = useState(false);
+  const [sectionProductQuery, setSectionProductQuery] = useState({});
+  const [sectionProductResults, setSectionProductResults] = useState({});
+  const [sectionProductSearching, setSectionProductSearching] = useState({});
+  const [sectionProducts, setSectionProducts] = useState({}); // sectionId → [{_id,name,images}]
+
+  const loadSections = useCallback(() => {
+    apiFetch('/api/sections/admin').then(d => setSections(Array.isArray(d) ? d : [])).catch(() => {});
+  }, []);
+
+  const loadSectionProducts = useCallback((sectionId) => {
+    apiFetch(`/api/sections/with-products`).then(d => {
+      const match = (Array.isArray(d) ? d : []).find(s => s._id === sectionId);
+      setSectionProducts(prev => ({ ...prev, [sectionId]: match?.products || [] }));
+    }).catch(() => {});
+  }, []);
+
   useEffect(() => {
     apiFetch('/api/admins/config').then(d => {
       if (d?.fees) setFees(f => ({ ...f, ...d.fees }));
@@ -96,7 +117,8 @@ export default function Config() {
       });
     }).catch(() => {});
     loadEvents();
-  }, [loadEvents]);
+    loadSections();
+  }, [loadEvents, loadSections]);
 
   async function save() {
     const serviceFee       = parseFloat(fees.serviceFee);
@@ -272,6 +294,52 @@ export default function Config() {
     setProductQuery(prev => ({ ...prev, [ev._id]: '' }));
     setProductResults(prev => ({ ...prev, [ev._id]: [] }));
     loadEvents(); refreshConfig();
+  }
+
+  // ── Sections CRUD ──────────────────────────────────────────────────────────
+  async function createSection() {
+    if (!newSection.name.trim()) return;
+    setSectionSaving(true);
+    try {
+      await apiFetch('/api/sections', { method: 'POST', body: { name: newSection.name.trim() } });
+      setNewSection({ name: '' });
+      loadSections();
+    } catch {} finally { setSectionSaving(false); }
+  }
+
+  async function deleteSectionById(id) {
+    if (!confirm('Delete this section?')) return;
+    await apiFetch(`/api/sections/${id}`, { method: 'DELETE' });
+    loadSections();
+  }
+
+  async function toggleSectionActive(s) {
+    await apiFetch(`/api/sections/${s._id}`, { method: 'PUT', body: { active: !s.active } });
+    loadSections();
+  }
+
+  async function searchSectionProducts(sectionId, q) {
+    if (!q.trim()) { setSectionProductResults(prev => ({ ...prev, [sectionId]: [] })); return; }
+    setSectionProductSearching(prev => ({ ...prev, [sectionId]: true }));
+    try {
+      // Admin endpoint — unlike the public /api/products search, this also
+      // surfaces flagged/removed products so admins can still curate sections
+      // for items that aren't currently visible to shoppers.
+      const d = await apiFetch(`/api/admins/products?q=${encodeURIComponent(q)}&limit=6`);
+      setSectionProductResults(prev => ({ ...prev, [sectionId]: d.products || d || [] }));
+    } catch {} finally { setSectionProductSearching(prev => ({ ...prev, [sectionId]: false })); }
+  }
+
+  async function addProductToSection(sectionId, product) {
+    await apiFetch(`/api/sections/${sectionId}/products`, { method: 'PUT', body: { productIds: [product._id] } });
+    setSectionProductQuery(prev => ({ ...prev, [sectionId]: '' }));
+    setSectionProductResults(prev => ({ ...prev, [sectionId]: [] }));
+    loadSectionProducts(sectionId);
+  }
+
+  async function removeProductFromSectionById(sectionId, productId) {
+    await apiFetch(`/api/sections/${sectionId}/products/${productId}`, { method: 'DELETE' });
+    loadSectionProducts(sectionId);
   }
 
   return (
@@ -686,6 +754,102 @@ export default function Config() {
                       <div
                         key={p._id}
                         onClick={() => addProductToEvent(ev, p)}
+                        style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid var(--line)' }}
+                        onMouseEnter={e => e.currentTarget.style.background = 'var(--surface)'}
+                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                      >
+                        {p.images?.[0]?.url && (
+                          <img src={p.images[0].url} alt="" style={{ width: 32, height: 32, borderRadius: 6, objectFit: 'cover', flexShrink: 0 }} />
+                        )}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontWeight: 600, fontSize: '1.25rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</div>
+                          <div className="muted" style={{ fontSize: '1.1rem' }}>₦{Number(p.price).toLocaleString()}</div>
+                        </div>
+                        <i className="fa-solid fa-plus" style={{ color: '#f97316', flexShrink: 0 }} />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Sections ──────────────────────────────────────────────────────── */}
+      <div className="adm-card" style={{ marginTop: 24 }}>
+        <div className="adm-card-head">
+          <h3>Sections</h3>
+          <span className="muted" style={{ fontSize: '1.2rem' }}>Fixed, admin-managed product collections (e.g. Back to School, Gifts for Val) — separate from category. Sellers can also tag their own products into an active section when listing.</span>
+        </div>
+        <div className="adm-card-body">
+          {/* Create new section */}
+          <div style={{ display: 'flex', gap: 8, marginBottom: 20, flexWrap: 'wrap' }}>
+            <input
+              className="adm-input"
+              placeholder="Section name (e.g. Back to School)"
+              value={newSection.name}
+              onChange={e => setNewSection({ name: e.target.value })}
+              style={{ flex: 1, minWidth: 180 }}
+            />
+            <button className="abtn primary" onClick={createSection} disabled={sectionSaving || !newSection.name.trim()}>
+              {sectionSaving ? <i className="fa-solid fa-spinner fa-spin" /> : '+ Add section'}
+            </button>
+          </div>
+
+          {sections.length === 0 && (
+            <div className="muted" style={{ fontSize: '1.2rem' }}>No sections yet. Add one above.</div>
+          )}
+
+          {sections.map(s => (
+            <div key={s._id} style={{ border: '1px solid var(--line)', borderRadius: 10, padding: 16, marginBottom: 16 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12, gap: 8 }}>
+                <div style={{ fontWeight: 700, fontSize: '1.4rem' }}>{s.name}</div>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <span style={{ fontSize: '1.1rem', color: s.active ? '#16a34a' : '#94a3b8' }}>{s.active ? 'Visible' : 'Hidden'}</span>
+                  <span className={`adm-toggle${s.active ? ' on' : ''}`} onClick={() => toggleSectionActive(s)} />
+                  <button className="abtn ghost sm" onClick={() => deleteSectionById(s._id)} style={{ color: '#ef4444' }}>
+                    <i className="fa-solid fa-trash" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Current products */}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+                {!(sectionProducts[s._id]?.length) && (
+                  <span className="muted" style={{ fontSize: '1.2rem' }}>No products yet — search below to add some, or load current products.</span>
+                )}
+                {(sectionProducts[s._id] || []).map(p => (
+                  <span key={p._id} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: 'var(--surface)', borderRadius: 6, padding: '3px 8px', fontSize: '1.2rem' }}>
+                    {p.name}
+                    <button onClick={() => removeProductFromSectionById(s._id, p._id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8', padding: '0 2px', fontSize: '1.1rem' }}>×</button>
+                  </span>
+                ))}
+                <button className="abtn ghost sm" onClick={() => loadSectionProducts(s._id)} style={{ fontSize: '1.05rem' }}>
+                  <i className="fa-solid fa-rotate" /> Refresh list
+                </button>
+              </div>
+
+              {/* Product search */}
+              <div style={{ position: 'relative' }}>
+                <input
+                  className="adm-input"
+                  placeholder="Search products to add…"
+                  value={sectionProductQuery[s._id] || ''}
+                  onChange={e => {
+                    const q = e.target.value;
+                    setSectionProductQuery(prev => ({ ...prev, [s._id]: q }));
+                    searchSectionProducts(s._id, q);
+                  }}
+                  style={{ width: '100%' }}
+                />
+                {sectionProductSearching[s._id] && <i className="fa-solid fa-spinner fa-spin" style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />}
+                {(sectionProductResults[s._id] || []).length > 0 && (
+                  <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: 'var(--paper)', border: '1px solid var(--line)', borderRadius: 8, zIndex: 50, maxHeight: 220, overflowY: 'auto', boxShadow: '0 4px 16px rgba(0,0,0,.15)' }}>
+                    {sectionProductResults[s._id].map(p => (
+                      <div
+                        key={p._id}
+                        onClick={() => addProductToSection(s._id, p)}
                         style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid var(--line)' }}
                         onMouseEnter={e => e.currentTarget.style.background = 'var(--surface)'}
                         onMouseLeave={e => e.currentTarget.style.background = 'transparent'}

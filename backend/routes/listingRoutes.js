@@ -15,22 +15,22 @@ const router = express.Router();
 router.post(
   "/",
   protect,
-  requireRole("seller", "admin"),
+  requireRole("seller", "agent", "admin"),
   uploadListingMedia,
   createListing
 );
 router.put(
   "/:id",
   protect,
-  requireRole("seller", "admin"),
+  requireRole("seller", "agent", "admin"),
   uploadListingMedia,
   updateListing
 );
 
-router.get("/my", protect, requireRole("seller", "admin"), getMyListings);
+router.get("/my", protect, requireRole("seller", "agent", "admin"), getMyListings);
 router.get("/", getAllListings);
 router.get("/:id", getListingById);
-router.delete("/:id", protect, requireRole("seller", "admin"), deleteListing);
+router.delete("/:id", protect, requireRole("seller", "agent", "admin"), deleteListing);
 
 export default router;
 

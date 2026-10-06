@@ -12,7 +12,7 @@ import {
   setStoreStatus,
   saveDeliveryConfig,
 } from "../controllers/sellerController.js";
-import { protect, requireRole } from "../middleware/authMiddleware.js";
+import { protect, requireRole, optionalAuth } from "../middleware/authMiddleware.js";
 import { handleSellerUpload } from "../middleware/uploadHandler.js";
 
 const router = express.Router();
@@ -43,7 +43,9 @@ router.post(
   unfollowSeller
 );
 
-router.patch("/:id/view", incrementSellerView);
+// Public, anonymous-friendly view counter — matches the pattern used for
+// product view tracking (productRoutes.js POST /:id/view, optionalAuth).
+router.patch("/:id/view", optionalAuth, incrementSellerView);
 
 // ✅ Get seller info by ID (public)
 router.get("/:id", getSellerById);

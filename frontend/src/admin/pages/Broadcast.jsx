@@ -33,7 +33,8 @@ function emailStatusBadge(b) {
 export default function Broadcast() {
   const [audience, setAudience] = useState('all');
   const [channels, setChannels] = useState({ inapp: true, push: true, email: false });
-  const [form, setForm] = useState({ title: '', body: '', ctaLabel: '', ctaLink: '', sendAt: '', expires: '' });
+  const [form, setForm] = useState({ title: '', body: '', ctaLabel: '', ctaLink: '', sendAt: '', expires: '', emailSubject: '', emailBody: '' });
+  const [customizeEmail, setCustomizeEmail] = useState(false);
   const [sending, setSending] = useState(false);
   const [testing, setTesting] = useState(false);
   const [sendError, setSendError] = useState('');
@@ -62,10 +63,16 @@ export default function Broadcast() {
     setSendError('');
     setSendSuccess('');
     try {
-      const res = await apiFetch('/api/admins/broadcasts', {
-        method: 'POST',
-        body: { audience, channels, ...form },
-      });
+      // Only send the separate email copy when the admin actually turned on
+      // "Write separate email copy" — otherwise leftover text from a draft
+      // that was since toggled off would silently override the title/body
+      // fallback the UI is telling the admin will be used instead.
+      const { emailSubject, emailBody, ...restForm } = form;
+      const body = {
+        audience, channels, ...restForm,
+        ...(customizeEmail ? { emailSubject, emailBody } : {}),
+      };
+      const res = await apiFetch('/api/admins/broadcasts', { method: 'POST', body });
       const b = res?.broadcast;
       const isScheduled = b?.status === 'scheduled';
       if (isScheduled) {
@@ -80,7 +87,8 @@ export default function Broadcast() {
         const emailNote = channels.email ? ' Email delivery is in progress — check the table below for its status.' : '';
         setSendSuccess(`Broadcast sent — reached ${b?.reach ?? 0} user(s).${emailNote}`);
       }
-      setForm({ title: '', body: '', ctaLabel: '', ctaLink: '', sendAt: '', expires: '' });
+      setForm({ title: '', body: '', ctaLabel: '', ctaLink: '', sendAt: '', expires: '', emailSubject: '', emailBody: '' });
+      setCustomizeEmail(false);
       refreshRecent();
       // A second refresh shortly after — long enough for a small/medium
       // audience's chunked send to finish — so the admin sees the real
@@ -170,7 +178,10 @@ export default function Broadcast() {
               ))}
             </div>
 
-            <div className="adm-section-h">Message</div>
+            <div className="adm-section-h" style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+              Notification &amp; push
+              <span className="muted" style={{ fontWeight: 400, fontSize: '1.1rem' }}>— shown in the bell drawer and push notifications</span>
+            </div>
             <div className="adm-form-grid">
               <div className="adm-field full">
                 <label className="lbl">Title</label>
@@ -197,6 +208,42 @@ export default function Broadcast() {
                 <input type="datetime-local" value={form.expires} onChange={e => setForm(f => ({ ...f, expires: e.target.value }))} />
               </div>
             </div>
+
+            {channels.email && (
+              <>
+                <div className="adm-section-h" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+                    Email
+                    <span className="muted" style={{ fontWeight: 400, fontSize: '1.1rem' }}>— rendered with a dedicated email template</span>
+                  </span>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontWeight: 400, fontSize: '1.2rem' }}>
+                    <span className={`adm-toggle${customizeEmail ? ' on' : ''}`} onClick={() => setCustomizeEmail(c => !c)}></span>
+                    Write separate email copy
+                  </label>
+                </div>
+                {customizeEmail ? (
+                  <div className="adm-form-grid">
+                    <div className="adm-field full">
+                      <label className="lbl">Email subject</label>
+                      <input value={form.emailSubject} onChange={e => setForm(f => ({ ...f, emailSubject: e.target.value }))} placeholder={form.title || 'Email subject line…'} />
+                    </div>
+                    <div className="adm-field full">
+                      <label className="lbl">Email body</label>
+                      <textarea
+                        value={form.emailBody}
+                        onChange={e => setForm(f => ({ ...f, emailBody: e.target.value }))}
+                        placeholder={form.body || 'Write the email in full sentences — each new line becomes its own paragraph.'}
+                        style={{ minHeight: 120 }}
+                      ></textarea>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="muted" style={{ fontSize: '1.2rem', margin: '0 0 4px' }}>
+                    The email will reuse the title and body above, formatted with the clean template shown in the preview. Turn on "Write separate email copy" to customize it — notification text is short and punchy, but an email usually reads better in full sentences.
+                  </p>
+                )}
+              </>
+            )}
 
             {sendError && (
               <div style={{ marginTop: 12, padding: '10px 14px', borderRadius: 8, background: 'rgba(239,68,68,.1)', color: '#ef4444', fontSize: '1.25rem', border: '1px solid rgba(239,68,68,.3)' }}>
@@ -241,6 +288,41 @@ export default function Broadcast() {
               </div>
             </div>
           </div>
+
+          {channels.email && (
+            <div className="adm-card" style={{ marginBottom: 16 }}>
+              <div className="adm-card-head"><h3>Email preview</h3></div>
+              <div className="adm-card-body" style={{ background: '#f4f6f8', padding: 20 }}>
+                <div style={{ maxWidth: 400, margin: '0 auto', background: '#fff', borderRadius: 12, overflow: 'hidden', border: '1px solid #e6e9ee', fontFamily: 'Arial, Helvetica, sans-serif' }}>
+                  <div style={{ padding: '16px 22px', background: '#0f172a' }}>
+                    <span style={{ fontSize: '1.5rem', fontWeight: 800, color: '#fff', letterSpacing: '-0.02em' }}>
+                      <span style={{ color: '#1a5cff' }}>U</span>MP
+                    </span>
+                  </div>
+                  <div style={{ padding: '22px 22px 6px' }}>
+                    <h2 style={{ margin: '0 0 14px', color: '#16213e', fontSize: '1.7rem', lineHeight: 1.35 }}>
+                      {(customizeEmail && form.emailSubject) || form.title || 'Email subject line'}
+                    </h2>
+                    {((customizeEmail && form.emailBody) || form.body || 'Email body preview…')
+                      .split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
+                      .map((line, i) => (
+                        <p key={i} style={{ margin: '0 0 12px', color: '#4b5668', fontSize: '1.3rem', lineHeight: 1.65 }}>{line}</p>
+                      ))}
+                    {form.ctaLink && (
+                      <div style={{ textAlign: 'center', margin: '20px 0 8px' }}>
+                        <span style={{ display: 'inline-block', background: '#1a5cff', color: '#fff', padding: '10px 24px', borderRadius: 8, fontSize: '1.25rem', fontWeight: 700 }}>
+                          {form.ctaLabel || 'View'}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ padding: '14px 22px', textAlign: 'center', fontSize: '1rem', color: '#99a1ad', borderTop: '1px solid #eef0f4' }}>
+                    © {new Date().getFullYear()} UMP. All rights reserved.
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="adm-card">
             <div className="adm-card-head"><h3>Recent broadcasts</h3></div>

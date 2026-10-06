@@ -15,7 +15,7 @@ import logger from "../utils/logger.js";
 // controllers under adminUserController.js / adminSellerController.js / etc.,
 // mounted in adminRoutes.js). Removed as dead code.
 
-const ASSIGNABLE_ROLES = ["user", "seller", "service_provider"];
+const ASSIGNABLE_ROLES = ["user", "seller", "service_provider", "agent"];
 
 export const updateUserRole = async (req, res) => {
   try {

@@ -48,6 +48,7 @@ const Settings         = lazy(() => import("./pages/Settings"));
 const HelpSupport      = lazy(() => import("./pages/HelpSupport"));
 const Notifications    = lazy(() => import("./pages/Notifications"));
 const SellerDashboard  = lazy(() => import("./pages/SellerDashboard"));
+const AgentDashboard   = lazy(() => import("./pages/AgentDashboard"));
 const ProviderAnalytics = lazy(() => import("./pages/ProviderAnalytics"));
 const NotFound         = lazy(() => import("./pages/NotFound"));
 const Terms            = lazy(() => import("./pages/Terms"));
@@ -350,6 +351,7 @@ export default function App() {
       <Route path="/settings"      element={<PrivateRoute><Settings /></PrivateRoute>} />
       <Route path="/help"          element={<HelpSupport />} />
       <Route path="/seller-dashboard"    element={<PrivateRoute><SellerDashboard /></PrivateRoute>} />
+      <Route path="/agent-dashboard"     element={<PrivateRoute><AgentDashboard /></PrivateRoute>} />
       <Route path="/provider-analytics"  element={<PrivateRoute><ProviderAnalytics /></PrivateRoute>} />
 
       {/* Admin panel — not lazy-loaded so admins don't wait on navigation */}

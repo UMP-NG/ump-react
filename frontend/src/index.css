@@ -696,15 +696,16 @@ body {
 .chat-fab {
   display: flex;
   position: fixed; bottom: 80px; right: 20px; z-index: 150;
-  width: 52px; height: 52px; border-radius: 50%;
-  align-items: center; justify-content: center;
+  height: 52px; padding: 0 18px 0 16px; border-radius: 26px;
+  align-items: center; justify-content: center; gap: 8px;
   background: var(--accent); color: #fff;
   font-size: 2rem; border: none; cursor: pointer;
   box-shadow: 0 4px 20px rgba(249,115,22,.45);
   transition: transform .18s, box-shadow .18s;
 }
-.chat-fab:hover { transform: scale(1.1); box-shadow: 0 6px 28px rgba(249,115,22,.6); }
-@media (min-width: 768px) { .chat-fab { bottom: 28px; right: 28px; width: 56px; height: 56px; font-size: 2.2rem; } }
+.chat-fab-label { font-size: 1.3rem; font-weight: 700; font-family: var(--font-sans); white-space: nowrap; }
+.chat-fab:hover { transform: scale(1.06); box-shadow: 0 6px 28px rgba(249,115,22,.6); }
+@media (min-width: 768px) { .chat-fab { bottom: 28px; right: 28px; height: 56px; font-size: 2.2rem; } }
 .chat-fab-badge {
   position: absolute; top: -4px; right: -4px;
   background: #ef4444; color: #fff;
@@ -1049,12 +1050,13 @@ body {
 }
 .seller-main { flex: 1; min-height: 100vh; overflow-y: auto; }
 .seller-nav-item {
-  display: flex; align-items: center; gap: 12px;
-  padding: 13px 20px; font-size: 1.35rem; font-weight: 500;
+  display: flex; align-items: center; gap: 14px;
+  padding: 14px 20px; font-size: 1.4rem; font-weight: 600;
   color: rgba(255,255,255,.65); text-decoration: none;
   cursor: pointer; border: none; background: transparent; width: 100%;
   transition: background .15s, color .15s; text-align: left; font-family: var(--font-sans);
 }
+.seller-nav-item i { font-size: 1.7rem; }
 .seller-nav-item:hover { background: rgba(255,255,255,.07); color: #fff; }
 .seller-nav-item.active { background: rgba(249,115,22,.15); color: #fff; border-left: 3px solid var(--accent); }
 .seller-nav-item .nav-badge {

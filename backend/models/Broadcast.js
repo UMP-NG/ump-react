@@ -12,6 +12,12 @@ const broadcastSchema = new mongoose.Schema(
     },
     ctaLabel: String,
     ctaLink:  String,
+    // Optional, separate copy for the email channel — admins can write a
+    // cleaner subject/body for inboxes instead of reusing the push/in-app
+    // notification's short title+body verbatim. Falls back to title/body
+    // when left blank (see deliverBroadcastEmail).
+    emailSubject: { type: String, trim: true },
+    emailBody:    { type: String, trim: true },
     sendAt:   Date,
     expires:  Date,
     status:   { type: String, enum: ["draft", "scheduled", "sent"], default: "sent" },

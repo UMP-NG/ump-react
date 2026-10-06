@@ -250,7 +250,7 @@ export const initializePayment = async (req, res) => {
 
     const totalAmount = orders.reduce((s, o) => s + o.totalAmount, 0);
     const amountKobo = Math.round(totalAmount * 100);
-    const reference = `UMP_${Date.now()}`;
+    const reference = `UMP_${Date.now()}_${crypto.randomBytes(6).toString("hex")}`;
 
     // Reserve the order set BEFORE calling out to Paystack — creating the
     // Payment first means a concurrent double-submit is caught by the DB's
@@ -374,16 +374,21 @@ export const verifyPayment = async (req, res) => {
     const response = await paystack.get(`/transaction/verify/${reference}`);
     const data = response.data.data;
 
-    // Atomically claim this payment — prevents race with the webhook
+    // Atomically claim this payment — prevents race with the webhook.
+    // Scoped to the caller's own user id: without this, any authenticated
+    // user could verify (and thereby claim or permanently fail) a payment
+    // reference belonging to someone else.
     const payment = await Payment.findOneAndUpdate(
-      { reference, status: "pending" },
+      { reference, user: req.user._id, status: "pending" },
       { $set: { status: "processing" } },
       { new: false }
     );
 
     if (!payment) {
-      // Already processing or already finalised — idempotent response
-      const existing = await Payment.findOne({ reference });
+      // Already processing or already finalised — idempotent response.
+      // Still scoped to the caller so a non-owner gets a plain 404 instead
+      // of learning that the reference exists / its status.
+      const existing = await Payment.findOne({ reference, user: req.user._id });
       if (!existing)
         return res.status(404).json({ success: false, message: "Payment not found" });
       return res.json({ success: true, message: "Payment already processed", status: existing.status, orderId: existing.orders?.[0] });

@@ -24,13 +24,32 @@ function roleFilterFor(audience) {
     :    {};
 }
 
+const CLIENT_URL = process.env.CLIENT_URL || "http://localhost:5173";
+
+// Broadcast ctaLink is typically a relative in-app path (e.g. "/market") —
+// email clients have no origin to resolve that against, so it needs to
+// become an absolute URL before it can be used as an <a href>.
+function absoluteUrl(link) {
+  if (!link) return null;
+  if (/^https?:\/\//i.test(link)) return link;
+  return `${CLIENT_URL}${link.startsWith("/") ? "" : "/"}${link}`;
+}
+
 // Sends one chunk and returns the ids of users actually mailed (skipping
 // failures) so the caller can persist progress incrementally instead of only
-// at the very end.
+// at the very end. Renders via the dedicated "broadcast" email template
+// (utils/sendMail.js) rather than dumping the raw notification text into the
+// generic fallback template, which read poorly in real inboxes.
 async function sendEmailBatch(batch, { subject, message, ctaLabel, ctaLink }) {
-  const fullMessage = ctaLink ? `${message}\n\n${ctaLabel || "View"}: ${ctaLink}` : message;
+  const ctaUrl = absoluteUrl(ctaLink);
   const results = await Promise.allSettled(
-    batch.map((u) => sendMail({ email: u.email, subject, message: fullMessage }))
+    batch.map((u) => sendMail({
+      email: u.email,
+      type: "broadcast",
+      subject,
+      message,
+      ...(ctaUrl ? { ctaLabel: ctaLabel || "View", ctaUrl } : {}),
+    }))
   );
   const mailedIds = [];
   results.forEach((r, idx) => {
@@ -92,7 +111,10 @@ async function deliverBroadcastEmail(broadcastId) {
     for (let i = 0; i < users.length; i += EMAIL_CHUNK_SIZE) {
       const batch = users.slice(i, i + EMAIL_CHUNK_SIZE);
       const mailedIds = await sendEmailBatch(batch, {
-        subject: claimed.title, message: claimed.body, ctaLabel: claimed.ctaLabel, ctaLink: claimed.ctaLink,
+        subject: claimed.emailSubject || claimed.title,
+        message: claimed.emailBody || claimed.body,
+        ctaLabel: claimed.ctaLabel,
+        ctaLink: claimed.ctaLink,
       });
       if (mailedIds.length) {
         mailedTotal += mailedIds.length;
@@ -160,13 +182,15 @@ export const deleteBroadcast = async (req, res) => {
 
 export const createBroadcast = async (req, res) => {
   try {
-    const { title, body, audience, channels, ctaLabel, ctaLink, sendAt, expires } = req.body;
+    const { title, body, audience, channels, ctaLabel, ctaLink, sendAt, expires, emailSubject, emailBody } = req.body;
     if (!title?.trim() || !body?.trim()) return res.status(400).json({ message: "Title and body are required" });
     const ch          = channels || { inapp: true, push: true, email: false };
     const isScheduled = sendAt && new Date(sendAt) > new Date();
     const broadcast   = await Broadcast.create({
       title: title.trim(), body: body.trim(), audience: audience || "all", channels: ch,
       ctaLabel, ctaLink, sendAt: sendAt || null, expires: expires || null,
+      emailSubject: emailSubject?.trim() || undefined,
+      emailBody:    emailBody?.trim()    || undefined,
       status: isScheduled ? "scheduled" : "sent", sentAt: isScheduled ? null : new Date(), sentBy: req.user._id,
     });
     if (isScheduled) return res.status(201).json({ success: true, broadcast });

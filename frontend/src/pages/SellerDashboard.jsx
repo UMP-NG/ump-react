@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { naira } from "../components/ProductCard";
-import { apiFetch } from "../utils/api";
+import { apiFetch, setToken } from "../utils/api";
 import { useUser } from "../context/UserContext";
 import { useToast } from "../context/ToastContext";
 import FloatingChat from "../components/FloatingChat";
@@ -14,7 +14,6 @@ const NAV = [
   { id: "Home",       icon: "house",          label: "Dashboard Home" },
   { id: "Orders",     icon: "box-archive",     label: "Orders" },
   { id: "Products",   icon: "boxes-stacked",   label: "Products" },
-  { id: "Apartments", icon: "building",        label: "Apartments" },
   { id: "Messages",   icon: "message",         label: "Messages",   action: "navigate" },
   { id: "Promote",    icon: "rectangle-ad",    label: "Promote Products" },
   { id: "Payouts",    icon: "wallet",          label: "Payouts" },
@@ -26,6 +25,25 @@ const AD_PLAN_DESCS = {
   "7days":  "Best value for most sellers",
   "14days": "Maximum visibility for two weeks",
 };
+
+// ─── Color name → hex lookup (auto-fills the swatch as a seller types) ────────
+const COLOR_NAME_MAP = {
+  red: "#dc2626", blue: "#2563eb", black: "#111111", white: "#ffffff",
+  green: "#16a34a", yellow: "#eab308", orange: "#f97316", purple: "#9333ea",
+  pink: "#ec4899", grey: "#6b7280", gray: "#6b7280", brown: "#92400e",
+  navy: "#1e3a8a", gold: "#d4af37", silver: "#c0c0c0", beige: "#e8dcc8",
+  maroon: "#7f1d1d", teal: "#0d9488", cream: "#fdf6e3", khaki: "#bdb76b",
+  turquoise: "#14b8a6", lavender: "#c4b5fd", peach: "#fbbf9a", mint: "#86efac",
+  charcoal: "#374151", ivory: "#fffff0", olive: "#808000", coral: "#fb7185",
+  lilac: "#c084fc", mustard: "#ca8a04", rose: "#f43f5e", indigo: "#4f46e5",
+  violet: "#8b5cf6", magenta: "#d946ef", cyan: "#06b6d4", tan: "#d2b48c",
+  wine: "#722f37", "sky blue": "#38bdf8", "light blue": "#93c5fd",
+  "dark blue": "#1e40af", "light green": "#86efac", "dark green": "#166534",
+  "light grey": "#d1d5db", "light gray": "#d1d5db", "dark grey": "#4b5563", "dark gray": "#4b5563",
+};
+function colorHexFromName(name) {
+  return COLOR_NAME_MAP[String(name || "").trim().toLowerCase()];
+}
 
 // ─── Sidebar ──────────────────────────────────────────────────────────────────
 function Sidebar({ tab, setTab, navigate, profile, user, unreadMessages }) {
@@ -39,7 +57,17 @@ function Sidebar({ tab, setTab, navigate, profile, user, unreadMessages }) {
         <div style={{ fontSize: "2.4rem", fontWeight: 900, letterSpacing: "-0.04em", color: "#fff" }}>
           <span style={{ color: "var(--accent)" }}>U</span>MP
         </div>
-        <div style={{ fontSize: "1.1rem", color: "rgba(255,255,255,.4)", marginTop: 2 }}>Seller Portal</div>
+        <button
+          onClick={() => navigate("/")}
+          style={{
+            display: "flex", alignItems: "center", gap: 6, marginTop: 4, padding: 0,
+            background: "transparent", border: "none", cursor: "pointer",
+            fontSize: "1.1rem", color: "rgba(255,255,255,.5)", fontFamily: "var(--font-sans)",
+          }}
+        >
+          <i className="fas fa-arrow-left" />
+          Go back
+        </button>
       </div>
 
       <div style={{ padding: "20px 20px 16px", display: "flex", alignItems: "center", gap: 12, borderBottom: "1px solid rgba(255,255,255,.08)" }}>
@@ -127,10 +155,70 @@ const S_STYLE = {
   completed: { bg: "#dcfce7", color: "#16a34a" },
   delivered: { bg: "#dcfce7", color: "#16a34a" },
   cancelled: { bg: "#fee2e2", color: "#dc2626" },
+  disputed:  { bg: "#fee2e2", color: "#dc2626" },
 };
 function StatusBadge({ status }) {
   const s = S_STYLE[status] || S_STYLE.pending;
   return <span style={{ fontSize: "1.1rem", padding: "3px 10px", borderRadius: 20, background: s.bg, color: s.color, fontWeight: 700, whiteSpace: "nowrap" }}>{status || "pending"}</span>;
+}
+
+// ─── Order detail modal — brings the seller view up to parity with the admin
+// order drawer (buyer email/phone, payment method/status/reference, notes,
+// full address + recipient name, full timestamp) ──────────────────────────────
+function OrderDetailModal({ order, onClose }) {
+  const o = order;
+  const addr = o.shippingAddress;
+  const kv = (k, v) => v ? (
+    <div style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "6px 0", borderBottom: "1px solid var(--line)", fontSize: "1.25rem" }}>
+      <span style={{ color: "var(--ink-3)" }}>{k}</span>
+      <span style={{ fontWeight: 600, textAlign: "right" }}>{v}</span>
+    </div>
+  ) : null;
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.55)", zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }} onClick={onClose}>
+      <div className="card" style={{ maxWidth: 480, width: "100%", maxHeight: "88vh", overflowY: "auto", padding: 0 }} onClick={(e) => e.stopPropagation()}>
+        <div style={{ padding: "18px 20px", borderBottom: "1px solid var(--line)", display: "flex", justifyContent: "space-between", alignItems: "center", position: "sticky", top: 0, background: "var(--card-bg)", zIndex: 1 }}>
+          <div>
+            <div style={{ fontWeight: 800, fontSize: "1.7rem", fontFamily: "var(--font-mono)" }}>#{(o._id || "").toString().slice(-10)}</div>
+            <div style={{ fontSize: "1.15rem", color: "var(--ink-3)", marginTop: 2 }}>
+              {o.createdAt ? new Date(o.createdAt).toLocaleString(undefined, { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "—"}
+            </div>
+          </div>
+          <button onClick={onClose} style={{ border: "none", background: "none", cursor: "pointer", fontSize: "1.8rem", color: "var(--ink-3)" }}><i className="fas fa-xmark" /></button>
+        </div>
+
+        <div style={{ padding: 20 }}>
+          <div style={{ fontSize: "1.1rem", fontWeight: 700, color: "var(--ink-3)", textTransform: "uppercase", letterSpacing: ".06em", margin: "0 0 6px" }}>Buyer</div>
+          {kv("Name", o.buyer?.name)}
+          {kv("Email", o.buyer?.email)}
+          {kv("Phone", o.buyer?.phone)}
+
+          <div style={{ fontSize: "1.1rem", fontWeight: 700, color: "var(--ink-3)", textTransform: "uppercase", letterSpacing: ".06em", margin: "18px 0 6px" }}>Payment</div>
+          {kv("Method", o.paymentMethod)}
+          {kv("Status", o.paymentStatus)}
+          {kv("Reference", o.paymentInfo?.reference || o.paymentInfo?.transactionId)}
+
+          {(addr?.name || addr?.address) && (
+            <>
+              <div style={{ fontSize: "1.1rem", fontWeight: 700, color: "var(--ink-3)", textTransform: "uppercase", letterSpacing: ".06em", margin: "18px 0 6px" }}>Shipping address</div>
+              {kv("Recipient", addr.name)}
+              {kv("Phone", addr.phone)}
+              {kv("Address", addr.address)}
+              {kv("City", [addr.city, addr.state].filter(Boolean).join(", "))}
+            </>
+          )}
+
+          {o.notes && (
+            <>
+              <div style={{ fontSize: "1.1rem", fontWeight: 700, color: "var(--ink-3)", textTransform: "uppercase", letterSpacing: ".06em", margin: "18px 0 6px" }}>Notes</div>
+              <p style={{ margin: 0, fontSize: "1.25rem", color: "var(--ink-2)", lineHeight: 1.6 }}>{o.notes}</p>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // ─── Verify banner ────────────────────────────────────────────────────────────
@@ -183,6 +271,7 @@ function QuickEditModal({ product, onClose, onSave, showToast }) {
   });
   const [variants, setVariants] = useState(Array.isArray(product.variants) ? product.variants : []);
   const [variantInput, setVariantInput] = useState({ label: "", price: "", stock: "1" });
+  const [variantsOpen, setVariantsOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [colorInput, setColorInput] = useState({ name: "", code: "#e0e0e0" });
   const [sizeInput, setSizeInput] = useState("");
@@ -360,77 +449,94 @@ function QuickEditModal({ product, onClose, onSave, showToast }) {
               {form.colors.length === 0 && <span style={{ fontSize: "1.2rem", color: "var(--ink-4)" }}>No colors added</span>}
             </div>
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              <input style={{ ...iSty, flex: 1 }} placeholder="Color name (e.g. Red)" value={colorInput.name} onChange={(e) => setColorInput((c) => ({ ...c, name: e.target.value }))} onKeyDown={(e) => e.key === "Enter" && addColor()} />
+              <input style={{ ...iSty, flex: 1 }} placeholder="Color name (e.g. Red)" value={colorInput.name} onChange={(e) => { const name = e.target.value; const hex = colorHexFromName(name); setColorInput((c) => ({ ...c, name, ...(hex ? { code: hex } : {}) })); }} onKeyDown={(e) => e.key === "Enter" && addColor()} />
               <span style={{ width: 24, height: 24, borderRadius: "50%", background: colorInput.code || "#e0e0e0", border: "1px solid rgba(0,0,0,.15)", flexShrink: 0, display: "inline-block" }} title={colorInput.code} />
               <input type="color" value={colorInput.code} onChange={(e) => setColorInput((c) => ({ ...c, code: e.target.value }))} style={{ width: 40, height: 38, border: "1px solid var(--line)", borderRadius: "var(--r-md)", cursor: "pointer", padding: 2, flexShrink: 0 }} />
               <button className="btn btn-sm btn-ghost" onClick={addColor} style={{ flexShrink: 0 }}>Add</button>
             </div>
           </div>
 
-          {/* Sizes */}
-          <div style={{ marginBottom: 14 }}>
-            <label style={lSty}>Sizes <span style={{ fontWeight: 400, color: "var(--ink-4)" }}>(optional)</span></label>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
-              {form.sizes.map((s, i) => (
-                <span key={i} style={{ display: "flex", alignItems: "center", gap: 5, padding: "3px 10px", borderRadius: "var(--r-md)", background: "var(--surface)", border: "1px solid var(--line)", fontSize: "1.2rem", fontWeight: 600 }}>
-                  {s}<button onClick={() => removeSize(i)} style={{ border: "none", background: "none", cursor: "pointer", color: "var(--ink-3)", padding: 0, fontSize: "1rem", lineHeight: 1 }}><i className="fas fa-xmark" /></button>
-                </span>
-              ))}
-              {form.sizes.length === 0 && <span style={{ fontSize: "1.2rem", color: "var(--ink-4)" }}>No sizes</span>}
-            </div>
-            <div style={{ display: "flex", gap: 8 }}>
-              <input style={{ ...iSty, flex: 1 }} placeholder="e.g. S, M, L, XL, 42" value={sizeInput} onChange={(e) => setSizeInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addSize()} />
-              <button className="btn btn-sm btn-ghost" onClick={addSize} style={{ flexShrink: 0 }}>Add</button>
-            </div>
-          </div>
-
-          {/* Types / Variants */}
-          <div style={{ marginBottom: 14 }}>
-            <label style={lSty}>Types / Variants <span style={{ fontWeight: 400, color: "var(--ink-4)" }}>(optional)</span></label>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
-              {form.types.map((t, i) => (
-                <span key={i} style={{ display: "flex", alignItems: "center", gap: 5, padding: "3px 10px", borderRadius: "var(--r-md)", background: "var(--surface)", border: "1px solid var(--line)", fontSize: "1.2rem" }}>
-                  {t}<button onClick={() => removeType(i)} style={{ border: "none", background: "none", cursor: "pointer", color: "var(--ink-3)", padding: 0, fontSize: "1rem", lineHeight: 1 }}><i className="fas fa-xmark" /></button>
-                </span>
-              ))}
-              {form.types.length === 0 && <span style={{ fontSize: "1.2rem", color: "var(--ink-4)" }}>No types</span>}
-            </div>
-            <div style={{ display: "flex", gap: 8 }}>
-              <input style={{ ...iSty, flex: 1 }} placeholder="e.g. Eau de Parfum, 50ml, Red" value={typeInput} onChange={(e) => setTypeInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addType()} />
-              <button className="btn btn-sm btn-ghost" onClick={addType} style={{ flexShrink: 0 }}>Add</button>
-            </div>
-          </div>
-
-          {/* Priced Variants */}
+          {/* Types / Variants — collapsible to reduce clutter */}
           <div style={{ borderTop: "1px solid var(--line)", paddingTop: 14, marginBottom: 14 }}>
-            <label style={lSty}>Priced Variants <span style={{ fontWeight: 400, color: "var(--ink-4)" }}>(optional — e.g. 256GB ₦1.3M vs 512GB ₦1.45M)</span></label>
-            {variants.length > 0 && (
-              <div style={{ border: "1px solid var(--line)", borderRadius: 8, overflow: "hidden", marginBottom: 8 }}>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 100px 64px 32px", padding: "6px 10px", background: "var(--surface)", fontSize: "1.05rem", fontWeight: 700, color: "var(--ink-3)", borderBottom: "1px solid var(--line)", gap: 8 }}>
-                  <span>Label</span><span>Price (₦)</span><span>Stock</span><span />
-                </div>
-                {variants.map((v, i) => (
-                  <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 100px 64px 32px", padding: "8px 10px", borderBottom: i < variants.length - 1 ? "1px solid var(--line)" : "none", alignItems: "center", gap: 8 }}>
-                    <span style={{ fontSize: "1.2rem" }}>{v.label}</span>
-                    <span style={{ fontSize: "1.2rem" }}>₦{Number(v.price).toLocaleString()}</span>
-                    <span style={{ fontSize: "1.2rem" }}>{v.stock}</span>
-                    <button onClick={() => removeVariant(i)} style={{ border: "none", background: "none", cursor: "pointer", color: "var(--ink-3)", padding: 4 }}><i className="fas fa-xmark" /></button>
+            <button
+              type="button"
+              onClick={() => setVariantsOpen((o) => !o)}
+              style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", background: "none", border: "none", cursor: "pointer", padding: 0 }}
+            >
+              <span style={{ ...lSty, marginBottom: 0 }}>
+                Sizes, Types & Priced Variants <span style={{ fontWeight: 400, color: "var(--ink-4)" }}>(optional)</span>
+              </span>
+              <i className={`fas fa-chevron-${variantsOpen ? "up" : "down"}`} style={{ color: "var(--ink-3)" }} />
+            </button>
+            {variantsOpen && (
+              <div style={{ marginTop: 14 }}>
+                {/* Sizes */}
+                <div style={{ marginBottom: 14 }}>
+                  <label style={lSty}>Sizes <span style={{ fontWeight: 400, color: "var(--ink-4)" }}>(optional)</span></label>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
+                    {form.sizes.map((s, i) => (
+                      <span key={i} style={{ display: "flex", alignItems: "center", gap: 5, padding: "3px 10px", borderRadius: "var(--r-md)", background: "var(--surface)", border: "1px solid var(--line)", fontSize: "1.2rem", fontWeight: 600 }}>
+                        {s}<button onClick={() => removeSize(i)} style={{ border: "none", background: "none", cursor: "pointer", color: "var(--ink-3)", padding: 0, fontSize: "1rem", lineHeight: 1 }}><i className="fas fa-xmark" /></button>
+                      </span>
+                    ))}
+                    {form.sizes.length === 0 && <span style={{ fontSize: "1.2rem", color: "var(--ink-4)" }}>No sizes</span>}
                   </div>
-                ))}
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <input style={{ ...iSty, flex: 1 }} placeholder="e.g. S, M, L, XL, 42" value={sizeInput} onChange={(e) => setSizeInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addSize()} />
+                    <button className="btn btn-sm btn-ghost" onClick={addSize} style={{ flexShrink: 0 }}>Add</button>
+                  </div>
+                </div>
+
+                {/* Types / Variants */}
+                <div style={{ marginBottom: 14 }}>
+                  <label style={lSty}>Types / Variants <span style={{ fontWeight: 400, color: "var(--ink-4)" }}>(optional)</span></label>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
+                    {form.types.map((t, i) => (
+                      <span key={i} style={{ display: "flex", alignItems: "center", gap: 5, padding: "3px 10px", borderRadius: "var(--r-md)", background: "var(--surface)", border: "1px solid var(--line)", fontSize: "1.2rem" }}>
+                        {t}<button onClick={() => removeType(i)} style={{ border: "none", background: "none", cursor: "pointer", color: "var(--ink-3)", padding: 0, fontSize: "1rem", lineHeight: 1 }}><i className="fas fa-xmark" /></button>
+                      </span>
+                    ))}
+                    {form.types.length === 0 && <span style={{ fontSize: "1.2rem", color: "var(--ink-4)" }}>No types</span>}
+                  </div>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <input style={{ ...iSty, flex: 1 }} placeholder="e.g. Eau de Parfum, 50ml, Red" value={typeInput} onChange={(e) => setTypeInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addType()} />
+                    <button className="btn btn-sm btn-ghost" onClick={addType} style={{ flexShrink: 0 }}>Add</button>
+                  </div>
+                </div>
+
+                {/* Priced Variants */}
+                <div>
+                  <label style={lSty}>Priced Variants <span style={{ fontWeight: 400, color: "var(--ink-4)" }}>(optional — e.g. 256GB ₦1.3M vs 512GB ₦1.45M)</span></label>
+                  {variants.length > 0 && (
+                    <div style={{ border: "1px solid var(--line)", borderRadius: 8, overflow: "hidden", marginBottom: 8 }}>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 100px 64px 32px", padding: "6px 10px", background: "var(--surface)", fontSize: "1.05rem", fontWeight: 700, color: "var(--ink-3)", borderBottom: "1px solid var(--line)", gap: 8 }}>
+                        <span>Label</span><span>Price (₦)</span><span>Stock</span><span />
+                      </div>
+                      {variants.map((v, i) => (
+                        <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 100px 64px 32px", padding: "8px 10px", borderBottom: i < variants.length - 1 ? "1px solid var(--line)" : "none", alignItems: "center", gap: 8 }}>
+                          <span style={{ fontSize: "1.2rem" }}>{v.label}</span>
+                          <span style={{ fontSize: "1.2rem" }}>₦{Number(v.price).toLocaleString()}</span>
+                          <span style={{ fontSize: "1.2rem" }}>{v.stock}</span>
+                          <button onClick={() => removeVariant(i)} style={{ border: "none", background: "none", cursor: "pointer", color: "var(--ink-3)", padding: 4 }}><i className="fas fa-xmark" /></button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 100px 64px auto", gap: 6, alignItems: "center" }}>
+                    <input style={iSty} placeholder="Label (e.g. Black 256GB)" value={variantInput.label} onChange={(e) => setVariantInput((v) => ({ ...v, label: e.target.value }))} onKeyDown={(e) => e.key === "Enter" && addVariant()} />
+                    <input style={iSty} type="number" placeholder="Price" min="0" value={variantInput.price} onChange={(e) => setVariantInput((v) => ({ ...v, price: e.target.value }))} />
+                    <input style={iSty} type="number" placeholder="Stock" min="0" value={variantInput.stock} onChange={(e) => setVariantInput((v) => ({ ...v, stock: e.target.value }))} />
+                    <button onClick={addVariant} style={{ padding: "8px 10px", borderRadius: 8, border: "none", background: "var(--accent)", color: "#fff", cursor: "pointer", fontSize: "1.3rem", whiteSpace: "nowrap" }}>
+                      <i className="fas fa-plus" /> Add
+                    </button>
+                  </div>
+                  {variants.length > 0 && (
+                    <p style={{ margin: "6px 0 0", fontSize: "1.05rem", color: "var(--ink-3)" }}>
+                      Price → ₦{Math.min(...variants.map((v) => v.price)).toLocaleString()} (min) · Stock → {variants.reduce((s, v) => s + (v.stock || 0), 0)} (total)
+                    </p>
+                  )}
+                </div>
               </div>
-            )}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 100px 64px auto", gap: 6, alignItems: "center" }}>
-              <input style={iSty} placeholder="Label (e.g. Black 256GB)" value={variantInput.label} onChange={(e) => setVariantInput((v) => ({ ...v, label: e.target.value }))} onKeyDown={(e) => e.key === "Enter" && addVariant()} />
-              <input style={iSty} type="number" placeholder="Price" min="0" value={variantInput.price} onChange={(e) => setVariantInput((v) => ({ ...v, price: e.target.value }))} />
-              <input style={iSty} type="number" placeholder="Stock" min="0" value={variantInput.stock} onChange={(e) => setVariantInput((v) => ({ ...v, stock: e.target.value }))} />
-              <button onClick={addVariant} style={{ padding: "8px 10px", borderRadius: 8, border: "none", background: "var(--accent)", color: "#fff", cursor: "pointer", fontSize: "1.3rem", whiteSpace: "nowrap" }}>
-                <i className="fas fa-plus" /> Add
-              </button>
-            </div>
-            {variants.length > 0 && (
-              <p style={{ margin: "6px 0 0", fontSize: "1.05rem", color: "var(--ink-3)" }}>
-                Price → ₦{Math.min(...variants.map((v) => v.price)).toLocaleString()} (min) · Stock → {variants.reduce((s, v) => s + (v.stock || 0), 0)} (total)
-              </p>
             )}
           </div>
 
@@ -468,380 +574,16 @@ function QuickEditModal({ product, onClose, onSave, showToast }) {
   );
 }
 
-// ─── Listing Modal (Apartments) ───────────────────────────────────────────────
-const AMENITY_OPTIONS = ["WiFi", "Water", "Electricity", "Kitchen", "Bathroom", "Parking", "Security", "Laundry", "AC", "Generator"];
-
-function ListingModal({ listing, onClose, onSave, showToast }) {
-  const [form, setForm] = useState({
-    name: listing?.name || "",
-    type: listing?.type || "Apartment",
-    price: listing?.price || "",
-    rate: listing?.rate || "per Year",
-    location: listing?.location || "",
-    beds: listing?.beds || 1,
-    baths: listing?.baths || 1,
-    distance: listing?.distance || "",
-    description: listing?.description || "",
-    furnished: listing?.furnished || false,
-    available: listing?.available ?? true,
-    amenities: listing?.amenities || [],
-    pricePerHalfYear: listing?.pricePerHalfYear ?? "",
-    agreementFee:  listing?.agreementFee  ?? "",
-    commissionFee: listing?.commissionFee ?? "",
-    agentFee:      listing?.agentFee      ?? "",
-    cautionFee:    listing?.cautionFee    ?? "",
-  });
-  const [imageFiles, setImageFiles] = useState([]);
-  const [imagePreviews, setImagePreviews] = useState([]);
-  const [videoFile, setVideoFile] = useState(null);
-  const [videoPreview, setVideoPreview] = useState(null);
-  const [customAmenity, setCustomAmenity] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [listCropQueue, setListCropQueue] = useState([]);
-  const [listCropSrc, setListCropSrc] = useState(null);
-
-  const set = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.type === "checkbox" ? e.target.checked : e.target.value }));
-  const toggleAmenity = (a) => setForm((f) => ({
-    ...f,
-    amenities: f.amenities.includes(a) ? f.amenities.filter((x) => x !== a) : [...f.amenities, a],
-  }));
-
-  function handleImagePick(e) {
-    const files = Array.from(e.target.files).slice(0, 4 - imagePreviews.length);
-    if (!files.length) return;
-    const readers = files.map((file) => new Promise((res) => {
-      const r = new FileReader();
-      r.onload = () => res(r.result);
-      r.readAsDataURL(file);
-    }));
-    Promise.all(readers).then((srcs) => {
-      setListCropQueue(srcs.slice(1));
-      setListCropSrc(srcs[0]);
-    });
-    e.target.value = "";
-  }
-
-  function handleListCropConfirm(blob) {
-    const file = new File([blob], `listing-${imageFiles.length + 1}.jpg`, { type: "image/jpeg" });
-    setImageFiles((prev) => [...prev, file]);
-    setImagePreviews((prev) => [...prev, URL.createObjectURL(blob)]);
-    if (listCropQueue.length > 0) {
-      setListCropSrc(listCropQueue[0]);
-      setListCropQueue((q) => q.slice(1));
-    } else {
-      setListCropSrc(null);
-    }
-  }
-
-  function removeImage(i) {
-    setImageFiles((prev) => prev.filter((_, idx) => idx !== i));
-    setImagePreviews((prev) => prev.filter((_, idx) => idx !== i));
-  }
-
-  function handleVideoPick(e) {
-    const f = e.target.files?.[0];
-    if (f) { setVideoFile(f); setVideoPreview(URL.createObjectURL(f)); }
-  }
-
-  async function handleSave() {
-    if (!form.name.trim() || !form.location.trim() || !form.price) {
-      showToast("Name, location, and price are required", "error");
-      return;
-    }
-    if (!imageFiles.length && !listing?.images?.length) {
-      showToast("At least one listing photo is required", "error");
-      return;
-    }
-    setSaving(true);
-    try {
-      const fd = new FormData();
-      fd.append("name", form.name.trim());
-      fd.append("type", form.type);
-      fd.append("price", Number(form.price));
-      fd.append("rate", form.rate);
-      fd.append("location", form.location.trim());
-      fd.append("beds", Number(form.beds));
-      fd.append("baths", Number(form.baths));
-      fd.append("distance", form.distance);
-      fd.append("description", form.description);
-      fd.append("furnished", form.furnished);
-      fd.append("available", form.available);
-      if (form.pricePerHalfYear) fd.append("pricePerHalfYear", Number(form.pricePerHalfYear));
-      fd.append("agreementFee",  Number(form.agreementFee)  || 0);
-      fd.append("commissionFee", Number(form.commissionFee) || 0);
-      fd.append("agentFee",      Number(form.agentFee)      || 0);
-      fd.append("cautionFee",    Number(form.cautionFee)    || 0);
-      form.amenities.forEach((a) => fd.append("amenities", a));
-      imageFiles.forEach((f) => fd.append("images", f));
-      if (videoFile) fd.append("videos", videoFile);
-
-      let result;
-      if (listing) {
-        result = await apiFetch(`/api/listings/${listing._id}`, { method: "PUT", body: fd });
-      } else {
-        result = await apiFetch("/api/listings", { method: "POST", body: fd });
-      }
-      showToast(listing ? "Listing updated" : "Listing created", "success");
-      onSave(result.listing);
-    } catch (err) {
-      showToast(err?.message || "Failed to save listing", "error");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  const iSty = { width: "100%", padding: "8px 12px", borderRadius: "var(--r-md)", border: "1px solid var(--line)", background: "var(--surface)", color: "var(--ink-1)", fontSize: "1.3rem", fontFamily: "var(--font-sans)", boxSizing: "border-box" };
-  const lSty = { fontSize: "1.15rem", color: "var(--ink-3)", fontWeight: 600, marginBottom: 4, display: "block" };
-
-  return (
-    <>
-    {listCropSrc && (
-      <ImageCropModal
-        src={listCropSrc}
-        aspect={4 / 3}
-        title={`Crop listing photo ${imagePreviews.length + 1}`}
-        onConfirm={handleListCropConfirm}
-        onCancel={() => { setListCropSrc(null); setListCropQueue([]); }}
-      />
-    )}
-    <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.55)", zIndex: 300, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }} onClick={onClose}>
-      <div className="card" style={{ maxWidth: 560, width: "100%", maxHeight: "92vh", overflowY: "auto", padding: 0 }} onClick={(e) => e.stopPropagation()}>
-        <div style={{ padding: "18px 20px", borderBottom: "1px solid var(--line)", display: "flex", justifyContent: "space-between", alignItems: "center", position: "sticky", top: 0, background: "var(--card-bg)", zIndex: 1 }}>
-          <div style={{ fontWeight: 800, fontSize: "1.8rem" }}>{listing ? "Edit Listing" : "New Listing"}</div>
-          <button onClick={onClose} style={{ border: "none", background: "none", cursor: "pointer", fontSize: "1.8rem", color: "var(--ink-3)" }}><i className="fas fa-xmark" /></button>
-        </div>
-
-        <div style={{ padding: 20 }}>
-          <div style={{ marginBottom: 14 }}>
-            <label style={lSty}>Property Name</label>
-            <input style={iSty} value={form.name} onChange={set("name")} placeholder="e.g. Luxury 2BR Apartment near UNILAG" />
-          </div>
-
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
-            <div>
-              <label style={lSty}>Type</label>
-              <select style={{ ...iSty }} value={form.type} onChange={set("type")}>
-                <option value="Apartment">Apartment</option>
-                <option value="Hostel">Hostel</option>
-              </select>
-            </div>
-            <div>
-              <label style={lSty}>Payment Plan</label>
-              <select style={{ ...iSty }} value={form.rate} onChange={set("rate")}>
-                <option value="per Year">Per Year</option>
-                <option value="per Month">Per Month</option>
-                <option value="per Semester">Per Semester</option>
-                <option value="per Day">Per Day</option>
-              </select>
-            </div>
-          </div>
-
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
-            <div>
-              <label style={lSty}>Price / yr (₦)</label>
-              <input style={iSty} type="number" min="0" value={form.price} onChange={set("price")} placeholder="0" />
-            </div>
-            <div>
-              <label style={lSty}>Price / 6 months (₦) <span style={{ color: "var(--ink-3)", fontWeight: 400 }}>optional</span></label>
-              <input style={iSty} type="number" min="0" value={form.pricePerHalfYear} onChange={set("pricePerHalfYear")} placeholder="0" />
-            </div>
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
-            <div>
-              <label style={lSty}>Distance to Campus</label>
-              <input style={iSty} value={form.distance} onChange={set("distance")} placeholder="e.g. 500m from gate" />
-            </div>
-            <div>
-              <label style={lSty}>Location / Neighborhood</label>
-              <input style={iSty} value={form.location} onChange={set("location")} placeholder="e.g. Akoka, Yaba, Lagos" />
-            </div>
-          </div>
-
-          {/* Agent / move-in fees — optional */}
-          <div style={{ marginBottom: 4 }}>
-            <label style={lSty}>Agent & Move-in Fees <span style={{ color: "var(--ink-3)", fontWeight: 400 }}>(optional — Lagos agents)</span></label>
-          </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
-            <div>
-              <label style={{ ...lSty, fontSize: "1.1rem" }}>Agreement fee (₦)</label>
-              <input style={iSty} type="number" min="0" value={form.agreementFee} onChange={set("agreementFee")} placeholder="0" />
-            </div>
-            <div>
-              <label style={{ ...lSty, fontSize: "1.1rem" }}>Commission fee (₦)</label>
-              <input style={iSty} type="number" min="0" value={form.commissionFee} onChange={set("commissionFee")} placeholder="0" />
-            </div>
-            <div>
-              <label style={{ ...lSty, fontSize: "1.1rem" }}>Agent fee (₦)</label>
-              <input style={iSty} type="number" min="0" value={form.agentFee} onChange={set("agentFee")} placeholder="0" />
-            </div>
-            <div>
-              <label style={{ ...lSty, fontSize: "1.1rem" }}>Caution fee (₦)</label>
-              <input style={iSty} type="number" min="0" value={form.cautionFee} onChange={set("cautionFee")} placeholder="0" />
-            </div>
-          </div>
-
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 10, marginBottom: 14 }}>
-            <div>
-              <label style={lSty}>{form.type === "Hostel" ? "Men per Room" : "Bedrooms"}</label>
-              <input style={iSty} type="number" min="1" value={form.beds} onChange={set("beds")} placeholder={form.type === "Hostel" ? "e.g. 4" : "1"} />
-            </div>
-            <div>
-              <label style={lSty}>Bathrooms</label>
-              <input style={iSty} type="number" min="0" value={form.baths} onChange={set("baths")} />
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", justifyContent: "flex-end", paddingBottom: 6 }}>
-              <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: "1.2rem", color: "var(--ink-2)" }}>
-                <input type="checkbox" checked={form.furnished} onChange={set("furnished")} />
-                Furnished
-              </label>
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", justifyContent: "flex-end", paddingBottom: 6 }}>
-              <label style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer", fontSize: "1.2rem", color: "var(--ink-2)" }}>
-                <input type="checkbox" checked={form.available} onChange={set("available")} />
-                Available
-              </label>
-            </div>
-          </div>
-
-          <div style={{ marginBottom: 14 }}>
-            <label style={lSty}>Description</label>
-            <textarea style={{ ...iSty, height: 80, resize: "vertical" }} value={form.description} onChange={set("description")} placeholder="Describe the property..." />
-          </div>
-
-          <div style={{ marginBottom: 14 }}>
-            <label style={lSty}>Amenities</label>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
-              {AMENITY_OPTIONS.map((a) => {
-                const active = form.amenities.includes(a);
-                return (
-                  <button key={a} type="button" onClick={() => toggleAmenity(a)} style={{ padding: "4px 12px", borderRadius: 20, border: `1px solid ${active ? "var(--accent)" : "var(--line)"}`, background: active ? "rgba(249,115,22,.1)" : "transparent", color: active ? "var(--accent)" : "var(--ink-2)", fontWeight: active ? 600 : 400, fontSize: "1.2rem", cursor: "pointer", transition: "all .15s", fontFamily: "var(--font-sans)" }}>
-                    {a}
-                  </button>
-                );
-              })}
-              {/* Custom amenities added by user */}
-              {form.amenities.filter((a) => !AMENITY_OPTIONS.includes(a)).map((a) => (
-                <span key={a} style={{ display: "inline-flex", alignItems: "center", gap: 5, padding: "4px 10px", borderRadius: 20, border: "1px solid var(--accent)", background: "rgba(249,115,22,.1)", color: "var(--accent)", fontSize: "1.2rem", fontWeight: 600 }}>
-                  {a}
-                  <button type="button" onClick={() => toggleAmenity(a)} style={{ border: "none", background: "none", cursor: "pointer", color: "var(--accent)", padding: 0, lineHeight: 1, fontSize: "1rem", display: "flex", alignItems: "center" }}>
-                    <i className="fas fa-xmark" />
-                  </button>
-                </span>
-              ))}
-            </div>
-            {/* Add custom amenity */}
-            <div style={{ display: "flex", gap: 8 }}>
-              <input
-                style={{ ...iSty, flex: 1 }}
-                placeholder="Add custom (e.g. Rooftop, CCTV, Gym)…"
-                value={customAmenity}
-                onChange={(e) => setCustomAmenity(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    const val = customAmenity.trim();
-                    if (val && !form.amenities.includes(val)) {
-                      setForm((f) => ({ ...f, amenities: [...f.amenities, val] }));
-                    }
-                    setCustomAmenity("");
-                  }
-                }}
-              />
-              <button
-                type="button"
-                className="btn btn-ghost btn-sm"
-                style={{ flexShrink: 0 }}
-                onClick={() => {
-                  const val = customAmenity.trim();
-                  if (val && !form.amenities.includes(val)) {
-                    setForm((f) => ({ ...f, amenities: [...f.amenities, val] }));
-                  }
-                  setCustomAmenity("");
-                }}
-              >
-                Add
-              </button>
-            </div>
-          </div>
-
-          {/* Photos */}
-          <div style={{ marginBottom: 14 }}>
-            <label style={lSty}>Photos <span style={{ fontWeight: 400, color: "var(--ink-4)" }}>(max 4)</span></label>
-            {listing?.images?.length > 0 && imagePreviews.length === 0 && (
-              <div style={{ display: "flex", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
-                {listing.images.map((img, i) => (
-                  <img key={i} src={img.url} alt="" style={{ width: 72, height: 72, borderRadius: 8, objectFit: "cover", border: "1px solid var(--line)" }} />
-                ))}
-                <span style={{ fontSize: "1.1rem", color: "var(--ink-4)", alignSelf: "center" }}>Pick new photos below to replace</span>
-              </div>
-            )}
-            <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", padding: "8px 14px", borderRadius: "var(--r-md)", border: "1px dashed var(--line)", background: "var(--surface)", width: "fit-content" }}>
-              <i className="fas fa-cloud-arrow-up" style={{ color: "var(--accent)" }} />
-              <span style={{ fontSize: "1.2rem", color: "var(--ink-2)" }}>{imageFiles.length > 0 ? `${imageFiles.length} photo(s) selected` : "Choose photos"}</span>
-              <input type="file" accept="image/*" multiple style={{ display: "none" }} onChange={(e) => { handleImagePick(e); e.target.value = ""; }} />
-            </label>
-            {imagePreviews.length > 0 && (
-              <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
-                {imagePreviews.map((src, i) => (
-                  <div key={i} style={{ position: "relative", width: 80, height: 80 }}>
-                    <img src={src} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 8 }} />
-                    <button onClick={() => removeImage(i)} style={{ position: "absolute", top: -4, right: -4, width: 18, height: 18, borderRadius: "50%", background: "#dc2626", color: "#fff", border: "none", cursor: "pointer", fontSize: "0.9rem", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}>
-                      <i className="fas fa-xmark" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Video Tour */}
-          <div style={{ marginBottom: 4 }}>
-            <label style={lSty}>Video Tour <span style={{ fontWeight: 400, color: "var(--ink-4)" }}>(optional)</span></label>
-            {!videoPreview && listing?.videos?.[0]?.url && (
-              <video controls playsInline preload="metadata" style={{ width: "100%", borderRadius: 8, maxHeight: 160, marginBottom: 8 }}>
-                <source src={cloudVideo(listing.videos[0].url)} type="video/mp4" />
-              </video>
-            )}
-            {videoPreview ? (
-              <div style={{ position: "relative" }}>
-                <video controls playsInline preload="metadata" style={{ width: "100%", borderRadius: 8, maxHeight: 160 }}>
-                  <source src={videoPreview} type={videoFile?.type || "video/mp4"} />
-                </video>
-                <button onClick={() => { setVideoFile(null); setVideoPreview(null); }} style={{ position: "absolute", top: 8, right: 8, background: "#dc2626", color: "#fff", border: "none", borderRadius: "50%", width: 26, height: 26, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "1rem" }}>
-                  <i className="fas fa-xmark" />
-                </button>
-              </div>
-            ) : (
-              <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer", padding: "8px 14px", borderRadius: "var(--r-md)", border: "1px dashed var(--line)", background: "var(--surface)", width: "fit-content" }}>
-                <i className="fas fa-video" style={{ color: "var(--accent)" }} />
-                <span style={{ fontSize: "1.2rem", color: "var(--ink-2)" }}>{videoFile ? videoFile.name : "Upload video"}</span>
-                <input type="file" accept="video/*" style={{ display: "none" }} onChange={handleVideoPick} />
-              </label>
-            )}
-          </div>
-        </div>
-
-        <div style={{ padding: "14px 20px", borderTop: "1px solid var(--line)", display: "flex", gap: 10, justifyContent: "flex-end", position: "sticky", bottom: 0, background: "var(--card-bg)" }}>
-          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary" disabled={saving} onClick={handleSave}>
-            {saving ? <i className="fas fa-spinner fa-spin" /> : listing ? <><i className="fas fa-check" /> Save Changes</> : <><i className="fas fa-plus" /> Add Listing</>}
-          </button>
-        </div>
-      </div>
-    </div>
-    </>
-  );
-}
-
 // ─── Add Product Modal ────────────────────────────────────────────────────────
 function AddProductModal({ onClose, onSave, showToast }) {
-  const [form, setForm] = useState({ name: "", price: "", stock: "", desc: "", condition: "New", status: "active", category: "", colors: [], sizes: [], types: [], specs: [], variants: [] });
+  const [form, setForm] = useState({ name: "", price: "", stock: "", desc: "", condition: "New", status: "active", category: "", colors: [], sizes: [], types: [], specs: [], variants: [], sections: [] });
   const [imageFiles, setImageFiles] = useState([]);
   const [imagePreviews, setImagePreviews] = useState([]);
   const [mainImageIdx, setMainImageIdx] = useState(0);
   const [videoFile, setVideoFile] = useState(null);
   const [videoPreview, setVideoPreview] = useState(null);
   const [categories, setCategories] = useState([]);
+  const [sections, setSections] = useState([]);
   const [staged, setStaged] = useState([]);
   const [saving, setSaving] = useState(false);
   const [addError, setAddError] = useState("");
@@ -850,6 +592,7 @@ function AddProductModal({ onClose, onSave, showToast }) {
   const [typeInput, setTypeInput] = useState("");
   const [specInput, setSpecInput] = useState({ k: "", v: "" });
   const [variantInput, setVariantInput] = useState({ label: "", price: "", stock: "1" });
+  const [variantsOpen, setVariantsOpen] = useState(false);
   const [cropQueue, setCropQueue] = useState([]);
   const [cropSrc, setCropSrc] = useState(null);
   const modalRef = useRef();
@@ -858,7 +601,15 @@ function AddProductModal({ onClose, onSave, showToast }) {
     apiFetch("/api/categories")
       .then((d) => setCategories(d.categories || d || []))
       .catch(() => setCategories([]));
+    apiFetch("/api/sections")
+      .then((d) => setSections(Array.isArray(d) ? d : []))
+      .catch(() => setSections([]));
   }, []);
+
+  const toggleFormSection = (id) => setForm((f) => ({
+    ...f,
+    sections: f.sections.includes(id) ? f.sections.filter((x) => x !== id) : [...f.sections, id],
+  }));
 
   const set = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.value }));
 
@@ -987,6 +738,7 @@ function AddProductModal({ onClose, onSave, showToast }) {
     fd.append("colors", JSON.stringify(item.form.colors));
     if (item.form.sizes.length) fd.append("sizes", JSON.stringify(item.form.sizes));
     if (item.form.types.length) fd.append("types", JSON.stringify(item.form.types));
+    if (item.form.sections?.length) fd.append("sections", JSON.stringify(item.form.sections));
     item.form.specs.forEach(({ k, v }) => { fd.append("specKey", k); fd.append("specValue", v); });
     const orderedFiles = item.mainImageIdx === 0
       ? item.imageFiles
@@ -1120,6 +872,26 @@ function AddProductModal({ onClose, onSave, showToast }) {
             </div>
           </div>
 
+          {/* Sections — separate from category; helps buyers discover the product via curated home-page collections */}
+          {sections.length > 0 && (
+            <div style={{ marginBottom: 14 }}>
+              <label style={lSty}>Sections <span style={{ fontWeight: 400, color: "var(--ink-4)" }}>(optional — tag into a home-page collection, e.g. Back to School)</span></label>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                {sections.map((s) => {
+                  const active = form.sections.includes(s._id);
+                  return (
+                    <button
+                      key={s._id} type="button" onClick={() => toggleFormSection(s._id)}
+                      style={{ padding: "4px 12px", borderRadius: 20, border: `1px solid ${active ? "var(--accent)" : "var(--line)"}`, background: active ? "rgba(249,115,22,.1)" : "transparent", color: active ? "var(--accent)" : "var(--ink-2)", fontWeight: active ? 600 : 400, fontSize: "1.2rem", cursor: "pointer", fontFamily: "var(--font-sans)" }}
+                    >
+                      {s.name}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {/* Description */}
           <div style={{ marginBottom: 14 }}>
             <label style={lSty}>Description</label>
@@ -1197,46 +969,10 @@ function AddProductModal({ onClose, onSave, showToast }) {
               ))}
             </div>
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              <input style={{ ...iSty, flex: 1 }} placeholder="Color name" value={colorInput.name} onChange={(e) => setColorInput((c) => ({ ...c, name: e.target.value }))} onKeyDown={(e) => e.key === "Enter" && addColor()} />
+              <input style={{ ...iSty, flex: 1 }} placeholder="Color name" value={colorInput.name} onChange={(e) => { const name = e.target.value; const hex = colorHexFromName(name); setColorInput((c) => ({ ...c, name, ...(hex ? { code: hex } : {}) })); }} onKeyDown={(e) => e.key === "Enter" && addColor()} />
               <span style={{ width: 24, height: 24, borderRadius: "50%", background: colorInput.code || "#e0e0e0", border: "1px solid rgba(0,0,0,.15)", flexShrink: 0, display: "inline-block" }} title={colorInput.code} />
               <input type="color" value={colorInput.code} onChange={(e) => setColorInput((c) => ({ ...c, code: e.target.value }))} style={{ width: 40, height: 38, border: "1px solid var(--line)", borderRadius: "var(--r-md)", cursor: "pointer", padding: 2, flexShrink: 0 }} />
               <button className="btn btn-sm btn-ghost" onClick={addColor} style={{ flexShrink: 0 }}>Add</button>
-            </div>
-          </div>
-
-          {/* Sizes */}
-          <div style={{ marginBottom: 14 }}>
-            <label style={lSty}>Sizes <span style={{ fontWeight: 400, color: "var(--ink-4)" }}>(optional — e.g. S, M, L, XL, 42)</span></label>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
-              {form.sizes.map((s, i) => (
-                <span key={i} style={{ display: "flex", alignItems: "center", gap: 5, padding: "3px 10px", borderRadius: "var(--r-md)", background: "var(--surface)", border: "1px solid var(--line)", fontSize: "1.2rem", fontWeight: 600 }}>
-                  {s}
-                  <button onClick={() => removeSize(i)} style={{ border: "none", background: "none", cursor: "pointer", color: "var(--ink-3)", padding: 0, fontSize: "1rem" }}><i className="fas fa-xmark" /></button>
-                </span>
-              ))}
-              {form.sizes.length === 0 && <span style={{ fontSize: "1.2rem", color: "var(--ink-4)" }}>No sizes added</span>}
-            </div>
-            <div style={{ display: "flex", gap: 8 }}>
-              <input style={{ ...iSty, flex: 1 }} placeholder="Size (e.g. M, XL, 42)" value={sizeInput} onChange={(e) => setSizeInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addSize()} />
-              <button className="btn btn-sm btn-ghost" onClick={addSize} style={{ flexShrink: 0 }}>Add</button>
-            </div>
-          </div>
-
-          {/* Types / Variants */}
-          <div style={{ marginBottom: 14 }}>
-            <label style={lSty}>Types / Variants <span style={{ fontWeight: 400, color: "var(--ink-4)" }}>(optional — e.g. Eau de Parfum, Red, 100ml)</span></label>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
-              {form.types.map((t, i) => (
-                <span key={i} style={{ display: "flex", alignItems: "center", gap: 5, padding: "3px 10px", borderRadius: "var(--r-md)", background: "var(--surface)", border: "1px solid var(--line)", fontSize: "1.2rem" }}>
-                  {t}
-                  <button onClick={() => removeType(i)} style={{ border: "none", background: "none", cursor: "pointer", color: "var(--ink-3)", padding: 0, fontSize: "1rem" }}><i className="fas fa-xmark" /></button>
-                </span>
-              ))}
-              {form.types.length === 0 && <span style={{ fontSize: "1.2rem", color: "var(--ink-4)" }}>No types added</span>}
-            </div>
-            <div style={{ display: "flex", gap: 8 }}>
-              <input style={{ ...iSty, flex: 1 }} placeholder="Type (e.g. Eau de Parfum, 50ml)" value={typeInput} onChange={(e) => setTypeInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addType()} />
-              <button className="btn btn-sm btn-ghost" onClick={addType} style={{ flexShrink: 0 }}>Add</button>
             </div>
           </div>
 
@@ -1260,35 +996,88 @@ function AddProductModal({ onClose, onSave, showToast }) {
             </div>
           </div>
 
-          {/* Priced Variants */}
+          {/* Sizes / Types / Priced Variants — collapsible to reduce clutter */}
           <div style={{ marginBottom: 4, borderTop: "1px solid var(--line)", paddingTop: 14 }}>
-            <label style={lSty}>Priced Variants <span style={{ fontWeight: 400, color: "var(--ink-4)" }}>(optional — e.g. storage sizes, colour tiers)</span></label>
-            <p style={{ margin: "0 0 10px", fontSize: "1.1rem", color: "var(--ink-3)", lineHeight: 1.5 }}>
-              Use this when the same product comes in options that have <strong>different prices</strong> — like iPhone 17 Black ₦1.1M vs Lavender ₦1.15M, or 256GB vs 512GB. Each variant has its own price and stock.
-            </p>
-            {form.variants.length > 0 && (
-              <div style={{ border: "1px solid var(--line)", borderRadius: "var(--r-md)", overflow: "hidden", marginBottom: 10 }}>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 100px 64px 32px", padding: "6px 10px", background: "var(--surface)", fontSize: "1.05rem", fontWeight: 700, color: "var(--ink-3)", borderBottom: "1px solid var(--line)", gap: 8 }}>
-                  <span>Label</span><span>Price (₦)</span><span>Stock</span><span></span>
-                </div>
-                {form.variants.map((v, i) => (
-                  <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 100px 64px 32px", padding: "8px 10px", borderBottom: i < form.variants.length - 1 ? "1px solid var(--line)" : "none", alignItems: "center", gap: 8 }}>
-                    <span style={{ fontSize: "1.2rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.label}</span>
-                    <span style={{ fontSize: "1.2rem" }}>₦{Number(v.price).toLocaleString()}</span>
-                    <span style={{ fontSize: "1.2rem" }}>{v.stock}</span>
-                    <button onClick={() => removeVariant(i)} style={{ border: "none", background: "none", cursor: "pointer", color: "var(--ink-3)", padding: 4 }}><i className="fas fa-xmark" /></button>
+            <button
+              type="button"
+              onClick={() => setVariantsOpen((o) => !o)}
+              style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%", background: "none", border: "none", cursor: "pointer", padding: 0 }}
+            >
+              <span style={{ ...lSty, marginBottom: 0 }}>
+                Sizes, Types & Priced Variants <span style={{ fontWeight: 400, color: "var(--ink-4)" }}>(optional)</span>
+              </span>
+              <i className={`fas fa-chevron-${variantsOpen ? "up" : "down"}`} style={{ color: "var(--ink-3)" }} />
+            </button>
+            {variantsOpen && (
+              <div style={{ marginTop: 14 }}>
+                {/* Sizes */}
+                <div style={{ marginBottom: 14 }}>
+                  <label style={lSty}>Sizes <span style={{ fontWeight: 400, color: "var(--ink-4)" }}>(optional — e.g. S, M, L, XL, 42)</span></label>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
+                    {form.sizes.map((s, i) => (
+                      <span key={i} style={{ display: "flex", alignItems: "center", gap: 5, padding: "3px 10px", borderRadius: "var(--r-md)", background: "var(--surface)", border: "1px solid var(--line)", fontSize: "1.2rem", fontWeight: 600 }}>
+                        {s}
+                        <button onClick={() => removeSize(i)} style={{ border: "none", background: "none", cursor: "pointer", color: "var(--ink-3)", padding: 0, fontSize: "1rem" }}><i className="fas fa-xmark" /></button>
+                      </span>
+                    ))}
+                    {form.sizes.length === 0 && <span style={{ fontSize: "1.2rem", color: "var(--ink-4)" }}>No sizes added</span>}
                   </div>
-                ))}
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <input style={{ ...iSty, flex: 1 }} placeholder="Size (e.g. M, XL, 42)" value={sizeInput} onChange={(e) => setSizeInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addSize()} />
+                    <button className="btn btn-sm btn-ghost" onClick={addSize} style={{ flexShrink: 0 }}>Add</button>
+                  </div>
+                </div>
+
+                {/* Types / Variants */}
+                <div style={{ marginBottom: 14 }}>
+                  <label style={lSty}>Types / Variants <span style={{ fontWeight: 400, color: "var(--ink-4)" }}>(optional — e.g. Eau de Parfum, Red, 100ml)</span></label>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 8 }}>
+                    {form.types.map((t, i) => (
+                      <span key={i} style={{ display: "flex", alignItems: "center", gap: 5, padding: "3px 10px", borderRadius: "var(--r-md)", background: "var(--surface)", border: "1px solid var(--line)", fontSize: "1.2rem" }}>
+                        {t}
+                        <button onClick={() => removeType(i)} style={{ border: "none", background: "none", cursor: "pointer", color: "var(--ink-3)", padding: 0, fontSize: "1rem" }}><i className="fas fa-xmark" /></button>
+                      </span>
+                    ))}
+                    {form.types.length === 0 && <span style={{ fontSize: "1.2rem", color: "var(--ink-4)" }}>No types added</span>}
+                  </div>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <input style={{ ...iSty, flex: 1 }} placeholder="Type (e.g. Eau de Parfum, 50ml)" value={typeInput} onChange={(e) => setTypeInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addType()} />
+                    <button className="btn btn-sm btn-ghost" onClick={addType} style={{ flexShrink: 0 }}>Add</button>
+                  </div>
+                </div>
+
+                {/* Priced Variants */}
+                <div>
+                  <label style={lSty}>Priced Variants <span style={{ fontWeight: 400, color: "var(--ink-4)" }}>(optional — e.g. storage sizes, colour tiers)</span></label>
+                  <p style={{ margin: "0 0 10px", fontSize: "1.1rem", color: "var(--ink-3)", lineHeight: 1.5 }}>
+                    Use this when the same product comes in options that have <strong>different prices</strong> — like iPhone 17 Black ₦1.1M vs Lavender ₦1.15M, or 256GB vs 512GB. Each variant has its own price and stock.
+                  </p>
+                  {form.variants.length > 0 && (
+                    <div style={{ border: "1px solid var(--line)", borderRadius: "var(--r-md)", overflow: "hidden", marginBottom: 10 }}>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 100px 64px 32px", padding: "6px 10px", background: "var(--surface)", fontSize: "1.05rem", fontWeight: 700, color: "var(--ink-3)", borderBottom: "1px solid var(--line)", gap: 8 }}>
+                        <span>Label</span><span>Price (₦)</span><span>Stock</span><span></span>
+                      </div>
+                      {form.variants.map((v, i) => (
+                        <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 100px 64px 32px", padding: "8px 10px", borderBottom: i < form.variants.length - 1 ? "1px solid var(--line)" : "none", alignItems: "center", gap: 8 }}>
+                          <span style={{ fontSize: "1.2rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.label}</span>
+                          <span style={{ fontSize: "1.2rem" }}>₦{Number(v.price).toLocaleString()}</span>
+                          <span style={{ fontSize: "1.2rem" }}>{v.stock}</span>
+                          <button onClick={() => removeVariant(i)} style={{ border: "none", background: "none", cursor: "pointer", color: "var(--ink-3)", padding: 4 }}><i className="fas fa-xmark" /></button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 100px 64px auto", gap: 6, alignItems: "center" }}>
+                    <input style={iSty} placeholder="Label (e.g. Black 256GB)" value={variantInput.label} onChange={(e) => setVariantInput(v => ({ ...v, label: e.target.value }))} onKeyDown={(e) => e.key === "Enter" && addVariant()} />
+                    <input style={iSty} type="number" placeholder="Price" min="0" value={variantInput.price} onChange={(e) => setVariantInput(v => ({ ...v, price: e.target.value }))} />
+                    <input style={iSty} type="number" placeholder="Stock" min="0" value={variantInput.stock} onChange={(e) => setVariantInput(v => ({ ...v, stock: e.target.value }))} />
+                    <button onClick={addVariant} style={{ padding: "8px 12px", borderRadius: "var(--r-md)", border: "none", background: "var(--accent)", color: "#fff", cursor: "pointer", fontSize: "1.3rem", whiteSpace: "nowrap" }}>
+                      <i className="fas fa-plus" /> Add
+                    </button>
+                  </div>
+                </div>
               </div>
             )}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 100px 64px auto", gap: 6, alignItems: "center" }}>
-              <input style={iSty} placeholder="Label (e.g. Black 256GB)" value={variantInput.label} onChange={(e) => setVariantInput(v => ({ ...v, label: e.target.value }))} onKeyDown={(e) => e.key === "Enter" && addVariant()} />
-              <input style={iSty} type="number" placeholder="Price" min="0" value={variantInput.price} onChange={(e) => setVariantInput(v => ({ ...v, price: e.target.value }))} />
-              <input style={iSty} type="number" placeholder="Stock" min="0" value={variantInput.stock} onChange={(e) => setVariantInput(v => ({ ...v, stock: e.target.value }))} />
-              <button onClick={addVariant} style={{ padding: "8px 12px", borderRadius: "var(--r-md)", border: "none", background: "var(--accent)", color: "#fff", cursor: "pointer", fontSize: "1.3rem", whiteSpace: "nowrap" }}>
-                <i className="fas fa-plus" /> Add
-              </button>
-            </div>
           </div>
         </div>
 
@@ -1381,20 +1170,13 @@ export default function SellerDashboard() {
   const [orderFilter, setOrderFilter] = useState("All");
   const [statusUpdating, setStatusUpdating] = useState({});
   const [confirmCancel, setConfirmCancel] = useState(null);
+  const [orderDetail, setOrderDetail] = useState(null);
 
   // Products
   const [quickEdit, setQuickEdit] = useState(null);
   const [addProductOpen, setAddProductOpen] = useState(false);
   const [deleteProductId, setDeleteProductId] = useState(null);
   const [productDeleting, setProductDeleting] = useState(false);
-
-  // Apartments
-  const [listings, setListings] = useState([]);
-  const [listingsLoading, setListingsLoading] = useState(false);
-  const [listingsFetched, setListingsFetched] = useState(false);
-  const [listingModal, setListingModal] = useState(null);
-  const [deleteListingId, setDeleteListingId] = useState(null);
-  const [listingDeleting, setListingDeleting] = useState(false);
 
   // Settings
   const [dashPwd, setDashPwd] = useState({ old: "", new: "", confirm: "" });
@@ -1465,8 +1247,7 @@ export default function SellerDashboard() {
       apiFetch("/api/payouts").catch(() => []),
       apiFetch("/api/messages/unread-count").catch(() => ({ count: 0 })),
       apiFetch("/api/payouts/details").catch(() => null),
-      apiFetch("/api/listings/my").catch(() => ({ listings: [] })),
-    ]).then(([dash, prods, ords, pays, unread, bankDets, listingsRes]) => {
+    ]).then(([dash, prods, ords, pays, unread, bankDets]) => {
       if (!dash && isManual) showToast('Failed to refresh dashboard data', 'error');
       setKpis(dash?.kpis || dash);
       setProfile((prev) => dash?.profile || prev);
@@ -1475,8 +1256,6 @@ export default function SellerDashboard() {
       setOrders(ords.orders || ords || []);
       setPayouts(pays.payouts || pays || []);
       setUnreadMessages(unread?.count || unread?.unread || 0);
-      setListings(listingsRes?.listings || []);
-      setListingsFetched(true);
 
       if (dash?.profile) {
         setStoreOpen(dash.profile.isOpen !== false);
@@ -1549,17 +1328,6 @@ export default function SellerDashboard() {
       .catch(() => {});
   }, [tab, adCampaignsLoaded]);
 
-  // ── Load listings when Apartments tab opens ──────────────────────────────────
-  useEffect(() => {
-    if (tab !== "Apartments" || listingsFetched) return;
-    setListingsFetched(true);
-    setListingsLoading(true);
-    apiFetch("/api/listings/my")
-      .then((d) => setListings(d.listings || []))
-      .catch(() => setListings([]))
-      .finally(() => setListingsLoading(false));
-  }, [tab, listingsFetched]);
-
   // ── Verify ───────────────────────────────────────────────────────────────────
   async function requestVerification() {
     setVerifyLoading(true);
@@ -1612,30 +1380,6 @@ export default function SellerDashboard() {
     }
   }
 
-  // ── Listing CRUD ───────────────────────────────────────────────────────────────
-  function handleListingSaved(saved) {
-    setListings((prev) => {
-      const idx = prev.findIndex((l) => l._id === saved._id);
-      if (idx >= 0) { const copy = [...prev]; copy[idx] = saved; return copy; }
-      return [saved, ...prev];
-    });
-    setListingModal(null);
-  }
-
-  async function handleDeleteListing(id) {
-    setListingDeleting(true);
-    try {
-      await apiFetch(`/api/listings/${id}`, { method: "DELETE" });
-      setListings((l) => l.filter((li) => (li._id || li.id) !== id));
-      showToast("Listing deleted", "success");
-    } catch (err) {
-      showToast(err?.message || "Failed to delete listing", "error");
-    } finally {
-      setListingDeleting(false);
-      setDeleteListingId(null);
-    }
-  }
-
   // ── Settings handlers ──────────────────────────────────────────────────────────
   async function changePassword() {
     if (!dashPwd.old || !dashPwd.new || !dashPwd.confirm) { showToast("All fields required", "error"); return; }
@@ -1643,7 +1387,11 @@ export default function SellerDashboard() {
     if (dashPwd.new !== dashPwd.confirm) { showToast("Passwords don't match", "error"); return; }
     setPwdSaving(true);
     try {
-      await apiFetch("/api/seller-dashboard/users/update-password", { method: "PUT", body: { currentPassword: dashPwd.old, newPassword: dashPwd.new } });
+      const res = await apiFetch("/api/seller-dashboard/users/update-password", { method: "PUT", body: { currentPassword: dashPwd.old, newPassword: dashPwd.new } });
+      // Changing your password invalidates every other session's token,
+      // including — briefly — this one; store the fresh one the server
+      // issues so this device stays signed in.
+      if (res?.token) setToken(res.token);
       showToast("Password updated", "success");
       setDashPwd({ old: "", new: "", confirm: "" });
     } catch (err) {
@@ -2081,21 +1829,6 @@ export default function SellerDashboard() {
             </div>
           </div>
 
-          {/* Listings quick-access */}
-          <div className="card" style={{ padding: 0, overflow: "hidden", marginTop: 20 }}>
-            <div style={{ padding: "16px 16px 12px", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid var(--line)" }}>
-              <h3 style={{ margin: 0, fontSize: "1.6rem", fontWeight: 700 }}><i className="fas fa-building" style={{ marginRight: 8, color: "var(--accent)" }} />Apartments & Hostels</h3>
-              <span style={{ fontSize: "1.2rem", color: "var(--accent)", cursor: "pointer", fontWeight: 600 }} onClick={() => setTab("Apartments")}>Manage</span>
-            </div>
-            <div style={{ padding: "14px 16px" }}>
-              <p style={{ margin: 0, color: "var(--ink-3)", fontSize: "1.3rem" }}>
-                You have <strong style={{ color: "var(--ink-1)" }}>{listings.length}</strong> active {listings.length === 1 ? "listing" : "listings"}.
-              </p>
-              <button className="btn btn-sm" style={{ marginTop: 12, background: "rgba(249,115,22,.1)", color: "var(--accent)", border: "none" }} onClick={() => setTab("Apartments")}>
-                <i className="fas fa-arrow-right" /> View all listings
-              </button>
-            </div>
-          </div>
         </>
       )}
 
@@ -2124,7 +1857,7 @@ export default function SellerDashboard() {
 
           <h2 style={{ fontSize: "2rem", fontWeight: 800, margin: "0 0 16px" }}>Orders</h2>
           <div style={{ display: "flex", gap: 8, overflowX: "auto", scrollbarWidth: "none", marginBottom: 16 }}>
-            {["All", "Pending", "Confirmed", "Shipped", "Ready_for_pickup", "Completed", "Cancelled"].map((s) => (
+            {["All", "Pending", "Confirmed", "Shipped", "Ready_for_pickup", "Completed", "Cancelled", "Disputed"].map((s) => (
               <span key={s} className={`chip${orderFilter === s ? " active" : ""}`} style={{ cursor: "pointer", flexShrink: 0 }} onClick={() => setOrderFilter(s)}>{s === "Ready_for_pickup" ? "Ready for Pickup" : s}</span>
             ))}
           </div>
@@ -2170,6 +1903,13 @@ export default function SellerDashboard() {
                       <div style={{ textAlign: "right" }}>
                         <div style={{ fontSize: "1.8rem", fontWeight: 900, color: "var(--accent)" }}>{naira(o.totalAmount || o.total || 0)}</div>
                         <StatusBadge status={status} />
+                        <button
+                          className="btn btn-ghost btn-sm"
+                          style={{ marginTop: 6, padding: "3px 10px", fontSize: "1.1rem" }}
+                          onClick={() => setOrderDetail(o)}
+                        >
+                          <i className="fas fa-eye" /> Details
+                        </button>
                       </div>
                     </div>
 
@@ -2460,106 +2200,6 @@ export default function SellerDashboard() {
                               <i className="fas fa-pen" />
                             </button>
                             <button className="btn btn-sm" style={{ padding: "4px 10px", color: "#dc2626", border: "1px solid #dc2626", background: "transparent" }} title="Delete" onClick={() => setDeleteProductId(p._id)}>
-                              <i className="fas fa-trash" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ── Apartments tab ── */}
-      {tab === "Apartments" && (
-        <div>
-          {listingModal && (
-            <ListingModal
-              listing={listingModal === "new" ? null : listingModal}
-              onClose={() => setListingModal(null)}
-              onSave={handleListingSaved}
-              showToast={showToast}
-            />
-          )}
-
-          {/* Delete listing confirm */}
-          {deleteListingId && (
-            <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.5)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
-              <div className="card" style={{ maxWidth: 360, width: "100%", padding: 24 }}>
-                <div style={{ width: 48, height: 48, borderRadius: "50%", background: "#fee2e2", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 16 }}>
-                  <i className="fas fa-trash" style={{ color: "#dc2626", fontSize: "1.8rem" }} />
-                </div>
-                <h3 style={{ margin: "0 0 8px", fontSize: "1.7rem", fontWeight: 800 }}>Delete this listing?</h3>
-                <p style={{ margin: "0 0 20px", color: "var(--ink-2)", fontSize: "1.3rem" }}>This cannot be undone.</p>
-                <div style={{ display: "flex", gap: 10 }}>
-                  <button className="btn btn-ghost btn-block" onClick={() => setDeleteListingId(null)}>Cancel</button>
-                  <button className="btn btn-block" style={{ background: "#dc2626", color: "#fff", border: "none" }} disabled={listingDeleting} onClick={() => handleDeleteListing(deleteListingId)}>
-                    {listingDeleting ? <i className="fas fa-spinner fa-spin" /> : "Delete"}
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-            <div>
-              <h2 style={{ fontSize: "2rem", fontWeight: 800, margin: "0 0 4px" }}>Apartments</h2>
-              <p style={{ margin: 0, color: "var(--ink-3)", fontSize: "1.3rem" }}>Manage your hostel and apartment listings.</p>
-            </div>
-            <button className="btn btn-primary btn-sm" onClick={() => setListingModal("new")}><i className="fas fa-plus" /> Add listing</button>
-          </div>
-
-          {listingsLoading ? (
-            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-              {[1, 2, 3].map((i) => <Skel.HostelCard key={i} />)}
-            </div>
-          ) : listings.length === 0 ? (
-            <div style={{ textAlign: "center", padding: "60px 0" }}>
-              <i className="fas fa-building" style={{ fontSize: "3.2rem", color: "var(--ink-4)", marginBottom: 16 }} />
-              <p style={{ color: "var(--ink-2)", fontSize: "1.4rem", marginBottom: 12 }}>No listings yet.</p>
-              <button className="btn btn-primary" onClick={() => setListingModal("new")}><i className="fas fa-plus" /> Add your first listing</button>
-            </div>
-          ) : (
-            <div className="card" style={{ padding: 0, overflow: "hidden" }}>
-              <div style={{ overflowX: "auto" }}>
-                <table className="dash-table">
-                  <thead>
-                    <tr><th>Property</th><th>Type</th><th>Price</th><th>Beds/Baths</th><th>Available</th><th>Actions</th></tr>
-                  </thead>
-                  <tbody>
-                    {listings.map((l) => (
-                      <tr key={l._id}>
-                        <td>
-                          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                            <div style={{ width: 44, height: 44, borderRadius: 8, background: "var(--surface)", overflow: "hidden", flexShrink: 0 }}>
-                              {l.images?.[0]?.url
-                                ? <img src={l.images[0].url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                                : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}><i className="fas fa-building" style={{ color: "var(--ink-4)" }} /></div>}
-                            </div>
-                            <div>
-                              <div style={{ fontWeight: 600, fontSize: "1.3rem" }}>{l.name}</div>
-                              <div style={{ fontSize: "1.1rem", color: "var(--ink-3)" }}>{l.location || ""}</div>
-                            </div>
-                          </div>
-                        </td>
-                        <td><span style={{ fontSize: "1.1rem", padding: "3px 8px", borderRadius: 20, background: "var(--surface)", border: "1px solid var(--line)" }}>{l.type || "—"}</span></td>
-                        <td style={{ fontWeight: 700, color: "var(--accent)" }}>{naira(l.price)}<span style={{ fontWeight: 400, fontSize: "1.1rem", color: "var(--ink-3)" }}> {l.rate || ""}</span></td>
-                        <td>{l.beds || 0} {l.type === "Hostel" ? (l.beds === 1 ? "man/room" : "men/room") : (l.beds === 1 ? "bed" : "beds")} · {l.baths || 0} {l.baths === 1 ? "bath" : "baths"}</td>
-                        <td>
-                          <span style={{ fontSize: "1.1rem", padding: "3px 8px", borderRadius: 20, background: l.available ? "#dcfce7" : "#fee2e2", color: l.available ? "#16a34a" : "#dc2626", fontWeight: 600 }}>
-                            {l.available ? "Yes" : "No"}
-                          </span>
-                        </td>
-                        <td>
-                          <div style={{ display: "flex", gap: 6 }}>
-                            <button className="btn btn-sm btn-ghost" style={{ padding: "4px 10px" }} onClick={() => setListingModal(l)}>
-                              <i className="fas fa-pen" />
-                            </button>
-                            <button className="btn btn-sm" style={{ padding: "4px 10px", color: "#dc2626", border: "1px solid #dc2626", background: "transparent" }} onClick={() => setDeleteListingId(l._id)}>
                               <i className="fas fa-trash" />
                             </button>
                           </div>
@@ -3076,7 +2716,6 @@ export default function SellerDashboard() {
     { id: "Home",       icon: "house",         label: "Home" },
     { id: "Orders",     icon: "box-archive",   label: "Orders" },
     { id: "Products",   icon: "boxes-stacked", label: "Products" },
-    { id: "Apartments", icon: "building",      label: "Listings" },
     { id: "Payouts",    icon: "wallet",        label: "Payouts" },
     { id: "Settings",   icon: "gear",          label: "Settings" },
   ];
@@ -3094,6 +2733,7 @@ export default function SellerDashboard() {
       )}
       {quickEdit && <QuickEditModal product={quickEdit} onClose={() => setQuickEdit(null)} showToast={showToast} onSave={(updated) => { setProducts((p) => p.map((x) => x._id === updated._id ? { ...x, ...updated } : x)); setQuickEdit(null); }} />}
       {addProductOpen && <AddProductModal onClose={() => setAddProductOpen(false)} showToast={showToast} onSave={(result) => { if (result) setProducts((p) => [...(Array.isArray(result) ? result : [result]), ...p]); setAddProductOpen(false); }} />}
+      {orderDetail && <OrderDetailModal order={orderDetail} onClose={() => setOrderDetail(null)} />}
 
       <FloatingChat />
       <div className="seller-dash">
@@ -3118,7 +2758,7 @@ export default function SellerDashboard() {
                 onClick={() => setTab(t.id)}
                 style={{ flex: 1, minWidth: 0, padding: "8px 2px", border: "none", background: "transparent", color: tab === t.id ? "var(--accent)" : "rgba(255,255,255,.5)", fontSize: "0.78rem", fontWeight: 600, cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 2, fontFamily: "var(--font-sans)" }}
               >
-                <i className={`fas fa-${t.icon}`} style={{ fontSize: "1.35rem" }} />
+                <i className={`fas fa-${t.icon}`} style={{ fontSize: "1.7rem" }} />
                 <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", width: "100%", textAlign: "center" }}>{t.label}</span>
               </button>
             ))}

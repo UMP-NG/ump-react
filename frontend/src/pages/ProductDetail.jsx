@@ -793,17 +793,26 @@ export default function ProductDetail() {
           <h2 style={{ fontSize: "1.7rem", fontWeight: 800, margin: "0 0 12px" }}>Meet the Seller</h2>
           <div style={{ border: "1px solid var(--line)", borderRadius: "var(--r-lg)", overflow: "hidden" }}>
             <div style={{ padding: "14px 16px", display: "flex", alignItems: "center", gap: 12 }}>
-              <div style={{ width: 50, height: 50, borderRadius: "50%", overflow: "hidden", flexShrink: 0, border: "1px solid var(--line)" }}>
-                {logoUrl && !logoUrl.includes("guy.png")
-                  ? <img src={logoUrl} alt={seller.storeName} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                  : <Ph kind="portrait-3" label={seller.storeName?.[0] || seller.name?.[0] || "S"} />}
-              </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: "1.4rem", fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                  {seller.storeName || seller.name}
+              <div
+                role="button"
+                tabIndex={0}
+                aria-label={`Visit ${seller.storeName || seller.name}'s store`}
+                onClick={() => navigate(`/store/${seller._id}`)}
+                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); navigate(`/store/${seller._id}`); } }}
+                style={{ display: "flex", alignItems: "center", gap: 12, flex: 1, minWidth: 0, cursor: "pointer" }}
+              >
+                <div style={{ width: 50, height: 50, borderRadius: "50%", overflow: "hidden", flexShrink: 0, border: "1px solid var(--line)" }}>
+                  {logoUrl && !logoUrl.includes("guy.png")
+                    ? <img src={logoUrl} alt={seller.storeName} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    : <Ph kind="portrait-3" label={seller.storeName?.[0] || seller.name?.[0] || "S"} />}
                 </div>
-                <div style={{ fontSize: "1.2rem", color: "var(--ink-3)" }}>
-                  {seller.followerCount || 0} follower{(seller.followerCount || 0) !== 1 ? "s" : ""}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: "1.4rem", fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {seller.storeName || seller.name}
+                  </div>
+                  <div style={{ fontSize: "1.2rem", color: "var(--ink-3)" }}>
+                    {seller.followerCount || 0} follower{(seller.followerCount || 0) !== 1 ? "s" : ""}
+                  </div>
                 </div>
               </div>
               <button

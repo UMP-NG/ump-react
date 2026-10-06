@@ -389,7 +389,7 @@ export default function Navbar({ frosted = false, dark = false }) {
                     )}
                   </button>
                   <button className="icon-btn" style={{ position: "relative" }} onClick={() => navigate("/cart")}>
-                    <i className="fas fa-bag-shopping" />
+                    <i className="fas fa-cart-shopping" />
                     {cartCount > 0 && <span className="badge-dot" />}
                   </button>
                   <div className="avatar" onClick={() => setShowProfile(true)} style={{ overflow: "hidden", padding: avatarUrl && !avatarBroken ? 0 : undefined }}>

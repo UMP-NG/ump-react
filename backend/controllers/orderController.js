@@ -60,79 +60,6 @@ function generateDeliveryCode() {
 // ===============================
 // Create a new order
 // ===============================
-export const createOrder = async (req, res) => {
-  try {
-    const { items, shippingAddress, notes } = req.body;
-
-    if (!items || items.length === 0) {
-      return res
-        .status(400)
-        .json({ message: "Order must contain at least one item" });
-    }
-
-    let subtotal = 0;
-
-    // Process each item
-    const processedItems = [];
-    const orderSellerIds = new Set();
-    for (const item of items) {
-      // Fix #12: validate quantity before using it in calculations
-      const qty = Number(item.quantity);
-      if (!Number.isInteger(qty) || qty < 1) {
-        return res.status(400).json({ message: `Invalid quantity for item ${item.product}. Must be a positive integer.` });
-      }
-
-      const product = await Product.findById(item.product);
-      if (!product) {
-        return res.status(404).json({ message: `Product not found: ${item.product}` });
-      }
-
-      if (product.seller) orderSellerIds.add(product.seller.toString());
-      subtotal += product.price * qty;
-
-      processedItems.push({
-        product: product._id,
-        quantity: qty,
-        price: product.price,
-        variant: item.variant || {},
-      });
-    }
-
-    // Block orders that include items from a temporarily closed store
-    if (orderSellerIds.size > 0) {
-      const closedStore = await Seller.findOne({
-        user: { $in: [...orderSellerIds] },
-        isOpen: false,
-      }).select("storeName").lean();
-      if (closedStore) {
-        return res.status(400).json({
-          message: `${closedStore.storeName || "This store"} is temporarily closed. Please check back later.`,
-        });
-      }
-    }
-
-    const tax = 0;
-    const totalAmount = subtotal + tax;
-
-    const order = await Order.create({
-      buyer: req.user._id,
-      items: processedItems,
-      subtotal,
-      tax,
-      deliveryFee: 0,
-      totalAmount,
-      shippingAddress,
-      notes,
-      status: "pending",
-    });
-
-    res.status(201).json({ success: true, order });
-  } catch (error) {
-    logger.error("Error creating order:", error);
-    res.status(500).json({ message: "Server error" });
-  }
-};
-
 // ✅ Allowed payment methods
 const PAYMENT_METHODS = [
   "Paystack",
@@ -519,7 +446,7 @@ export const getSellerOrders = async (req, res) => {
 
     // base query
     let query = Order.find(filter)
-      .populate("buyer", "name email")
+      .populate("buyer", "name email avatar phone")
       .populate("items.product", "name price images")
       .sort({ createdAt: -1 });
 
@@ -711,6 +638,15 @@ export const updateOrderStatus = async (req, res) => {
         message: STATUS_MSG[status] || `Your order status changed to ${status}.`,
         link: "/orders",
       });
+      if (status === "completed") {
+        const firstProductId = order.items[0]?.product?._id || order.items[0]?.product;
+        notify(order.buyer, {
+          type: "review",
+          title: "How was your order?",
+          message: "Leave a review and rate the seller to help other buyers.",
+          link: firstProductId ? `/products/${firstProductId}` : "/orders",
+        });
+      }
     }
 
     audit(`ORDER_${status.toUpperCase()}`, {
@@ -760,6 +696,14 @@ export const updateOrder = async (req, res) => {
       }
     }
 
+    // Same integrity rule as updateOrderStatus: an order can only reach
+    // "completed" once the buyer has confirmed delivery via their code —
+    // without this, this more permissive endpoint could mark an order
+    // completed without ever releasing escrow or decrementing stock.
+    if (status === "completed" && !order.deliveryCodeUsed) {
+      return res.status(400).json({ message: "Orders must be completed by the buyer confirming the delivery code — use the 'Confirm delivery' flow instead." });
+    }
+
     const prevStatus = order.status;
     if (status) order.status = status;
     // Fix #1: only admins may change paymentStatus — sellers cannot
@@ -783,6 +727,15 @@ export const updateOrder = async (req, res) => {
           title:   `Order ${status.charAt(0).toUpperCase() + status.slice(1)}`,
           message: msg,
           link:    "/orders",
+        }).catch(() => {});
+      }
+      if (status === "completed") {
+        const firstProductId = order.items[0]?.product?._id || order.items[0]?.product;
+        notify(order.buyer, {
+          type: "review",
+          title: "How was your order?",
+          message: "Leave a review and rate the seller to help other buyers.",
+          link: firstProductId ? `/products/${firstProductId}` : "/orders",
         }).catch(() => {});
       }
     }
@@ -1038,6 +991,16 @@ export const confirmDelivery = async (req, res) => {
     if (!codeMatch)
       return res.status(400).json({ message: "Invalid delivery code" });
 
+    // Every order reaching this point must have an owning seller recorded —
+    // this is the exact attribution that determines who gets paid, so an
+    // order with no seller must be rejected before the delivery code is
+    // consumed, not after (failing after the atomic claim below would burn
+    // the buyer's one-time code on an order that can never be completed).
+    if (!order.seller) {
+      logger.error(`confirmDelivery: order ${order._id} has no seller recorded — refusing to credit any payout`);
+      return res.status(500).json({ message: "This order is missing seller information and cannot be completed. Contact support." });
+    }
+
     // ── Atomic gate: exactly one concurrent request wins ─────────────────────
     // findOneAndUpdate with deliveryCodeUsed:false ensures this is a test-and-set.
     // Any second concurrent request that passed the checks above will fail here.
@@ -1049,9 +1012,7 @@ export const confirmDelivery = async (req, res) => {
     if (!claimed)
       return res.status(400).json({ message: "Delivery already confirmed by a concurrent request — please check order status." });
 
-    // Look up seller profile — used for payout crediting only; delivery never fails if absent
-    const sellerUserId = order.seller || req.user._id;
-    const seller = await Seller.findOne({ user: sellerUserId });
+    const seller = await Seller.findOne({ user: order.seller });
 
     // Determine which pending items are being delivered now
     const pendingItems = order.items.filter((i) => i.status !== "completed");
@@ -1115,7 +1076,7 @@ export const confirmDelivery = async (req, res) => {
       });
     } else {
       // Seller profile doesn't exist yet — log for admin follow-up but don't block delivery
-      logger.warn(`confirmDelivery: no Seller document for user ${sellerUserId}; order ${order._id} payout of ₦${payoutAmount} needs manual admin credit`);
+      logger.warn(`confirmDelivery: no Seller document for user ${order.seller}; order ${order._id} payout of ₦${payoutAmount} needs manual admin credit`);
     }
 
     // Reduce stock for delivered items only
@@ -1141,6 +1102,14 @@ export const confirmDelivery = async (req, res) => {
         title: "Order delivered!",
         message: `All items in order #${order._id.toString().slice(-6).toUpperCase()} have been delivered.`,
         link: "/orders",
+      });
+      // Prompt the buyer to leave a review now that the order is fully completed.
+      const firstProductId = order.items[0]?.product?._id || order.items[0]?.product;
+      notify(order.buyer, {
+        type: "review",
+        title: "How was your order?",
+        message: "Leave a review and rate the seller to help other buyers.",
+        link: firstProductId ? `/products/${firstProductId}` : "/orders",
       });
     }
 

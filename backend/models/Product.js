@@ -69,6 +69,11 @@ const productSchema = new mongoose.Schema(
       ref: "Subcategory",
     },
 
+    // Admin-managed curated sections (e.g. "Back to school") — separate from
+    // category. A seller can tag a product into any active section at
+    // listing time; admins can also bulk-assign from the Sections manager.
+    sections: [{ type: mongoose.Schema.Types.ObjectId, ref: "Section" }],
+
     // Store color metadata (name + hex code) as subdocuments
     colors: {
       type: [

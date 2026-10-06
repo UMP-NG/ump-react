@@ -10,6 +10,7 @@ export default function ProfilePopup({ onClose }) {
   const roles = Array.isArray(user?.roles) ? user.roles : [];
   const isSeller   = roles.includes("seller");
   const isProvider = roles.includes("service_provider");
+  const isAgent    = roles.includes("agent");
   const isAdmin    = Array.isArray(user?.roles) && user.roles.includes("admin");
   const isLimited  = user?.isLimitedAccount;
 
@@ -19,12 +20,13 @@ export default function ProfilePopup({ onClose }) {
     ...(isAdmin ? [{ icon: "user-shield", label: "Admin panel", path: "/admin", admin: true }] : []),
     { icon: "box-archive",        label: "My orders",           path: "/orders" },
     { icon: "calendar-check",     label: "My bookings",         path: "/bookings" },
-    { icon: "wallet",             label: "Wallet",              path: "/wallet" },
     { icon: "heart",              label: "Wishlist",            path: "/wishlist" },
     ...(!isLimited && isSeller   ? [{ icon: "store",              label: "Seller dashboard",         path: "/seller-dashboard" }] : []),
     ...(!isLimited && isProvider ? [{ icon: "hand-holding-heart", label: "Provider analytics",       path: "/provider-analytics" }] : []),
+    ...(!isLimited && isAgent    ? [{ icon: "building",           label: "Agent dashboard",          path: "/agent-dashboard" }] : []),
     ...(!isLimited && !isSeller && !isProvider ? [{ icon: "circle-plus", label: "Become a seller / provider", path: "/partner", accent: true }] : []),
     ...(!isLimited && isSeller !== isProvider  ? [{ icon: "circle-plus", label: "Add another role",           path: "/partner", accent: true }] : []),
+    ...(!isLimited && !isAgent ? [{ icon: "circle-plus", label: "Become an agent", path: "/partner", accent: true }] : []),
     ...(isLimited ? [{ icon: "link", label: "Link school email", path: "/settings?tab=verify", accent: true }] : []),
     { icon: "gear",               label: "Settings",            path: "/settings" },
     { icon: "circle-question",    label: "Help & support",      path: "/help" },
@@ -75,25 +77,8 @@ export default function ProfilePopup({ onClose }) {
             <div style={{ fontSize: "1.1rem", opacity: 0.7, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               {user?.email || "—"}
             </div>
-            {user?.referralCode && (
-              <div style={{ fontSize: "0.95rem", opacity: 0.85, marginTop: 6, fontFamily: "monospace", fontWeight: 600, color: "#fbbf24" }}>
-                Referral: <span style={{ letterSpacing: "0.05em" }}>{user.referralCode}</span>
-              </div>
-            )}
           </div>
         </div>
-        {/* Wallet section - NOTE: use actual wallet balance, not referralCredit */}
-        {user?.walletBalance !== undefined && (
-          <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--line)", background: "rgba(59,130,246,.05)" }}>
-            <div style={{ fontSize: "0.95rem", color: "var(--ink-3)", marginBottom: 4 }}>UMP Wallet Balance</div>
-            <div style={{ fontSize: "1.6rem", fontWeight: 700, color: "var(--accent)" }}>
-              ₦{Number(user.walletBalance || 0).toLocaleString()}
-            </div>
-            <div style={{ fontSize: "0.85rem", color: "var(--ink-3)", marginTop: 4 }}>
-              <a href="/wallet" style={{ color: "var(--accent)", textDecoration: "none", fontWeight: 600 }}>View details →</a>
-            </div>
-          </div>
-        )}
         <div style={{ padding: 8, maxHeight: "calc(100vh - 220px)", overflowY: "auto", scrollbarWidth: "thin" }}>
           {MENU.map((it) => (
             <button

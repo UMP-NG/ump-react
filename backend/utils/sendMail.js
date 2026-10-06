@@ -95,6 +95,56 @@ const buildContent = (options) => {
   </div>
 </body>
 </html>`;
+  } else if (options.type === "broadcast") {
+    subject = options.subject || "An update from UMP";
+    const bodyText = options.message || "";
+    const paragraphs = bodyText
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .map((line) => `<p style="margin:0 0 14px;">${escapeHtml(line)}</p>`)
+      .join("");
+    const hasCta = options.ctaLabel && options.ctaUrl;
+    textContent = `${subject}\n\n${bodyText}` +
+      (hasCta ? `\n\n${options.ctaLabel}: ${options.ctaUrl}` : "") +
+      `\n\n— UMP Team`;
+    const ctaHtml = hasCta
+      ? `<div style="text-align:center; margin:28px 0 4px;">
+           <a href="${escapeHtml(options.ctaUrl)}" target="_blank" style="display:inline-block; background-color:#1a5cff; color:#ffffff; text-decoration:none; padding:13px 30px; border-radius:8px; font-size:15px; font-weight:bold;">${escapeHtml(options.ctaLabel)}</a>
+         </div>`
+      : "";
+    htmlContent = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>${escapeHtml(subject)}</title>
+  <style>
+    body { margin: 0; padding: 0; background-color: #f4f6f8; font-family: Arial, Helvetica, sans-serif; }
+    .wrapper { width: 100%; padding: 30px 10px; }
+    .container { max-width: 540px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; overflow: hidden; border: 1px solid #e6e9ee; }
+    .header { padding: 20px 28px; background-color: #0f172a; }
+    .header .brand { font-size: 20px; font-weight: 800; letter-spacing: -0.02em; color: #ffffff; margin: 0; }
+    .header .brand span { color: #1a5cff; }
+    .body { padding: 30px 28px; }
+    h2 { margin: 0 0 16px; color: #16213e; font-size: 21px; line-height: 1.35; }
+    p { margin: 0 0 14px; color: #4b5668; font-size: 15px; line-height: 1.65; }
+    .footer { padding: 18px 28px; text-align: center; font-size: 12px; color: #99a1ad; border-top: 1px solid #eef0f4; line-height: 1.6; }
+  </style>
+</head>
+<body>
+  <div class="wrapper">
+    <div class="container">
+      <div class="header"><p class="brand"><span>U</span>MP</p></div>
+      <div class="body">
+        <h2>${escapeHtml(subject)}</h2>
+        ${paragraphs}
+        ${ctaHtml}
+      </div>
+      <div class="footer">© ${new Date().getFullYear()} UMP. All rights reserved.<br />You're receiving this because you have a UMP account.</div>
+    </div>
+  </div>
+</body>
+</html>`;
   } else {
     subject = options.subject || "Message from UMP";
     const msg = options.message || "Hello from UMP!";

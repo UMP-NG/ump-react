@@ -1,6 +1,5 @@
 import express from "express";
 import {
-  createOrder,
   getMyOrders,
   getOrderById,
   updateOrder,
@@ -22,14 +21,6 @@ import { protect, requireRole } from "../middleware/authMiddleware.js";
 import { deliveryCodeLimiter } from "../middleware/rateLimits.js";
 
 const router = express.Router();
-
-// ✅ Create order (user, seller, admin)
-router.post(
-  "/",
-  protect,
-  requireRole("user", "seller", "admin"),
-  createOrder
-);
 
 // GET /api/orders/me
 router.get(

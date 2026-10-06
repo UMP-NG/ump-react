@@ -6,10 +6,10 @@ import {
   updateSellerSettings,
   updateNotificationPreferences,
   updateSellerPolicies,
-  updatePassword,
   deactivateAccount,
 } from "../controllers/sellerAnalyticsController.js";
 import { getSellerOrders } from "../controllers/orderController.js";
+import { changePassword } from "../controllers/authController.js";
 
 const router = express.Router();
 
@@ -35,7 +35,11 @@ router.put(
   requireRole("seller"),
   updateSellerPolicies
 );
-router.put("/users/update-password", protect, updatePassword);
+// Delegates to the canonical change-password flow (authController.changePassword)
+// — correctly single-hashes the new password and bumps tokenVersion to
+// invalidate any other existing session, unlike the old duplicate handler
+// this used to call.
+router.put("/users/update-password", protect, changePassword);
 router.delete("/users/deactivate", protect, deactivateAccount);
 router.get("/orders", protect, requireRole("seller"), getSellerOrders);
 export default router;

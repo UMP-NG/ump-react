@@ -25,6 +25,7 @@ export default function FloatingChat() {
   return (
     <button className="chat-fab" onClick={() => navigate("/messages")} title="Messages">
       <i className="fas fa-comment-dots" />
+      <span className="chat-fab-label">Chat</span>
       {unread > 0 && (
         <span className="chat-fab-badge">{unread > 9 ? "9+" : unread}</span>
       )}

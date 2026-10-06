@@ -3,7 +3,9 @@ import Product from "../models/Product.js";
 import Seller from "../models/Seller.js";
 import Payout from "../models/Payout.js";
 import Notification from "../models/Notification.js";
+import User from "../models/User.js";
 import cloudinary from "../config/cloudinary.js";
+import logger from "../utils/logger.js";
 
 /**
  * GET /api/seller/dashboard
@@ -295,37 +297,6 @@ export const updateSellerPolicies = async (req, res) => {
 };
 
 /**
- * PUT /api/users/update-password
- * Change account password
- */
-import bcrypt from "bcrypt";
-import User from "../models/User.js";
-import logger from "../utils/logger.js";
-
-export const updatePassword = async (req, res) => {
-  try {
-    const userId = req.user._id;
-    const { oldPassword, newPassword } = req.body;
-
-    const user = await User.findById(userId);
-    if (!user) return res.status(404).json({ message: "User not found." });
-
-    const isMatch = await bcrypt.compare(oldPassword, user.password);
-    if (!isMatch)
-      return res.status(400).json({ message: "Old password is incorrect." });
-
-    const salt = await bcrypt.genSalt(10);
-    user.password = await bcrypt.hash(newPassword, salt);
-    await user.save();
-
-    res.json({ message: "Password updated successfully." });
-  } catch (err) {
-    logger.error("updatePassword error:", err);
-    res.status(500).json({ message: err.message });
-  }
-};
-
-/**
  * DELETE /api/users/deactivate
  * Deactivate account
  */
@@ -336,9 +307,21 @@ export const deactivateAccount = async (req, res) => {
     const user = await User.findById(userId);
     if (!user) return res.status(404).json({ message: "User not found." });
 
-    user.isActive = false;
+    // `isActive` isn't a field on the User schema (Mongoose strict mode
+    // silently dropped it, making this a no-op) — the real field is `status`.
+    user.status = "inactive";
+    // Bump tokenVersion so the current session's cookie/token is also
+    // invalidated — a "deactivated" account shouldn't stay logged in.
+    user.tokenVersion = (user.tokenVersion || 0) + 1;
     await user.save();
 
+    res.cookie("token", "", {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+      expires: new Date(0),
+      path: "/",
+    });
     res.json({ message: "Your account has been deactivated." });
   } catch (err) {
     logger.error("deactivateAccount error:", err);
