@@ -143,15 +143,16 @@ export const createPromotion = async (req, res) => {
         promotion = created;
 
         // Apply the discount to each product now — percentage-based, computed
-        // from each product's own current price.
-        await Promise.all(products.map((p) => {
+        // from each product's own current price. Run one at a time: a single
+        // ClientSession can't have multiple operations in flight concurrently.
+        for (const p of products) {
           const salePrice = Math.round(p.price * (1 - pct / 100));
-          return Product.findByIdAndUpdate(p._id, {
+          await Product.findByIdAndUpdate(p._id, {
             salePrice,
             saleEndsAt: endsAt,
             activePromotion: promotion._id,
           }, { session });
-        }));
+        }
       });
     } finally {
       session.endSession();

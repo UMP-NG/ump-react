@@ -138,6 +138,10 @@ export default function Navbar({ frosted = false, dark = false }) {
     }
     clearTimeout(suggestionsTimeoutRef.current);
     const reqId = ++suggestionsReqIdRef.current;
+    // Drop the previous query's results immediately — otherwise they stay on
+    // screen, now describing a different search term, until the new fetch
+    // resolves 300ms later.
+    setSuggestions([]);
     suggestionsTimeoutRef.current = setTimeout(() => {
       Promise.allSettled([
         apiFetch(`/api/products?search=${encodeURIComponent(q)}&limit=5`),

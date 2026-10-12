@@ -55,8 +55,16 @@ export async function confirmAllOrders(payment) {
           // Awaited — a fire-and-forget call here could be cut short by a
           // process restart/deploy before the unit count (and the revert it
           // can trigger) is actually committed, letting the store oversell
-          // past its promo cap indefinitely.
-          if (promotionId) await recordPromotionSale(promotionId, item.quantity || 1);
+          // past its promo cap indefinitely. Caught locally so a failure
+          // here can't abort confirmation of the rest of this order, or of
+          // the other orders still left in this payment's loop.
+          if (promotionId) {
+            try {
+              await recordPromotionSale(promotionId, item.quantity || 1);
+            } catch (err) {
+              logger.error("recordPromotionSale (confirmOrders):", err.message);
+            }
+          }
         }
       }
     }
