@@ -83,6 +83,7 @@ export const createSection = async (req, res) => {
     if (!name?.trim()) return res.status(400).json({ message: "Name required" });
 
     const slug = slugify(name, { lower: true, strict: true });
+    if (!slug) return res.status(400).json({ message: "Name must contain at least one letter or number" });
     const existing = await Section.findOne({ slug });
     if (existing) return res.status(409).json({ message: "Section already exists" });
 
@@ -102,6 +103,7 @@ export const updateSection = async (req, res) => {
       const name = req.body.name.trim();
       if (!name) return res.status(400).json({ message: "Name cannot be empty" });
       const slug = slugify(name, { lower: true, strict: true });
+      if (!slug) return res.status(400).json({ message: "Name must contain at least one letter or number" });
       const collision = await Section.findOne({ slug, _id: { $ne: id } }).select("_id").lean();
       if (collision) return res.status(409).json({ message: "Another section already has this name" });
       updates.name = name;

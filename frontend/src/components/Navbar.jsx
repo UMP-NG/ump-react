@@ -196,8 +196,13 @@ export default function Navbar({ frosted = false, dark = false }) {
   }
 
   // Close the suggestions dropdown when the route changes (e.g. after
-  // navigating to a suggestion or a different page entirely).
-  useEffect(() => { setShowSuggestions(false); }, [pathname]);
+  // navigating to a suggestion or a different page entirely). Also bump the
+  // request-id guard so a still-in-flight fetch from the previous page can't
+  // land after navigation and pop the dropdown back open on the new page.
+  useEffect(() => {
+    suggestionsReqIdRef.current++;
+    setShowSuggestions(false);
+  }, [pathname]);
 
   function isActive(path) {
     if (path === "/") return pathname === "/";

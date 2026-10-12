@@ -115,35 +115,47 @@ export const createPromotion = async (req, res) => {
     const endsAt = new Date(startsAt.getTime() + days * 24 * 60 * 60 * 1000);
     const eligibleProductIds = products.map((p) => p._id);
 
-    // If any of these products are already carrying a different, still-
-    // active promotion, detach them from it so that old promotion's record
-    // doesn't keep listing products it no longer actually discounts.
-    await Promotion.updateMany(
-      { status: "active", products: { $in: eligibleProductIds } },
-      { $pull: { products: { $in: eligibleProductIds } } }
-    );
+    // Detaching these products from any older active promotion, creating the
+    // new promotion, and pointing the products at it must all succeed or all
+    // fail together — otherwise a mid-sequence failure can leave a product
+    // detached from its old promotion with no new one to replace it, or a
+    // promotion with products that were never actually discounted.
+    let promotion;
+    const session = await mongoose.startSession();
+    try {
+      await session.withTransaction(async () => {
+        await Promotion.updateMany(
+          { status: "active", products: { $in: eligibleProductIds } },
+          { $pull: { products: { $in: eligibleProductIds } } },
+          { session }
+        );
 
-    const promotion = await Promotion.create({
-      seller,
-      products: eligibleProductIds,
-      discountPercent: pct,
-      maxUnits: units,
-      startsAt,
-      endsAt,
-      status: "active",
-      createdBy: req.user._id,
-    });
+        const [created] = await Promotion.create([{
+          seller,
+          products: eligibleProductIds,
+          discountPercent: pct,
+          maxUnits: units,
+          startsAt,
+          endsAt,
+          status: "active",
+          createdBy: req.user._id,
+        }], { session });
+        promotion = created;
 
-    // Apply the discount to each product now — percentage-based, computed
-    // from each product's own current price.
-    await Promise.all(products.map((p) => {
-      const salePrice = Math.round(p.price * (1 - pct / 100));
-      return Product.findByIdAndUpdate(p._id, {
-        salePrice,
-        saleEndsAt: endsAt,
-        activePromotion: promotion._id,
+        // Apply the discount to each product now — percentage-based, computed
+        // from each product's own current price.
+        await Promise.all(products.map((p) => {
+          const salePrice = Math.round(p.price * (1 - pct / 100));
+          return Product.findByIdAndUpdate(p._id, {
+            salePrice,
+            saleEndsAt: endsAt,
+            activePromotion: promotion._id,
+          }, { session });
+        }));
       });
-    }));
+    } finally {
+      session.endSession();
+    }
 
     res.status(201).json({ promotion: await shapePromotion(promotion._id) });
   } catch (err) {

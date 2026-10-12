@@ -53,7 +53,11 @@ function NewPromotionModal({ onClose, onCreated }) {
     if (!selectedStore?.userId) { setProducts([]); return; }
     setProductsLoading(true);
     apiFetch(`/api/admins/products?seller=${selectedStore.userId}&status=active&limit=200`)
-      .then((d) => setProducts(d.products || []))
+      // Variant products can't be promoted — their real price comes from each
+      // variant's own price, not this top-level price, so the backend rejects
+      // them outright. Filter them out here instead of letting the admin pick
+      // one and then hit a confusing "ineligible" error on submit.
+      .then((d) => setProducts((d.products || []).filter((p) => !p.variants?.length)))
       .catch(() => setProducts([]))
       .finally(() => setProductsLoading(false));
   }, [selectedStore?.userId]);

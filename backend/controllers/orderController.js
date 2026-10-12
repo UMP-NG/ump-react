@@ -176,13 +176,17 @@ export const checkoutCart = async (req, res) => {
     const giftAvailable         = wallet?.giftCredits || 0;
     const withdrawableAvailable = wallet?.withdrawableBalance || 0;
     const available = referralAvailable + giftAvailable + withdrawableAvailable;
-    // Use negotiatedPrice if set (server-stored when negotiation was accepted), else the
-    // price snapshotted on the cart item itself — which already reflects the buyer's
-    // selected variant (addToCart stores the variant's own price, not the product's
-    // base/cheapest price). Falling back to i.product.price would silently re-price
-    // every variant item at the base price, undercharging for pricier variants.
+    // Use negotiatedPrice if set (server-stored when negotiation was accepted); for a
+    // selected variant, the cart item's own snapshotted price (variants don't carry a
+    // sale price, and i.product.price is just the cheapest variant — never re-derive
+    // from it or pricier variants get undercharged). For a plain (non-variant) item,
+    // re-check the CURRENT effective price instead of trusting the cart snapshot — a
+    // sale/promotion that was active when the item was added may have ended since, and
+    // charging the stale discounted price would short the seller at checkout.
+    const currentItemPrice = (i) =>
+      i.negotiatedPrice ?? (i.selectedVariant ? (i.price ?? i.product.price) : effectivePrice(i.product));
     const cartTotal  = [...sellerGroups.values()].flat().reduce(
-      (s, i) => s + (i.negotiatedPrice ?? i.price ?? i.product.price) * (i.quantity || 1), 0
+      (s, i) => s + currentItemPrice(i) * (i.quantity || 1), 0
     );
     const creditApplied = Math.min(Math.max(0, Number(creditToUse) || 0), available, cartTotal);
     let creditRemaining = creditApplied;
@@ -293,11 +297,7 @@ export const checkoutCart = async (req, res) => {
       const orderItems = sellerItems.map((i) => ({
         product:         i.product._id,
         quantity:        i.quantity,
-        // Use server-stored negotiatedPrice if present (set when buyer's negotiation was
-        // accepted); otherwise the cart item's own snapshotted price, which already
-        // reflects the selected variant — never re-derive from i.product.price here,
-        // that's the product's base price and ignores variant selection entirely.
-        price:           i.negotiatedPrice ?? i.price ?? i.product.price,
+        price:           currentItemPrice(i),
         negotiatedPrice: i.negotiatedPrice || undefined,
         negotiationId:   i.negotiationId   || undefined,
         variant:         i.selectedVariant ? { sku: i.selectedVariant, attributes: {} } : {},
