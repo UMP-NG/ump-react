@@ -3,6 +3,7 @@ import {
   listSections,
   listSectionsAdmin,
   listSectionsWithProducts,
+  getSectionProducts,
   createSection,
   updateSection,
   deleteSection,
@@ -19,6 +20,7 @@ router.get("/with-products", listSectionsWithProducts);
 
 // Admin
 router.get("/admin", protect, requireRole("admin"), listSectionsAdmin);
+router.get("/:id/products", protect, requireRole("admin"), getSectionProducts);
 router.post("/", protect, requireRole("admin"), createSection);
 router.put("/:id", protect, requireRole("admin"), updateSection);
 router.delete("/:id", protect, requireRole("admin"), deleteSection);

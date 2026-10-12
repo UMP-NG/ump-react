@@ -303,7 +303,6 @@ export default function Market() {
         {/* Page header */}
         <div style={{ padding: "12px 0 0" }}>
           <h1 style={{ fontSize: "2.6rem", fontWeight: 800, letterSpacing: "-0.02em", margin: "4px 0 4px" }}>Marketplace</h1>
-          <p style={{ margin: 0, color: "var(--ink-2)", fontSize: "1.3rem" }}>{total} items from verified UNILAG sellers</p>
         </div>
 
         {/* Category chips */}

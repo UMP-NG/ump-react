@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
@@ -31,6 +31,7 @@ export default function Hostel() {
   const [minPrice, setMinPrice] = useState("");
   const [maxPrice, setMaxPrice] = useState("");
   const [furnished, setFurnished] = useState(false);
+  const [area, setArea] = useState("");
   const [listings, setListings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState(null);
@@ -57,6 +58,18 @@ export default function Hostel() {
       .finally(() => setLoading(false));
   }, []);
 
+  // Quick-pick suggestions — the first comma-separated segment of each
+  // listing's free-text location (e.g. "Akoka, Yaba, Lagos" → "Akoka"),
+  // deduped, so buyers get tappable chips instead of only a blank text box.
+  const areaOptions = useMemo(() => {
+    const seen = new Set();
+    for (const l of listings) {
+      const first = (l.location || "").split(",")[0].trim();
+      if (first) seen.add(first);
+    }
+    return [...seen].sort().slice(0, 12);
+  }, [listings]);
+
   const visible = listings.filter((l) => {
     if (filter !== "All") {
       const typeMatch = (l.type || "").toLowerCase().replace(/\s+/g, "-") === filter.toLowerCase().replace(/\s+/g, "-");
@@ -64,6 +77,7 @@ export default function Hostel() {
     }
     if (minPrice && (l.price || 0) < Number(minPrice)) return false;
     if (maxPrice && (l.price || 0) > Number(maxPrice)) return false;
+    if (area.trim() && !(l.location || "").toLowerCase().includes(area.trim().toLowerCase())) return false;
     if (furnished) {
       const amenities = (l.amenities || []).map((a) => a.toLowerCase());
       const desc = (l.description || l.name || "").toLowerCase();
@@ -85,6 +99,34 @@ export default function Hostel() {
           {ROOM_TYPES.map((t) => (
             <span key={t} className={`chip${filter === t ? " active" : ""}`} style={{ cursor: "pointer", flexShrink: 0 }} onClick={() => setFilter(t)}>{t}</span>
           ))}
+        </div>
+
+        {/* Area / location */}
+        <div style={{ padding: "10px 0 0" }}>
+          <input
+            className="input"
+            type="text"
+            placeholder="Filter by area (e.g. Akoka, Bariga, Yaba)"
+            value={area}
+            onChange={(e) => setArea(e.target.value)}
+            style={{ width: "100%", height: 40, boxSizing: "border-box" }}
+          />
+          {areaOptions.length > 0 && (
+            <div style={{ display: "flex", gap: 6, overflowX: "auto", scrollbarWidth: "none", marginTop: 8 }}>
+              {areaOptions.map((a) => (
+                <button
+                  key={a}
+                  type="button"
+                  className={`chip${area === a ? " active" : ""}`}
+                  style={{ cursor: "pointer", flexShrink: 0, fontSize: "1.15rem", fontFamily: "inherit" }}
+                  onClick={() => setArea(area === a ? "" : a)}
+                  aria-pressed={area === a}
+                >
+                  {a}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Price range + furnished toggle */}
@@ -125,11 +167,11 @@ export default function Hostel() {
                     <i className="fas fa-bed" style={{ fontSize: "2.8rem", color: "var(--ink-3)" }} />
                   </div>
                   <h3 style={{ margin: "0 0 8px", fontSize: "1.8rem", fontWeight: 700 }}>
-                    {filter !== "All" ? `No "${filter}" listings` : "No listings yet"}
+                    {area.trim() ? `No listings in "${area.trim()}"` : filter !== "All" ? `No "${filter}" listings` : "No listings yet"}
                   </h3>
                   <p style={{ margin: 0, color: "var(--ink-3)", fontSize: "1.3rem", maxWidth: 300, lineHeight: 1.5 }}>
-                    {filter !== "All"
-                      ? "Try a different room type or clear your filters."
+                    {area.trim() || filter !== "All" || minPrice || maxPrice || furnished
+                      ? "Try a different area, room type, or clear your filters."
                       : "No off-campus stays around UNILAG have been listed yet. Check back soon."}
                   </p>
                 </div>

@@ -78,8 +78,6 @@ export default function Navbar({ frosted = false, dark = false }) {
   const [showProfile, setShowProfile] = useState(false);
   const [isDark, toggleTheme] = useTheme();
   const [search, setSearch] = useState("");
-  const [mobSearch, setMobSearch] = useState(false);
-  const [mobQ, setMobQ] = useState("");
   const [cartCount, setCartCount] = useState(0);
   const [notifCount, setNotifCount] = useState(0);
   const [suggestions, setSuggestions] = useState([]);
@@ -121,8 +119,6 @@ export default function Navbar({ frosted = false, dark = false }) {
     window.addEventListener("notifications:all-read", onAllRead);
     return () => window.removeEventListener("notifications:all-read", onAllRead);
   }, []);
-  const mobInputRef = useRef(null);
-
   const cls = ["nav", frosted ? "frosted" : "", dark ? "dark" : ""].filter(Boolean).join(" ");
 
   const initials = user
@@ -174,26 +170,14 @@ export default function Navbar({ frosted = false, dark = false }) {
     fetchSuggestions(val);
   }
 
-  function handleMobSearchChange(val) {
-    setMobQ(val);
-    fetchSuggestions(val);
-  }
-
   function clearSearch() {
     setSearch("");
     fetchSuggestions(""); // resets suggestions/showSuggestions too
     searchInputRef.current?.focus();
   }
 
-  function clearMobSearch() {
-    setMobQ("");
-    fetchSuggestions("");
-    mobInputRef.current?.focus();
-  }
-
   function handleSuggestionClick(suggestion) {
     setShowSuggestions(false);
-    if (mobSearch) closeMobSearch();
     if (suggestion.type === "product") {
       navigate(`/products/${suggestion._id}`);
     } else if (suggestion.type === "service") {
@@ -211,31 +195,9 @@ export default function Navbar({ frosted = false, dark = false }) {
     }
   }
 
-  function openMobSearch() {
-    setMobSearch(true);
-    setMobQ("");
-    setTimeout(() => mobInputRef.current?.focus(), 50);
-  }
-
-  function closeMobSearch() {
-    setMobSearch(false);
-    setMobQ("");
-    suggestionsReqIdRef.current++;
-    clearTimeout(suggestionsTimeoutRef.current);
-    setSuggestions([]);
-    setShowSuggestions(false);
-  }
-
-  function submitMobSearch(e) {
-    e.preventDefault();
-    if (mobQ.trim()) {
-      navigate(`/search?q=${encodeURIComponent(mobQ.trim())}`);
-      closeMobSearch();
-    }
-  }
-
-  // close mobile search when route changes
-  useEffect(() => { closeMobSearch(); }, [pathname]);
+  // Close the suggestions dropdown when the route changes (e.g. after
+  // navigating to a suggestion or a different page entirely).
+  useEffect(() => { setShowSuggestions(false); }, [pathname]);
 
   function isActive(path) {
     if (path === "/") return pathname === "/";
@@ -244,167 +206,107 @@ export default function Navbar({ frosted = false, dark = false }) {
 
   return (
     <>
-      <nav className={cls}>
-        {mobSearch ? (
-          /* ── Mobile search bar (replaces nav content) ── */
-          <form onSubmit={submitMobSearch} style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, position: "relative" }}>
-            <button type="button" className="icon-btn" onClick={closeMobSearch} style={{ flexShrink: 0 }}>
-              <i className="fas fa-arrow-left" />
+      <header className="nav-header">
+        <nav className={cls}>
+          <Logo />
+
+          {/* Desktop nav links */}
+          <div className="nav-links">
+            {NAV_LINKS.map((l) => (
+              <span
+                key={l.path}
+                onClick={() => navigate(l.path)}
+                style={{
+                  fontSize: "1.4rem", fontWeight: 600, cursor: "pointer",
+                  color: isActive(l.path) ? "var(--accent)" : dark ? "rgba(255,255,255,.8)" : "var(--ink-2)",
+                  position: "relative",
+                  transition: "color .15s",
+                }}
+              >
+                {l.label}
+                {isActive(l.path) && (
+                  <span style={{ position: "absolute", bottom: -6, left: 0, right: 0, height: 3, background: "var(--accent)", borderRadius: 3 }} />
+                )}
+              </span>
+            ))}
+          </div>
+
+          {/* Right icons */}
+          <div className="nav-icons">
+            <button
+              className="icon-btn"
+              onClick={toggleTheme}
+              title={isDark ? "Switch to light mode" : "Switch to dark mode"}
+              style={{ color: isDark ? "#fbbf24" : "var(--ink-2)" }}
+            >
+              <i className={`fas fa-${isDark ? "sun" : "moon"}`} />
             </button>
-            <div className="search-wrap" style={{ flex: 1 }}>
-              <i className="fas fa-magnifying-glass search-icon" />
-              <input
-                ref={mobInputRef}
-                className="input"
-                placeholder="Search products, services, stores…"
-                value={mobQ}
-                onChange={(e) => handleMobSearchChange(e.target.value)}
-                style={{ padding: "10px 34px 10px 40px", height: 42 }}
-              />
-              {mobQ && (
-                <button type="button" className="search-clear-btn" title="Clear" onClick={clearMobSearch}>
-                  <i className="fas fa-circle-xmark" />
+
+            {user ? (
+              <>
+                <button className="icon-btn" style={{ position: "relative" }} onClick={() => navigate("/notifications")}>
+                  <i className="fas fa-bell" />
+                  {notifCount > 0 && (
+                    <span style={{
+                      position: "absolute", top: 2, right: 2,
+                      minWidth: 16, height: 16, borderRadius: 8,
+                      background: "var(--accent)", color: "#fff",
+                      fontSize: "1rem", fontWeight: 700,
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      lineHeight: 1, padding: "0 3px",
+                    }}>{notifCount > 99 ? "99+" : notifCount}</span>
+                  )}
                 </button>
-              )}
-            </div>
-            {mobQ.trim() && (
-              <button type="submit" className="icon-btn" style={{ background: "var(--accent)", color: "#fff", flexShrink: 0 }}>
-                <i className="fas fa-arrow-right" />
+                <button className="icon-btn" style={{ position: "relative" }} onClick={() => navigate("/cart")}>
+                  <i className="fas fa-cart-shopping" />
+                  {cartCount > 0 && <span className="badge-dot" />}
+                </button>
+                <div className="avatar" onClick={() => setShowProfile(true)} style={{ overflow: "hidden", padding: avatarUrl && !avatarBroken ? 0 : undefined }}>
+                  {avatarUrl && !avatarBroken
+                    ? <img src={avatarUrl} alt={user.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={() => setAvatarBroken(true)} />
+                    : initials}
+                </div>
+              </>
+            ) : (
+              <button className="btn btn-primary btn-sm" onClick={() => navigate("/login")}>Sign in</button>
+            )}
+          </div>
+        </nav>
+
+        {/* Always-visible search bar — no icon/click step, live suggestions
+            as you type. Shown below the nav row on every page, every
+            screen size. */}
+        <form className="nav-searchbar" onSubmit={handleSearch}>
+          <div className="search-wrap">
+            <i className="fas fa-magnifying-glass search-icon" />
+            <input
+              ref={searchInputRef}
+              className="input"
+              placeholder="Search products, services, stores…"
+              value={search}
+              onChange={(e) => handleSearchChange(e.target.value)}
+              onFocus={() => search.length >= 2 && setShowSuggestions(true)}
+            />
+            {search && (
+              <button type="button" className="search-clear-btn" title="Clear" onClick={clearSearch}>
+                <i className="fas fa-circle-xmark" />
               </button>
             )}
-
-            {/* Suggestions list — full-width, anchored below the whole search bar */}
-            {showSuggestions && suggestions.length > 0 && (
-              <div style={{
-                position: "absolute", top: "100%", left: 0, right: 0, marginTop: 4,
-                background: "var(--paper)", borderRadius: "var(--r-lg)", boxShadow: "var(--shadow-lg)",
-                zIndex: 100, maxHeight: "70vh", overflowY: "auto", border: "1px solid var(--line)",
-              }}>
-                {suggestions.map((s, i) => (
-                  <SuggestionItem
-                    key={`${s.type}-${s._id}`}
-                    s={s}
-                    showBorder={i < suggestions.length - 1}
-                    onClick={() => handleSuggestionClick(s)}
-                  />
-                ))}
-              </div>
-            )}
-          </form>
-        ) : (
-          <>
-            <Logo />
-
-            {/* Desktop nav links */}
-            <div className="nav-links">
-              {NAV_LINKS.map((l) => (
-                <span
-                  key={l.path}
-                  onClick={() => navigate(l.path)}
-                  style={{
-                    fontSize: "1.4rem", fontWeight: 600, cursor: "pointer",
-                    color: isActive(l.path) ? "var(--accent)" : dark ? "rgba(255,255,255,.8)" : "var(--ink-2)",
-                    position: "relative",
-                    transition: "color .15s",
-                  }}
-                >
-                  {l.label}
-                  {isActive(l.path) && (
-                    <span style={{ position: "absolute", bottom: -6, left: 0, right: 0, height: 3, background: "var(--accent)", borderRadius: 3 }} />
-                  )}
-                </span>
+          </div>
+          {showSuggestions && suggestions.length > 0 && (
+            <div ref={suggestionsRef} className="nav-search-suggestions">
+              {suggestions.map((s, i) => (
+                <SuggestionItem
+                  key={`${s.type}-${s._id}`}
+                  s={s}
+                  showBorder={i < suggestions.length - 1}
+                  onClick={() => handleSuggestionClick(s)}
+                />
               ))}
             </div>
-
-            {/* Right icons */}
-            <div className="nav-icons">
-              {/* Desktop search */}
-              <form className="nav-search" onSubmit={handleSearch} style={{ position: "relative" }}>
-                <div className="search-wrap" style={{ width: 220 }}>
-                  <i className="fas fa-magnifying-glass search-icon" />
-                  <input
-                    ref={searchInputRef}
-                    className="input"
-                    placeholder="Search…"
-                    value={search}
-                    onChange={(e) => handleSearchChange(e.target.value)}
-                    onFocus={() => search.length >= 2 && setShowSuggestions(true)}
-                    style={{ padding: "10px 34px 10px 40px", height: 40 }}
-                  />
-                  {search && (
-                    <button type="button" className="search-clear-btn" title="Clear" onClick={clearSearch}>
-                      <i className="fas fa-circle-xmark" />
-                    </button>
-                  )}
-                </div>
-                {/* Suggestions dropdown - List format with descriptions.
-                    Anchored via `right: 0` (not a hardcoded left offset) so a
-                    dropdown wider than the input never overflows the viewport. */}
-                {showSuggestions && suggestions.length > 0 && (
-                  <div ref={suggestionsRef} style={{
-                    position: "absolute", top: 40, right: 0, width: "min(420px, 92vw)",
-                    background: "var(--paper)", borderRadius: "var(--r-lg)", boxShadow: "var(--shadow-lg)",
-                    zIndex: 100, maxHeight: 400, overflowY: "auto", border: "1px solid var(--line)",
-                  }}>
-                    {suggestions.map((s, i) => (
-                      <SuggestionItem
-                        key={`${s.type}-${s._id}`}
-                        s={s}
-                        showBorder={i < suggestions.length - 1}
-                        onClick={() => handleSuggestionClick(s)}
-                      />
-                    ))}
-                  </div>
-                )}
-              </form>
-
-              {/* Mobile search icon */}
-              <button className="icon-btn mob-only" onClick={openMobSearch} title="Search">
-                <i className="fas fa-magnifying-glass" />
-              </button>
-
-              {/* Theme toggle — always visible */}
-              <button
-                className="icon-btn"
-                onClick={toggleTheme}
-                title={isDark ? "Switch to light mode" : "Switch to dark mode"}
-                style={{ color: isDark ? "#fbbf24" : "var(--ink-2)" }}
-              >
-                <i className={`fas fa-${isDark ? "sun" : "moon"}`} />
-              </button>
-
-              {user ? (
-                <>
-                  <button className="icon-btn" style={{ position: "relative" }} onClick={() => navigate("/notifications")}>
-                    <i className="fas fa-bell" />
-                    {notifCount > 0 && (
-                      <span style={{
-                        position: "absolute", top: 2, right: 2,
-                        minWidth: 16, height: 16, borderRadius: 8,
-                        background: "var(--accent)", color: "#fff",
-                        fontSize: "1rem", fontWeight: 700,
-                        display: "flex", alignItems: "center", justifyContent: "center",
-                        lineHeight: 1, padding: "0 3px",
-                      }}>{notifCount > 99 ? "99+" : notifCount}</span>
-                    )}
-                  </button>
-                  <button className="icon-btn" style={{ position: "relative" }} onClick={() => navigate("/cart")}>
-                    <i className="fas fa-cart-shopping" />
-                    {cartCount > 0 && <span className="badge-dot" />}
-                  </button>
-                  <div className="avatar" onClick={() => setShowProfile(true)} style={{ overflow: "hidden", padding: avatarUrl && !avatarBroken ? 0 : undefined }}>
-                    {avatarUrl && !avatarBroken
-                      ? <img src={avatarUrl} alt={user.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={() => setAvatarBroken(true)} />
-                      : initials}
-                  </div>
-                </>
-              ) : (
-                <button className="btn btn-primary btn-sm" onClick={() => navigate("/login")}>Sign in</button>
-              )}
-            </div>
-          </>
-        )}
-      </nav>
+          )}
+        </form>
+      </header>
       {showProfile && <ProfilePopup onClose={() => setShowProfile(false)} />}
     </>
   );

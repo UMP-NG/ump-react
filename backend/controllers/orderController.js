@@ -13,6 +13,7 @@ import PDFDocument from "pdfkit";
 import cloudinary from "../config/cloudinary.js";
 import { audit } from "../utils/auditLog.js";
 import { notify } from "../utils/notify.js";
+import { effectivePrice } from "../utils/pricing.js";
 import logger from "../utils/logger.js";
 import { spendWalletBalance, refundWalletBalance } from "./walletController.js";
 
@@ -1203,8 +1204,8 @@ export const confirmTransfer = async (req, res) => {
     for (const [sellerId, sellerItems] of Object.entries(itemsBySeller)) {
       // Always fetch authoritative price from DB — never trust client-submitted prices
       const productIds = [...new Set(sellerItems.map(i => i.product).filter(Boolean).map(String))];
-      const productDocs = await Product.find({ _id: { $in: productIds } }).select("_id price").lean();
-      const priceMap = new Map(productDocs.map(p => [p._id.toString(), p.price]));
+      const productDocs = await Product.find({ _id: { $in: productIds } }).select("_id price salePrice saleEndsAt").lean();
+      const priceMap = new Map(productDocs.map(p => [p._id.toString(), effectivePrice(p)]));
 
       // Resolve per-item price: verify negotiation from DB when present, fall back to canonical price
       const resolvedItems = await Promise.all(sellerItems.map(async (item) => {

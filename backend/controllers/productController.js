@@ -1,12 +1,24 @@
 import mongoose from "mongoose";
 import Product from "../models/Product.js";
 import Seller from "../models/Seller.js";
+import Section from "../models/Section.js";
 import cloudinary from "../config/cloudinary.js";
 import logger from "../utils/logger.js";
 import { notify } from "../utils/notify.js";
 
 const escapeRegex = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const filterValidObjectIds = (arr) => (arr === null ? null : (arr || []).filter((id) => mongoose.Types.ObjectId.isValid(id)));
+
+// Sellers only ever get offered active sections in the listing form's
+// picker, but the ids still arrive as free-form client input — re-check
+// against the DB so a seller can't tag a product into a retired/unknown
+// section (e.g. a stale picker, or a crafted request).
+async function filterActiveSectionIds(ids) {
+  if (ids === null || !ids.length) return ids;
+  const active = await Section.find({ _id: { $in: ids }, active: true }).select("_id").lean();
+  const activeIds = new Set(active.map((s) => s._id.toString()));
+  return ids.filter((id) => activeIds.has(id.toString()));
+}
 
 export const createProduct = async (req, res) => {
   try {
@@ -55,7 +67,7 @@ export const createProduct = async (req, res) => {
     };
     const parsedSizes = parseSArray(sizes);
     const parsedTypes = parseSArray(types);
-    const parsedSections = filterValidObjectIds(parseSArray(req.body.sections));
+    const parsedSections = await filterActiveSectionIds(filterValidObjectIds(parseSArray(req.body.sections)));
 
     // --- 🧩 Build Specs safely ---
     let specs = {};
@@ -560,7 +572,7 @@ export const updateProduct = async (req, res) => {
     };
     const newSizes = parseSArray(req.body.sizes);
     const newTypes = parseSArray(req.body.types);
-    const newSections = filterValidObjectIds(parseSArray(req.body.sections));
+    const newSections = await filterActiveSectionIds(filterValidObjectIds(parseSArray(req.body.sections)));
     if (newSizes !== null) product.sizes = newSizes;
     if (newTypes !== null) product.types = newTypes;
     if (newSections !== null) product.sections = newSections;

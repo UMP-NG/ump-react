@@ -34,7 +34,13 @@ export const listSectionsWithProducts = async (req, res) => {
     const sections = await Section.find({ active: true }).sort({ name: 1 }).lean();
     const results = await Promise.all(
       sections.map(async (s) => {
-        const products = await Product.find({ sections: s._id, isAvailable: true })
+        // isRemoved (admin moderation) isn't covered by the model's
+        // soft-delete query hook (that only excludes deletedAt) — exclude it
+        // explicitly so a removed product never surfaces on the public Home
+        // page. isFlagged is left alone, matching the rest of the public
+        // product listing (productController.js), which doesn't hide
+        // flagged-but-not-removed products either.
+        const products = await Product.find({ sections: s._id, isAvailable: true, isRemoved: { $ne: true } })
           .select("name price images slug salePrice saleEndsAt")
           .limit(12)
           .lean();
@@ -44,6 +50,29 @@ export const listSectionsWithProducts = async (req, res) => {
     res.json(results.filter((s) => s.products.length > 0));
   } catch (err) {
     logger.error("listSectionsWithProducts", err);
+    res.status(500).json({ message: err.message });
+  }
+};
+
+// GET /api/sections/:id/products — admin-only, every product currently
+// assigned to this section regardless of active/available/removed status or
+// count. Unlike listSectionsWithProducts (which is Home-page display logic:
+// active sections only, isAvailable products only, capped at 12), this is
+// the admin's "what's actually in this section" management view and must
+// never silently hide items the public page's filters would exclude.
+export const getSectionProducts = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const section = await Section.findById(id).lean();
+    if (!section) return res.status(404).json({ message: "Section not found" });
+    const products = await Product.find({ sections: id })
+      .select("name price images slug isAvailable isRemoved")
+      .setOptions({ includeDeleted: true })
+      .sort({ name: 1 })
+      .lean();
+    res.json({ products });
+  } catch (err) {
+    logger.error("getSectionProducts", err);
     res.status(500).json({ message: err.message });
   }
 };
@@ -70,8 +99,13 @@ export const updateSection = async (req, res) => {
     const { id } = req.params;
     const updates = {};
     if (req.body.name !== undefined) {
-      updates.name = req.body.name.trim();
-      updates.slug = slugify(updates.name, { lower: true, strict: true });
+      const name = req.body.name.trim();
+      if (!name) return res.status(400).json({ message: "Name cannot be empty" });
+      const slug = slugify(name, { lower: true, strict: true });
+      const collision = await Section.findOne({ slug, _id: { $ne: id } }).select("_id").lean();
+      if (collision) return res.status(409).json({ message: "Another section already has this name" });
+      updates.name = name;
+      updates.slug = slug;
     }
     if (req.body.active !== undefined) updates.active = !!req.body.active;
 
@@ -79,6 +113,9 @@ export const updateSection = async (req, res) => {
     if (!section) return res.status(404).json({ message: "Section not found" });
     res.json(section);
   } catch (err) {
+    if (err.code === 11000) {
+      return res.status(409).json({ message: "Another section already has this name" });
+    }
     logger.error("updateSection", err);
     res.status(500).json({ message: err.message });
   }

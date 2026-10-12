@@ -18,6 +18,11 @@ export const becomeAgent = async (req, res) => {
     let roles = req.user.roles;
     if (!roles.includes("agent")) {
       const updated = await User.findByIdAndUpdate(req.user._id, { $addToSet: { roles: "agent" } }, { new: true }).select("roles");
+      // req.user._id came from a user the `protect` middleware just loaded,
+      // so this should always find a document — but if the account was
+      // deleted in the brief window between that load and this update,
+      // fail cleanly instead of crashing on `updated.roles`.
+      if (!updated) return res.status(404).json({ message: "User not found" });
       roles = updated.roles;
     }
 

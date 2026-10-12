@@ -24,6 +24,7 @@ import Reports from './pages/Reports';
 import Verifications from './pages/Verifications';
 import Placeholder from './pages/Placeholder';
 import Coupons from './pages/Coupons';
+import Promotions from './pages/Promotions';
 import Ads from './pages/Ads';
 import Feedback from './pages/Feedback';
 
@@ -54,6 +55,7 @@ export default function AdminRoutes() {
           <Route path="config"     element={<Config />} />
           <Route path="admins"     element={<Admins />} />
           <Route path="coupons"    element={<Coupons />} />
+          <Route path="promotions" element={<Promotions />} />
           <Route path="ads"        element={<Ads />} />
           <Route path="feedback"   element={<Feedback />} />
         </Route>

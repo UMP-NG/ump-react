@@ -36,6 +36,7 @@ const NAV_GROUPS = [
     { id: 'feedback',  path: '/admin/feedback',  icon: 'fa-comment-dots', name: 'Demand Feedback' },
     { id: 'config',    path: '/admin/config',    icon: 'fa-sliders',    name: 'Site Configuration' },
     { id: 'coupons',   path: '/admin/coupons',   icon: 'fa-ticket',        name: 'Coupons' },
+    { id: 'promotions', path: '/admin/promotions', icon: 'fa-percent',     name: 'Store Promotions' },
     { id: 'ads',       path: '/admin/ads',       icon: 'fa-rectangle-ad',  name: 'Ad Campaigns' },
     { id: 'admins',    path: '/admin/admins',    icon: 'fa-user-shield', name: 'Admin Accounts' },
   ]},

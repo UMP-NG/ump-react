@@ -85,9 +85,13 @@ export default function Config() {
   }, []);
 
   const loadSectionProducts = useCallback((sectionId) => {
-    apiFetch(`/api/sections/with-products`).then(d => {
-      const match = (Array.isArray(d) ? d : []).find(s => s._id === sectionId);
-      setSectionProducts(prev => ({ ...prev, [sectionId]: match?.products || [] }));
+    // Admin-only endpoint — unlike /api/sections/with-products (Home-page
+    // display logic: active sections only, available products only, capped
+    // at 12), this always returns every product actually assigned to the
+    // section, regardless of status or count, so hidden/empty/large
+    // sections still show their real contents here.
+    apiFetch(`/api/sections/${sectionId}/products`).then(d => {
+      setSectionProducts(prev => ({ ...prev, [sectionId]: d?.products || [] }));
     }).catch(() => {});
   }, []);
 

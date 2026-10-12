@@ -10,6 +10,7 @@ import app from "./app.js";
 import Message from "./models/Message.js";
 import { setIO } from "./utils/socket.js";
 import { startAutoCancelJob } from "./utils/autoCancel.js";
+import { checkExpiredPromotions } from "./controllers/promotionController.js";
 import { notify } from "./utils/notify.js";
 import { getOrCreateOfficialSeller } from "./controllers/umpStoreController.js";
 import { backfillPasswordManuallySet } from "./utils/backfillPasswordState.js";
@@ -308,6 +309,13 @@ if (ENABLE_CLUSTER && cluster.isPrimary) {
       // single-process mode) to avoid N duplicate cron runs when cluster mode
       // is active.
       if (isCronWorker) startAutoCancelJob();
+
+      // Reverts any admin Promotion whose duration has run out and notifies
+      // admins — same once-at-boot-then-hourly pattern as the auto-cancel job.
+      if (isCronWorker) {
+        checkExpiredPromotions();
+        setInterval(checkExpiredPromotions, 60 * 60 * 1000);
+      }
 
       // Ensure the official UMP Store exists so it shows up on /store immediately —
       // doesn't depend on an admin first opening the admin UMP Store page.

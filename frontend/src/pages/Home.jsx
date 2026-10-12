@@ -84,7 +84,6 @@ export default function Home() {
   const [totalProducts, setTotalProducts] = useState(null);
   const [totalSellers, setTotalSellers] = useState(null);
   const [sections, setSections] = useState([]);
-  const [searchQuery, setSearchQuery] = useState("");
   const slideTimer = useRef(null);
 
   // Fallback hero copy only runs when admin hasn't configured real slides (below).
@@ -196,27 +195,9 @@ export default function Home() {
       .catch(() => {});
   }, []);
 
-  function handleHomeSearch(e) {
-    e.preventDefault();
-    if (searchQuery.trim()) navigate(`/search?q=${encodeURIComponent(searchQuery.trim())}`);
-  }
-
   return (
     <div className="page">
       <Navbar frosted />
-
-      {/* Persistent search bar — Home page only, every other page keeps its own search */}
-      <form onSubmit={handleHomeSearch} style={{ margin: "14px 16px 0" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10, background: "var(--paper)", border: "1px solid var(--line)", borderRadius: 999, padding: "12px 20px", boxShadow: "0 2px 10px rgba(0,0,0,.06)" }}>
-          <i className="fas fa-magnifying-glass" style={{ color: "var(--ink-3)" }} />
-          <input
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search products, services, stores…"
-            style={{ flex: 1, border: "none", outline: "none", background: "transparent", fontSize: "1.35rem", color: "var(--ink-1)", fontFamily: "var(--font-sans)" }}
-          />
-        </div>
-      </form>
 
       {/* Hero slideshow */}
       <div style={{ position: "relative", margin: "12px 16px 0", borderRadius: "var(--r-2xl)", overflow: "hidden", height: 380 }}>

@@ -133,8 +133,14 @@ const productSchema = new mongoose.Schema(
     adEndsAt: { type: Date, default: null },
 
     // ── Flash Sale ──────────────────────────────────────────────────────────────
+    // salePrice/saleEndsAt are the single source of truth for an active
+    // discount, honored at checkout (see utils/pricing.js). They can be set
+    // directly by the seller, OR driven by an admin Promotion campaign — when
+    // the latter is active, activePromotion identifies it so the promo's own
+    // unit-limit/expiry logic knows which products to revert.
     salePrice:  { type: Number, default: null, min: [0, "Sale price cannot be negative"] },
     saleEndsAt: { type: Date,   default: null },
+    activePromotion: { type: mongoose.Schema.Types.ObjectId, ref: "Promotion", default: null },
 
     // ── Restock alerts ──────────────────────────────────────────────────────────
     restockSubscribers: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],

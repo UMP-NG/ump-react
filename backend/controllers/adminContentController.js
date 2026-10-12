@@ -12,14 +12,15 @@ import { notify } from "../utils/notify.js";
 export const getAdminProducts = async (req, res) => {
   try {
     const page  = Math.max(1, parseInt(req.query.page)  || 1);
-    const limit = Math.min(50,  parseInt(req.query.limit) || 20);
+    const limit = Math.min(200, parseInt(req.query.limit) || 20);
     const skip  = (page - 1) * limit;
-    const { status, q } = req.query;
+    const { status, q, seller } = req.query;
     const filter = {};
     if (status === "flagged")      filter.isFlagged = true;
     else if (status === "removed") filter.isRemoved = true;
     else if (status === "active")  { filter.isFlagged = { $ne: true }; filter.isRemoved = { $ne: true }; }
     if (q?.trim()) filter.name = { $regex: q.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), $options: "i" };
+    if (seller && mongoose.Types.ObjectId.isValid(seller)) filter.seller = seller;
     const [products, total] = await Promise.all([
       Product.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).populate("seller","name").populate("category","name").lean(),
       Product.countDocuments(filter),

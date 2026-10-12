@@ -3,6 +3,7 @@ import Cart from "../models/Cart.js";
 import Product from "../models/Product.js";
 import Seller from "../models/Seller.js";
 import logger from "../utils/logger.js";
+import { effectivePrice } from "../utils/pricing.js";
 
 // ✅ Get current user's cart
 export const getCart = async (req, res) => {
@@ -74,7 +75,8 @@ export const addToCart = async (req, res) => {
         return res.status(400).json({ message: "Selected variant is no longer available" });
       }
     }
-    const itemPrice = matchedVariant ? matchedVariant.price : product.price;
+    // Variants don't carry their own sale price — only the base product does.
+    const itemPrice = matchedVariant ? matchedVariant.price : effectivePrice(product);
     const itemStock = matchedVariant ? (matchedVariant.stock || 0) : (product.stock || 0);
 
     if (itemStock <= 0) {
