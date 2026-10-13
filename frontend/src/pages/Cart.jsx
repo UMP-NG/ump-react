@@ -708,9 +708,6 @@ export default function Cart() {
                   <li style={{ fontSize: "1.2rem", color: "var(--ink-2)", lineHeight: 1.55 }}>
                     <strong>Never pay directly to a seller's bank account.</strong> All payments must go through UMP's secure checkout. UMP is not liable for any transactions made outside this platform.
                   </li>
-                  <li style={{ fontSize: "1.2rem", color: "var(--ink-2)", lineHeight: 1.55 }}>
-                    Collecting orders <strong>outside UNILAG campus</strong> is entirely at the buyer's risk. UMP is not responsible for off-campus pickups or deliveries.
-                  </li>
                 </ul>
               </div>
 

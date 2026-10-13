@@ -6,6 +6,10 @@ import User from "../models/User.js";
 import logger from "../utils/logger.js";
 import { notify } from "../utils/notify.js";
 
+// Store promotions are meant for lower-priced items only — keeps the feature
+// scoped to impulse/volume buys rather than discounting big-ticket products.
+const PROMOTABLE_PRICE_CEILING = 10000;
+
 async function notifyAdmins(title, message) {
   try {
     const admins = await User.find({ roles: "admin" }, { _id: 1 }).lean();
@@ -98,17 +102,19 @@ export const createPromotion = async (req, res) => {
       return res.status(400).json({ message: "Duration must be at least 1 day" });
     }
 
-    // Only allow products that actually belong to the chosen store, and
-    // exclude variant products — their real price comes from each
-    // variant's own price, not the top-level `price` field, so a discount
-    // computed from `price` here would never actually apply at checkout.
+    // Only allow products that actually belong to the chosen store, cost
+    // under the promo price cap, and have no priced variants — a variant's
+    // real price comes from its own price, not this top-level `price` field,
+    // so a discount computed from `price` here would never actually apply
+    // at checkout.
     const products = await Product.find({
       _id: { $in: validProductIds },
       seller,
+      price: { $lt: PROMOTABLE_PRICE_CEILING },
       $or: [{ variants: { $exists: false } }, { variants: { $size: 0 } }],
     }).select("_id price");
     if (products.length !== validProductIds.length) {
-      return res.status(400).json({ message: "One or more selected products are ineligible — they must belong to this store and have no priced variants" });
+      return res.status(400).json({ message: `One or more selected products are ineligible — they must belong to this store, cost under ₦${PROMOTABLE_PRICE_CEILING.toLocaleString("en-NG")}, and have no priced variants` });
     }
 
     const startsAt = new Date();

@@ -1,6 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '../../utils/api';
 
+// Matches PROMOTABLE_PRICE_CEILING in backend/controllers/promotionController.js —
+// store promotions are scoped to lower-priced items only.
+const PROMOTABLE_PRICE_CEILING = 10000;
+
 const STATUS_STYLE = {
   active:    { bg: 'rgba(34,197,94,.12)',  color: '#16a34a', label: 'Active' },
   expired:   { bg: 'rgba(148,163,184,.15)', color: '#64748b', label: 'Expired' },
@@ -54,10 +58,11 @@ function NewPromotionModal({ onClose, onCreated }) {
     setProductsLoading(true);
     apiFetch(`/api/admins/products?seller=${selectedStore.userId}&status=active&limit=200`)
       // Variant products can't be promoted — their real price comes from each
-      // variant's own price, not this top-level price, so the backend rejects
-      // them outright. Filter them out here instead of letting the admin pick
-      // one and then hit a confusing "ineligible" error on submit.
-      .then((d) => setProducts((d.products || []).filter((p) => !p.variants?.length)))
+      // variant's own price, not this top-level price. Promotions are also
+      // scoped to items under the price ceiling. The backend rejects both
+      // cases outright; filter them out here instead of letting the admin
+      // pick one and then hit a confusing "ineligible" error on submit.
+      .then((d) => setProducts((d.products || []).filter((p) => !p.variants?.length && p.price < PROMOTABLE_PRICE_CEILING)))
       .catch(() => setProducts([]))
       .finally(() => setProductsLoading(false));
   }, [selectedStore?.userId]);
@@ -150,11 +155,14 @@ function NewPromotionModal({ onClose, onCreated }) {
           {/* Product picker */}
           {selectedStore?.userId && (
             <div style={{ marginBottom: 14 }}>
-              <label style={lSty}>Products <span style={{ fontWeight: 400, color: 'var(--ink-4)' }}>({selectedProductIds.size} selected)</span></label>
+              <label style={lSty}>
+                Products under ₦{PROMOTABLE_PRICE_CEILING.toLocaleString()}
+                <span style={{ fontWeight: 400, color: 'var(--ink-4)' }}> ({selectedProductIds.size} selected)</span>
+              </label>
               {productsLoading ? (
                 <div style={{ padding: 16, textAlign: 'center', color: 'var(--ink-3)' }}><i className="fas fa-spinner fa-spin" /></div>
               ) : products.length === 0 ? (
-                <div className="muted" style={{ fontSize: '1.2rem' }}>This store has no active products.</div>
+                <div className="muted" style={{ fontSize: '1.2rem' }}>This store has no active products under ₦{PROMOTABLE_PRICE_CEILING.toLocaleString()} (promotions are only available for lower-priced items).</div>
               ) : (
                 <div style={{ border: '1px solid var(--line)', borderRadius: 8, maxHeight: 220, overflowY: 'auto' }}>
                   {products.map((p) => {
