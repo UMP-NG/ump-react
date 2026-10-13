@@ -227,9 +227,19 @@ export const login = async (req, res) => {
 
     // Also match schoolEmail so users can still log in with their original
     // address after an account merge (source email gets anonymised, but
-    // primary retains it as schoolEmail).
+    // primary retains it as schoolEmail) — but only once that link is
+    // actually verified. An in-progress/abandoned linkSchoolEmail (OTP sent,
+    // never confirmed) also sets this field, and matching it unverified lets
+    // that dangling account shadow a completely separate, legitimately
+    // verified account that was later signed up directly with the same
+    // school email — the shadowing account then wins or loses the lookup
+    // unpredictably, and if it wins the real owner gets wrongly told to
+    // verify an account they never touched.
     const existingUser = await User.findOne({
-      $or: [{ email: email.toLowerCase() }, { schoolEmail: email.toLowerCase() }],
+      $or: [
+        { email: email.toLowerCase() },
+        { schoolEmail: email.toLowerCase(), schoolEmailVerified: true },
+      ],
     });
     if (!existingUser) {
       // Generic message — avoids revealing whether the email is registered
@@ -580,7 +590,11 @@ export const googleSignIn = async (req, res) => {
     if (!email) return res.status(400).json({ message: "Email not returned by Google" });
 
     const isUnilag = GOOGLE_UNILAG_EMAIL.test(email);
-    let user = await User.findOne({ $or: [{ email }, { schoolEmail: email }] });
+    // Only match a verified schoolEmail link — see the identical guard (and
+    // its reasoning) in login() above.
+    let user = await User.findOne({
+      $or: [{ email }, { schoolEmail: email, schoolEmailVerified: true }],
+    });
 
     if (!user) {
       // Resolve referrer for new accounts only
