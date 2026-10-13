@@ -47,9 +47,9 @@ function NewPromotionModal({ onClose, onCreated }) {
   }
 
   function pickStore(s) {
-    setSelectedStore({ userId: s.user?._id, storeName: s.storeName || s.user?.name || 'Store' });
+    setSelectedStore({ userId: s.userId, storeName: s.storeName || s.ownerName || 'Store' });
     setStoreResults([]);
-    setStoreQuery(s.storeName || s.user?.name || '');
+    setStoreQuery(s.storeName || s.ownerName || '');
     setSelectedProductIds(new Set());
   }
 
@@ -144,8 +144,8 @@ function NewPromotionModal({ onClose, onCreated }) {
                     onMouseEnter={(e) => e.currentTarget.style.background = 'var(--surface)'}
                     onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
                   >
-                    <div style={{ fontWeight: 600, fontSize: '1.25rem' }}>{s.storeName || s.user?.name}</div>
-                    <div className="muted" style={{ fontSize: '1.1rem' }}>{s.user?.email}</div>
+                    <div style={{ fontWeight: 600, fontSize: '1.25rem' }}>{s.storeName || s.ownerName}</div>
+                    <div className="muted" style={{ fontSize: '1.1rem' }}>{s.email}</div>
                   </div>
                 ))}
               </div>
