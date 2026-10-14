@@ -19,17 +19,21 @@ export const getAdminStats = async (req, res) => {
       Seller.countDocuments({ createdAt: { $gte: since } }),
       Seller.countDocuments(),
       Order.aggregate([{ $facet: {
-        active:  [{ $match: { status: { $in: ["pending","confirmed","shipped"] } } }, { $group: { _id: null, total: { $sum: "$totalAmount" } } }],
-        period:  [{ $match: { createdAt: { $gte: since } } }, { $group: { _id: null, total: { $sum: "$totalAmount" }, count: { $sum: 1 } } }],
-        revenue: [{ $match: { status: "completed", createdAt: { $gte: since } } }, { $group: { _id: null, total: { $sum: "$totalAmount" } } }],
+        active: [{ $match: { status: { $in: ["pending","confirmed","shipped"] } } }, { $group: { _id: null, total: { $sum: "$totalAmount" } } }],
+        // "Order value" tracks every completed order ever, not just this
+        // period — an order that only reached "confirmed" (or any other
+        // non-terminal status) never counts, no matter how recent.
+        allTime: [{ $match: { status: "completed" } }, { $group: { _id: null, total: { $sum: "$totalAmount" }, count: { $sum: 1 } } }],
+        // Platform revenue stays period-scoped (this period's cut only).
+        period: [{ $match: { status: "completed", createdAt: { $gte: since } } }, { $group: { _id: null, total: { $sum: "$totalAmount" } } }],
       }}]),
       Payout.aggregate([{ $match: { status: "pending" } }, { $group: { _id: null, total: { $sum: "$amount" }, count: { $sum: 1 } } }]),
       Order.countDocuments({ status: "disputed" }),
     ]);
     const activeVal   = orderAgg[0]?.active[0]?.total  || 0;
-    const periodGMV   = orderAgg[0]?.period[0]?.total  || 0;
-    const periodCount = orderAgg[0]?.period[0]?.count  || 0;
-    const periodRev   = orderAgg[0]?.revenue[0]?.total || 0;
+    const periodGMV   = orderAgg[0]?.allTime[0]?.total || 0;
+    const periodCount = orderAgg[0]?.allTime[0]?.count || 0;
+    const periodRev   = orderAgg[0]?.period[0]?.total  || 0;
     const payoutVal   = payoutAgg[0]?.total  || 0;
     const payoutCount = payoutAgg[0]?.count  || 0;
     const result = {

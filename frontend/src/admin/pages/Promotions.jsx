@@ -232,6 +232,28 @@ function EditPromotionModal({ promotion, onClose, onUpdated }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
+  const existingIds = new Set((promotion.products || []).map((p) => p._id));
+  const [storeProducts, setStoreProducts] = useState([]);
+  const [productsLoading, setProductsLoading] = useState(true);
+  const [addedIds, setAddedIds] = useState(new Set());
+
+  useEffect(() => {
+    const sellerId = promotion.seller?._id;
+    if (!sellerId) { setProductsLoading(false); return; }
+    apiFetch(`/api/admins/products?seller=${sellerId}&status=active&limit=200`)
+      .then((d) => setStoreProducts((d.products || []).filter((p) => !p.variants?.length && p.price < PROMOTABLE_PRICE_CEILING)))
+      .catch(() => setStoreProducts([]))
+      .finally(() => setProductsLoading(false));
+  }, [promotion.seller?._id]);
+
+  function toggleAdd(id) {
+    setAddedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
   const iSty = { width: '100%', padding: '8px 12px', borderRadius: 'var(--r-md)', border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink-1)', fontSize: '1.3rem', fontFamily: 'var(--font-sans)', boxSizing: 'border-box' };
   const lSty = { fontSize: '1.15rem', color: 'var(--ink-3)', fontWeight: 600, marginBottom: 4, display: 'block' };
 
@@ -248,7 +270,7 @@ function EditPromotionModal({ promotion, onClose, onUpdated }) {
     try {
       const res = await apiFetch(`/api/promotions/${promotion._id}`, {
         method: 'PUT',
-        body: { discountPercent: pct, maxUnits: units, durationDays: days },
+        body: { discountPercent: pct, maxUnits: units, durationDays: days, addProductIds: [...addedIds] },
       });
       onUpdated(res.promotion);
       onClose();
@@ -271,6 +293,40 @@ function EditPromotionModal({ promotion, onClose, onUpdated }) {
           <p className="muted" style={{ fontSize: '1.2rem', marginTop: 0 }}>
             {promotion.seller?.storeName || promotion.seller?.name || 'This store'} · {promotion.products?.length || 0} product(s)
           </p>
+
+          <div style={{ marginBottom: 14 }}>
+            <label style={lSty}>
+              Products <span style={{ fontWeight: 400, color: 'var(--ink-4)' }}>({existingIds.size + addedIds.size} in this promo{addedIds.size ? `, +${addedIds.size} new` : ''})</span>
+            </label>
+            {productsLoading ? (
+              <div style={{ padding: 16, textAlign: 'center', color: 'var(--ink-3)' }}><i className="fas fa-spinner fa-spin" /></div>
+            ) : storeProducts.length === 0 ? (
+              <div className="muted" style={{ fontSize: '1.2rem' }}>No eligible products found for this store.</div>
+            ) : (
+              <div style={{ border: '1px solid var(--line)', borderRadius: 8, maxHeight: 220, overflowY: 'auto' }}>
+                {storeProducts.map((p) => {
+                  const already = existingIds.has(p._id);
+                  const checked = already || addedIds.has(p._id);
+                  return (
+                    <label
+                      key={p._id}
+                      style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', cursor: already ? 'default' : 'pointer', borderBottom: '1px solid var(--line)', background: checked ? 'rgba(249,115,22,.06)' : 'transparent' }}
+                    >
+                      <input type="checkbox" checked={checked} disabled={already} onChange={() => !already && toggleAdd(p._id)} />
+                      {p.images?.[0]?.url && <img src={p.images[0].url} alt="" style={{ width: 32, height: 32, borderRadius: 6, objectFit: 'cover' }} />}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: '1.25rem', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</div>
+                      </div>
+                      {already
+                        ? <span style={{ fontSize: '1rem', color: 'var(--ink-4)', fontWeight: 700 }}>IN PROMO</span>
+                        : <span style={{ fontSize: '1.2rem', fontWeight: 700 }}>₦{Number(p.price).toLocaleString()}</span>}
+                    </label>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
             <div>
               <label style={lSty}>Discount (%)</label>
@@ -286,7 +342,7 @@ function EditPromotionModal({ promotion, onClose, onUpdated }) {
             <input style={iSty} type="number" min="1" value={durationDays} onChange={(e) => setDurationDays(e.target.value)} placeholder="e.g. 7" />
           </div>
           <p className="muted" style={{ fontSize: '1.1rem', lineHeight: 1.5, margin: 0 }}>
-            Changing the discount re-prices every product in this promotion from its current price. The end date is reset to this many days from now.
+            Changing the discount re-prices every product in this promotion (including any newly added ones) from its current price. The end date is reset to this many days from now.
           </p>
           {error && <div style={{ marginTop: 12, padding: '10px 14px', background: 'rgba(239,68,68,.08)', borderRadius: 'var(--r-md)', color: '#dc2626', fontSize: '1.25rem' }}>{error}</div>}
         </div>

@@ -199,7 +199,7 @@ export const cancelPromotion = async (req, res) => {
 // still-active promotion (editing a terminal-status one doesn't make sense).
 export const updatePromotion = async (req, res) => {
   try {
-    const { discountPercent, maxUnits, durationDays } = req.body;
+    const { discountPercent, maxUnits, durationDays, addProductIds } = req.body;
 
     const pct = Number(discountPercent);
     if (!Number.isFinite(pct) || pct < 1 || pct > 95) {
@@ -214,7 +214,7 @@ export const updatePromotion = async (req, res) => {
       return res.status(400).json({ message: "Duration must be at least 1 day" });
     }
 
-    const existing = await Promotion.findById(req.params.id).select("status unitsSold").lean();
+    const existing = await Promotion.findById(req.params.id).select("status unitsSold seller products").lean();
     if (!existing) return res.status(404).json({ message: "Promotion not found" });
     if (existing.status !== "active") {
       return res.status(400).json({ message: `Cannot edit a promotion that is already ${existing.status}` });
@@ -223,17 +223,51 @@ export const updatePromotion = async (req, res) => {
       return res.status(400).json({ message: `Max units can't be less than the ${existing.unitsSold} already sold` });
     }
 
+    // Validate any newly-added products up front, same eligibility rules as
+    // createPromotion — belongs to this store, under the price ceiling, no
+    // priced variants — and reject the whole request if any fail, rather
+    // than silently dropping them.
+    const existingIds = new Set(existing.products.map((id) => id.toString()));
+    const requestedNewIds = (Array.isArray(addProductIds) ? addProductIds : [])
+      .filter((id) => mongoose.Types.ObjectId.isValid(id) && !existingIds.has(id));
+    let newProducts = [];
+    if (requestedNewIds.length) {
+      newProducts = await Product.find({
+        _id: { $in: requestedNewIds },
+        seller: existing.seller,
+        price: { $lt: PROMOTABLE_PRICE_CEILING },
+        $or: [{ variants: { $exists: false } }, { variants: { $size: 0 } }],
+      }).select("_id price");
+      if (newProducts.length !== requestedNewIds.length) {
+        return res.status(400).json({ message: `One or more new products are ineligible — they must belong to this store, cost under ₦${PROMOTABLE_PRICE_CEILING.toLocaleString("en-NG")}, and have no priced variants` });
+      }
+    }
+    const newProductIds = newProducts.map((p) => p._id);
+
     const endsAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
 
     let promotion;
     const session = await mongoose.startSession();
     try {
       await session.withTransaction(async () => {
+        if (newProductIds.length) {
+          // Detach newly-added products from any other active promotion first,
+          // same as createPromotion — a product can only belong to one at a time.
+          await Promotion.updateMany(
+            { status: "active", products: { $in: newProductIds } },
+            { $pull: { products: { $in: newProductIds } } },
+            { session }
+          );
+        }
+
         // Atomically re-claim "active" so a concurrent cancel/depletion/expiry
         // can't be overwritten by this edit.
         promotion = await Promotion.findOneAndUpdate(
           { _id: req.params.id, status: "active" },
-          { $set: { discountPercent: pct, maxUnits: units, endsAt } },
+          {
+            $set: { discountPercent: pct, maxUnits: units, endsAt },
+            ...(newProductIds.length ? { $addToSet: { products: { $each: newProductIds } } } : {}),
+          },
           { new: true, session }
         );
         if (!promotion) return;
@@ -242,17 +276,23 @@ export const updatePromotion = async (req, res) => {
         // a product can have been detached from this promotion's own array
         // and claimed by a newer one in the gap between our read of `existing`
         // above and this transaction. Only touch products still actually tied
-        // back to this promotion, never overwrite a different, newer promo's price.
+        // back to this promotion (or ones we're claiming for the first time
+        // right now), never overwrite a different, newer promo's price.
+        const newIdSet = new Set(newProductIds.map((id) => id.toString()));
         const products = await Product.find({
           _id: { $in: promotion.products },
-          activePromotion: promotion._id,
+          $or: [{ activePromotion: promotion._id }, { _id: { $in: newProductIds } }],
         }).select("_id price").session(session);
         // Re-price each product from its own current price and push the new
         // end date — one at a time, a ClientSession can't run operations
         // concurrently.
         for (const p of products) {
           const salePrice = Math.round(p.price * (1 - pct / 100));
-          await Product.findByIdAndUpdate(p._id, { salePrice, saleEndsAt: endsAt }, { session });
+          await Product.findByIdAndUpdate(p._id, {
+            salePrice,
+            saleEndsAt: endsAt,
+            ...(newIdSet.has(p._id.toString()) ? { activePromotion: promotion._id } : {}),
+          }, { session });
         }
       });
     } finally {
