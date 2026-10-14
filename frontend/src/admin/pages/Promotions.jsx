@@ -403,22 +403,24 @@ export default function Promotions() {
                     </td>
                     <td style={{ fontSize: '1.2rem', color: 'var(--ink-2)' }}>{p.endsAt ? new Date(p.endsAt).toLocaleDateString() : '—'}</td>
                     <td><StatusBadge status={p.status} /></td>
-                    <td style={{ display: 'flex', gap: 6 }}>
-                      {p.status === 'active' && (
-                        <>
-                          <button className="adm-icon-btn" title="Edit promotion" onClick={() => setEditing(p)}>
-                            <i className="fas fa-pen" />
+                    <td>
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        {p.status === 'active' && (
+                          <>
+                            <button className="adm-icon-btn" title="Edit promotion" onClick={() => setEditing(p)}>
+                              <i className="fas fa-pen" />
+                            </button>
+                            <button className="adm-icon-btn danger" title="End promotion" onClick={() => handleCancel(p._id)} disabled={cancelling === p._id}>
+                              {cancelling === p._id ? <i className="fas fa-spinner fa-spin" /> : <i className="fas fa-stop" />}
+                            </button>
+                          </>
+                        )}
+                        {p.status !== 'active' && (
+                          <button className="adm-icon-btn danger" title="Delete permanently" onClick={() => handleDelete(p._id)} disabled={deleting === p._id}>
+                            {deleting === p._id ? <i className="fas fa-spinner fa-spin" /> : <i className="fas fa-trash" />}
                           </button>
-                          <button className="adm-icon-btn danger" title="End promotion" onClick={() => handleCancel(p._id)} disabled={cancelling === p._id}>
-                            {cancelling === p._id ? <i className="fas fa-spinner fa-spin" /> : <i className="fas fa-stop" />}
-                          </button>
-                        </>
-                      )}
-                      {p.status !== 'active' && (
-                        <button className="adm-icon-btn danger" title="Delete permanently" onClick={() => handleDelete(p._id)} disabled={deleting === p._id}>
-                          {deleting === p._id ? <i className="fas fa-spinner fa-spin" /> : <i className="fas fa-trash" />}
-                        </button>
-                      )}
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}

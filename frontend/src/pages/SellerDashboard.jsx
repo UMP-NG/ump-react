@@ -196,13 +196,19 @@ function OrderDetailModal({ order, onClose, navigate, onPreviewImage }) {
                 {o.items.map((it, i) => (
                   <div key={i} style={{ display: "flex", alignItems: "center", gap: 10 }}>
                     {it.product?.images?.[0]?.url && (
-                      <img
-                        src={it.product.images[0].url}
-                        alt=""
+                      <button
+                        type="button"
                         title="Click to view product image"
+                        aria-label={`View image for ${it.product.name || "product"}`}
                         onClick={() => onPreviewImage?.({ url: it.product.images[0].url, name: it.product.name })}
-                        style={{ width: 44, height: 44, borderRadius: 8, objectFit: "cover", flexShrink: 0, cursor: "zoom-in", border: "1px solid var(--line)" }}
-                      />
+                        style={{ padding: 0, border: "1px solid var(--line)", borderRadius: 8, flexShrink: 0, cursor: "zoom-in", background: "none", lineHeight: 0 }}
+                      >
+                        <img
+                          src={it.product.images[0].url}
+                          alt=""
+                          style={{ width: 44, height: 44, borderRadius: 7, objectFit: "cover", display: "block" }}
+                        />
+                      </button>
                     )}
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ fontWeight: 600, fontSize: "1.25rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.product?.name || it.name || "Item"}</div>
@@ -1909,8 +1915,10 @@ export default function SellerDashboard() {
                 const status = o.status || "pending";
                 const isDone = status === "completed" || status === "cancelled";
 
+                // deliveryMethod only ever holds "pickup" or "delivery" (see Order
+                // model) — there's no separate self/courier distinction at runtime.
                 const dm = o.deliveryMethod || "pickup";
-                const SHIPPED_LABEL = dm === "pickup" ? "Mark as Packed" : dm === "self" ? "Out for Delivery" : null; // null = Shipbubble handles its own button
+                const SHIPPED_LABEL = dm === "pickup" ? "Mark as Packed" : "Out for Delivery";
                 const NEXT_ACTION = {
                   pending:   { label: "Confirm Order", newStatus: "confirmed", color: "var(--accent)" },
                   confirmed: SHIPPED_LABEL ? { label: SHIPPED_LABEL, newStatus: "shipped", color: "#3b82f6" } : null,
@@ -1928,11 +1936,11 @@ export default function SellerDashboard() {
                         <div style={{ fontWeight: 700, fontSize: "1.4rem", marginTop: 2 }}>{o.buyer?.name || "Buyer"}</div>
                         <div style={{ fontSize: "1.15rem", color: "var(--ink-3)", marginTop: 1 }}>{new Date(o.createdAt || Date.now()).toLocaleDateString()}</div>
                         <div style={{ marginTop: 6, display: "inline-flex", alignItems: "center", gap: 5, padding: "3px 8px", borderRadius: 99, fontSize: "1.1rem", fontWeight: 600,
-                          background: dm === "pickup" ? "rgba(249,115,22,.1)" : dm === "self" ? "rgba(59,130,246,.1)" : "rgba(139,92,246,.1)",
-                          color: dm === "pickup" ? "var(--accent)" : dm === "self" ? "#3b82f6" : "#8b5cf6",
+                          background: dm === "pickup" ? "rgba(249,115,22,.1)" : "rgba(59,130,246,.1)",
+                          color: dm === "pickup" ? "var(--accent)" : "#3b82f6",
                         }}>
-                          <i className={`fas ${dm === "pickup" ? "fa-person-walking" : dm === "self" ? "fa-bicycle" : "fa-truck"}`} />
-                          {dm === "pickup" ? "Self Pickup" : dm === "self" ? "Seller Delivery" : "Courier"}
+                          <i className={`fas ${dm === "pickup" ? "fa-person-walking" : "fa-bicycle"}`} />
+                          {dm === "pickup" ? "Self Pickup" : "Seller Delivery"}
                           {o.deliveryFee > 0 && <span style={{ opacity: .7 }}>· {naira(o.deliveryFee)}</span>}
                         </div>
                       </div>
@@ -1954,13 +1962,19 @@ export default function SellerDashboard() {
                         <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "1.3rem", padding: "4px 0" }}>
                           <span style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
                             {it.product?.images?.[0]?.url && (
-                              <img
-                                src={it.product.images[0].url}
-                                alt=""
+                              <button
+                                type="button"
                                 title="Click to view product image"
+                                aria-label={`View image for ${it.product.name || "product"}`}
                                 onClick={(e) => { e.stopPropagation(); setImagePreview({ url: it.product.images[0].url, name: it.product.name }); }}
-                                style={{ width: 44, height: 44, borderRadius: 8, objectFit: "cover", flexShrink: 0, cursor: "zoom-in", border: "1px solid var(--line)" }}
-                              />
+                                style={{ padding: 0, border: "1px solid var(--line)", borderRadius: 8, flexShrink: 0, cursor: "zoom-in", background: "none", lineHeight: 0 }}
+                              >
+                                <img
+                                  src={it.product.images[0].url}
+                                  alt=""
+                                  style={{ width: 44, height: 44, borderRadius: 7, objectFit: "cover", display: "block" }}
+                                />
+                              </button>
                             )}
                             {it.status === "completed"
                               ? <i className="fas fa-circle-check" style={{ color: "#16a34a", fontSize: "1.1rem" }} />
@@ -1982,19 +1996,12 @@ export default function SellerDashboard() {
                           {o.buyer?.phone && <div style={{ marginTop: 3, color: "var(--ink-3)" }}>Contact: {o.buyer.phone}</div>}
                         </div>
                       )}
-                      {dm === "self" && (o.shippingAddress?.address || o.shippingAddress?.city) && !isDone && (
+                      {dm === "delivery" && (o.shippingAddress?.address || o.shippingAddress?.city) && !isDone && (
                         <div style={{ marginTop: 10, padding: "8px 10px", background: "rgba(59,130,246,.07)", border: "1px solid rgba(59,130,246,.2)", borderRadius: "var(--r-md)", fontSize: "1.2rem", color: "var(--ink-2)" }}>
                           <i className="fas fa-location-dot" style={{ color: "#3b82f6", marginRight: 6 }} />
                           <strong>Deliver to:</strong>{" "}
                           {[o.shippingAddress.address, o.shippingAddress.city, o.shippingAddress.state].filter(Boolean).join(", ")}
                           {o.buyer?.phone && <div style={{ marginTop: 3, color: "var(--ink-3)" }}>Buyer contact: {o.buyer.phone}</div>}
-                        </div>
-                      )}
-                      {dm === "shipbubble" && (o.shippingAddress?.address || o.shippingAddress?.city) && !isDone && (
-                        <div style={{ marginTop: 10, padding: "8px 10px", background: "rgba(139,92,246,.07)", border: "1px solid rgba(139,92,246,.2)", borderRadius: "var(--r-md)", fontSize: "1.2rem", color: "var(--ink-2)" }}>
-                          <i className="fas fa-truck" style={{ color: "#8b5cf6", marginRight: 6 }} />
-                          <strong>Courier delivers to:</strong>{" "}
-                          {[o.shippingAddress.address, o.shippingAddress.city, o.shippingAddress.state].filter(Boolean).join(", ")}
                         </div>
                       )}
                     </div>

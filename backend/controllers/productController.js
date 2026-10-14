@@ -15,7 +15,9 @@ const ON_SALE_EXPR = {
     { $ne: ["$salePrice", null] },
     { $gte: ["$salePrice", 0] },
     { $lt: ["$salePrice", "$price"] },
-    { $or: [{ $eq: ["$saleEndsAt", null] }, { $gt: ["$saleEndsAt", "$$NOW"] }] },
+    // $ifNull first — a product with no saleEndsAt field at all (not just an
+    // explicit null) must still count as "no end date", same as isOnSale().
+    { $or: [{ $eq: [{ $ifNull: ["$saleEndsAt", null] }, null] }, { $gt: ["$saleEndsAt", "$$NOW"] }] },
   ],
 };
 const filterValidObjectIds = (arr) => (arr === null ? null : (arr || []).filter((id) => mongoose.Types.ObjectId.isValid(id)));

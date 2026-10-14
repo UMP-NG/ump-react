@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { apiFetch } from "../utils/api";
 
@@ -27,6 +27,11 @@ export default function PaymentSuccess() {
   const [adCampaign, setAdCampaign] = useState(null);
   const [countdown, setCountdown] = useState(5);
   const [showDeliveryPopup, setShowDeliveryPopup] = useState(false);
+  const deliveryPopupRef = useRef(null);
+
+  useEffect(() => {
+    if (showDeliveryPopup) deliveryPopupRef.current?.focus();
+  }, [showDeliveryPopup]);
 
   useEffect(() => {
     if (isFlutterwave && flwStatus === "cancelled") {
@@ -282,14 +287,17 @@ export default function PaymentSuccess() {
 
       {showDeliveryPopup && (
         <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="delivery-popup-heading"
           style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.6)", zIndex: 500, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}
         >
-          <div className="card" style={{ maxWidth: 420, width: "100%", padding: 24, textAlign: "left" }}>
+          <div ref={deliveryPopupRef} tabIndex={-1} className="card" style={{ maxWidth: 420, width: "100%", padding: 24, textAlign: "left", outline: "none" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
               <div style={{ width: 44, height: 44, borderRadius: "50%", background: "rgba(249,115,22,.12)", color: "var(--accent)", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: "1.6rem", flexShrink: 0 }}>
                 <i className="fas fa-comment-dots" />
               </div>
-              <h2 style={{ margin: 0, fontSize: "1.7rem", fontWeight: 800 }}>
+              <h2 id="delivery-popup-heading" style={{ margin: 0, fontSize: "1.7rem", fontWeight: 800 }}>
                 {isMultiSeller ? "Message your sellers" : "Message your seller"}
               </h2>
             </div>

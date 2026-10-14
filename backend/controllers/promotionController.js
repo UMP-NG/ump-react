@@ -238,7 +238,15 @@ export const updatePromotion = async (req, res) => {
         );
         if (!promotion) return;
 
-        const products = await Product.find({ _id: { $in: promotion.products } }).select("_id price").session(session);
+        // activePromotion guard — same reasoning as revertPromotionProducts:
+        // a product can have been detached from this promotion's own array
+        // and claimed by a newer one in the gap between our read of `existing`
+        // above and this transaction. Only touch products still actually tied
+        // back to this promotion, never overwrite a different, newer promo's price.
+        const products = await Product.find({
+          _id: { $in: promotion.products },
+          activePromotion: promotion._id,
+        }).select("_id price").session(session);
         // Re-price each product from its own current price and push the new
         // end date — one at a time, a ClientSession can't run operations
         // concurrently.
