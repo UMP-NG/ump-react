@@ -225,11 +225,90 @@ function NewPromotionModal({ onClose, onCreated }) {
   );
 }
 
+function EditPromotionModal({ promotion, onClose, onUpdated }) {
+  const [discountPercent, setDiscountPercent] = useState(String(promotion.discountPercent));
+  const [maxUnits, setMaxUnits] = useState(String(promotion.maxUnits));
+  const [durationDays, setDurationDays] = useState('7');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  const iSty = { width: '100%', padding: '8px 12px', borderRadius: 'var(--r-md)', border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--ink-1)', fontSize: '1.3rem', fontFamily: 'var(--font-sans)', boxSizing: 'border-box' };
+  const lSty = { fontSize: '1.15rem', color: 'var(--ink-3)', fontWeight: 600, marginBottom: 4, display: 'block' };
+
+  async function handleSave() {
+    const pct = Number(discountPercent);
+    if (!pct || pct < 1 || pct > 95) { setError('Discount must be between 1 and 95%'); return; }
+    const units = Number(maxUnits);
+    if (!Number.isInteger(units) || units < 1) { setError('Max units must be a positive whole number'); return; }
+    const days = Number(durationDays);
+    if (!days || days < 1) { setError('Duration must be at least 1 day'); return; }
+
+    setError('');
+    setSaving(true);
+    try {
+      const res = await apiFetch(`/api/promotions/${promotion._id}`, {
+        method: 'PUT',
+        body: { discountPercent: pct, maxUnits: units, durationDays: days },
+      });
+      onUpdated(res.promotion);
+      onClose();
+    } catch (err) {
+      setError(err?.message || 'Failed to update promotion');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,.55)', zIndex: 400, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }} onClick={onClose}>
+      <div className="adm-card" style={{ maxWidth: 420, width: '100%', padding: 0 }} onClick={(e) => e.stopPropagation()}>
+        <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--line)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ fontWeight: 800, fontSize: '1.8rem' }}>Edit Promotion</div>
+          <button onClick={onClose} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: '1.8rem', color: 'var(--ink-3)' }}><i className="fas fa-xmark" /></button>
+        </div>
+
+        <div style={{ padding: 20 }}>
+          <p className="muted" style={{ fontSize: '1.2rem', marginTop: 0 }}>
+            {promotion.seller?.storeName || promotion.seller?.name || 'This store'} · {promotion.products?.length || 0} product(s)
+          </p>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
+            <div>
+              <label style={lSty}>Discount (%)</label>
+              <input style={iSty} type="number" min="1" max="95" value={discountPercent} onChange={(e) => setDiscountPercent(e.target.value)} />
+            </div>
+            <div>
+              <label style={lSty}>Max units</label>
+              <input style={iSty} type="number" min="1" value={maxUnits} onChange={(e) => setMaxUnits(e.target.value)} />
+            </div>
+          </div>
+          <div style={{ marginBottom: 14 }}>
+            <label style={lSty}>Days from now until it ends</label>
+            <input style={iSty} type="number" min="1" value={durationDays} onChange={(e) => setDurationDays(e.target.value)} placeholder="e.g. 7" />
+          </div>
+          <p className="muted" style={{ fontSize: '1.1rem', lineHeight: 1.5, margin: 0 }}>
+            Changing the discount re-prices every product in this promotion from its current price. The end date is reset to this many days from now.
+          </p>
+          {error && <div style={{ marginTop: 12, padding: '10px 14px', background: 'rgba(239,68,68,.08)', borderRadius: 'var(--r-md)', color: '#dc2626', fontSize: '1.25rem' }}>{error}</div>}
+        </div>
+
+        <div style={{ padding: '14px 20px', borderTop: '1px solid var(--line)', display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+          <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
+            {saving ? <i className="fas fa-spinner fa-spin" /> : 'Save changes'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Promotions() {
   const [promotions, setPromotions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showNew, setShowNew] = useState(false);
+  const [editing, setEditing] = useState(null);
   const [cancelling, setCancelling] = useState(null);
+  const [deleting, setDeleting] = useState(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -255,11 +334,29 @@ export default function Promotions() {
     finally { setCancelling(null); }
   }
 
+  function handleUpdated(promotion) {
+    setPromotions((prev) => prev.map((p) => p._id === promotion._id ? promotion : p));
+  }
+
+  async function handleDelete(id) {
+    if (!confirm('Permanently delete this promotion record? This cannot be undone.')) return;
+    setDeleting(id);
+    try {
+      await apiFetch(`/api/promotions/${id}/permanent`, { method: 'DELETE' });
+      setPromotions((prev) => prev.filter((p) => p._id !== id));
+    } catch (err) {
+      alert(err?.message || 'Failed to delete promotion');
+    } finally {
+      setDeleting(null);
+    }
+  }
+
   const activeCount = promotions.filter((p) => p.status === 'active').length;
 
   return (
     <>
       {showNew && <NewPromotionModal onClose={() => setShowNew(false)} onCreated={handleCreated} />}
+      {editing && <EditPromotionModal promotion={editing} onClose={() => setEditing(null)} onUpdated={handleUpdated} />}
 
       <div className="adm-page-head">
         <div className="left">
@@ -291,7 +388,7 @@ export default function Promotions() {
                   <th>Units sold</th>
                   <th>Ends</th>
                   <th>Status</th>
-                  <th style={{ width: 90 }}>Actions</th>
+                  <th style={{ width: 120 }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -306,10 +403,20 @@ export default function Promotions() {
                     </td>
                     <td style={{ fontSize: '1.2rem', color: 'var(--ink-2)' }}>{p.endsAt ? new Date(p.endsAt).toLocaleDateString() : '—'}</td>
                     <td><StatusBadge status={p.status} /></td>
-                    <td>
+                    <td style={{ display: 'flex', gap: 6 }}>
                       {p.status === 'active' && (
-                        <button className="adm-icon-btn danger" title="End promotion" onClick={() => handleCancel(p._id)} disabled={cancelling === p._id}>
-                          {cancelling === p._id ? <i className="fas fa-spinner fa-spin" /> : <i className="fas fa-stop" />}
+                        <>
+                          <button className="adm-icon-btn" title="Edit promotion" onClick={() => setEditing(p)}>
+                            <i className="fas fa-pen" />
+                          </button>
+                          <button className="adm-icon-btn danger" title="End promotion" onClick={() => handleCancel(p._id)} disabled={cancelling === p._id}>
+                            {cancelling === p._id ? <i className="fas fa-spinner fa-spin" /> : <i className="fas fa-stop" />}
+                          </button>
+                        </>
+                      )}
+                      {p.status !== 'active' && (
+                        <button className="adm-icon-btn danger" title="Delete permanently" onClick={() => handleDelete(p._id)} disabled={deleting === p._id}>
+                          {deleting === p._id ? <i className="fas fa-spinner fa-spin" /> : <i className="fas fa-trash" />}
                         </button>
                       )}
                     </td>

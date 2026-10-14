@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { MiniStat } from '../components/StatCard';
 import { apiFetch } from '../../utils/api';
 
@@ -14,6 +15,7 @@ const STATUS_COLOR = {
   pending: 'gray', cancelled: 'red', disputed: 'red', 'pending-verification': 'gray',
 };
 const PAY_COLOR = { paystack: 'blue', wallet: 'purple', cash: 'gray', transfer: 'amber', flutterwave: 'amber' };
+const DELIVERY_COLOR = { pickup: 'purple', delivery: 'blue' };
 
 const ALL_STATUSES = ['pending', 'confirmed', 'shipped', 'ready_for_pickup', 'completed', 'cancelled', 'disputed'];
 
@@ -137,21 +139,22 @@ export default function Orders() {
             <thead>
               <tr>
                 <th>Order</th><th>Buyer</th><th>Seller</th><th>Items</th>
-                <th>Total</th><th>Payment</th><th>Status</th><th>Placed</th><th></th>
+                <th>Total</th><th>Payment</th><th>Fulfilment</th><th>Status</th><th>Placed</th><th></th>
               </tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan="9" style={{ textAlign: 'center', padding: 32, color: 'var(--ink-3)' }}>
+                <tr><td colSpan="10" style={{ textAlign: 'center', padding: 32, color: 'var(--ink-3)' }}>
                   <i className="fa-solid fa-circle-notch fa-spin"></i>
                 </td></tr>
               ) : displayed.length === 0 ? (
-                <tr><td colSpan="9">
+                <tr><td colSpan="10">
                   <div className="adm-empty"><i className="fa-solid fa-receipt"></i><p>No orders found</p></div>
                 </td></tr>
               ) : displayed.map(o => {
                 const status     = o.status || 'pending';
                 const payMethod  = (o.paymentMethod || 'paystack').toLowerCase();
+                const delivery   = o.deliveryMethod || 'pickup';
                 return (
                   <tr key={o._id} onClick={() => setDrawer(o)} style={{ cursor: 'pointer' }}>
                     <td className="mono" style={{ fontSize: '1.2rem' }}>{o.orderRef || ('#' + o._id?.slice(-6).toUpperCase())}</td>
@@ -165,6 +168,7 @@ export default function Orders() {
                     <td className="muted">{o.items?.length ?? 0}</td>
                     <td className="amount"><span className="naira"></span>{(o.totalAmount || 0).toLocaleString()}</td>
                     <td><span className={`pill ${PAY_COLOR[payMethod] || 'gray'}`}>{o.paymentMethod || 'Paystack'}</span></td>
+                    <td><span className={`pill ${DELIVERY_COLOR[delivery] || 'gray'}`}><i className={`fa-solid ${delivery === 'pickup' ? 'fa-store' : 'fa-truck'}`} style={{ marginRight: 4 }}></i>{delivery}</span></td>
                     <td><span className={`pill dot ${STATUS_COLOR[status] || 'gray'}`}>{status}</span></td>
                     <td className="muted">
                       {o.createdAt ? new Date(o.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—'}
@@ -211,6 +215,7 @@ export default function Orders() {
 }
 
 function OrderDrawer({ order, onClose, onUpdateStatus }) {
+  const navigate = useNavigate();
   const [updating, setUpdating] = useState(false);
   const [currentStatus, setCurrentStatus] = useState(order.status);
 
@@ -262,6 +267,15 @@ function OrderDrawer({ order, onClose, onUpdateStatus }) {
             </div>
           </div>
 
+          {/* Fulfilment */}
+          <div className="adm-section-h">Fulfilment</div>
+          <div style={{ marginBottom: 12 }}>
+            <span className={`pill ${DELIVERY_COLOR[order.deliveryMethod || 'pickup'] || 'gray'}`}>
+              <i className={`fa-solid ${(order.deliveryMethod || 'pickup') === 'pickup' ? 'fa-store' : 'fa-truck'}`} style={{ marginRight: 4 }}></i>
+              {order.deliveryMethod === 'delivery' ? 'Delivery' : 'Self pickup'}
+            </span>
+          </div>
+
           {/* Status update */}
           <div className="adm-section-h">Order status</div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
@@ -284,6 +298,15 @@ function OrderDrawer({ order, onClose, onUpdateStatus }) {
             <span className="k">Name</span><span className="v">{order.buyer?.name || '—'}</span>
             <span className="k">Email</span><span className="v">{order.buyer?.email || '—'}</span>
           </div>
+          {order.buyer?._id && (
+            <button
+              className="abtn ghost sm"
+              style={{ width: '100%', marginTop: 6, marginBottom: 4 }}
+              onClick={() => navigate(`/messages?with=${order.buyer._id}&name=${encodeURIComponent(order.buyer?.name || 'Buyer')}`)}
+            >
+              <i className="fa-solid fa-comment-dots"></i> Message buyer
+            </button>
+          )}
 
           <div className="adm-section-h">Seller</div>
           <div className="adm-kv">

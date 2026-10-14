@@ -165,7 +165,7 @@ function StatusBadge({ status }) {
 // ─── Order detail modal — brings the seller view up to parity with the admin
 // order drawer (buyer email/phone, payment method/status/reference, notes,
 // full address + recipient name, full timestamp) ──────────────────────────────
-function OrderDetailModal({ order, onClose }) {
+function OrderDetailModal({ order, onClose, navigate, onPreviewImage }) {
   const o = order;
   const addr = o.shippingAddress;
   const kv = (k, v) => v ? (
@@ -189,10 +189,45 @@ function OrderDetailModal({ order, onClose }) {
         </div>
 
         <div style={{ padding: 20 }}>
+          {o.items?.length > 0 && (
+            <>
+              <div style={{ fontSize: "1.1rem", fontWeight: 700, color: "var(--ink-3)", textTransform: "uppercase", letterSpacing: ".06em", margin: "0 0 6px" }}>Items</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 18 }}>
+                {o.items.map((it, i) => (
+                  <div key={i} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    {it.product?.images?.[0]?.url && (
+                      <img
+                        src={it.product.images[0].url}
+                        alt=""
+                        title="Click to view product image"
+                        onClick={() => onPreviewImage?.({ url: it.product.images[0].url, name: it.product.name })}
+                        style={{ width: 44, height: 44, borderRadius: 8, objectFit: "cover", flexShrink: 0, cursor: "zoom-in", border: "1px solid var(--line)" }}
+                      />
+                    )}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 600, fontSize: "1.25rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.product?.name || it.name || "Item"}</div>
+                      <div style={{ fontSize: "1.1rem", color: "var(--ink-3)" }}>Qty: {it.quantity || 1}</div>
+                    </div>
+                    <div style={{ fontWeight: 700, fontSize: "1.2rem", flexShrink: 0 }}>{naira((it.price || 0) * (it.quantity || 1))}</div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
           <div style={{ fontSize: "1.1rem", fontWeight: 700, color: "var(--ink-3)", textTransform: "uppercase", letterSpacing: ".06em", margin: "0 0 6px" }}>Buyer</div>
           {kv("Name", o.buyer?.name)}
           {kv("Email", o.buyer?.email)}
           {kv("Phone", o.buyer?.phone)}
+          {o.buyer?._id && navigate && (
+            <button
+              className="btn btn-ghost btn-sm"
+              style={{ marginTop: 8, width: "100%" }}
+              onClick={() => navigate(`/messages?with=${o.buyer._id}&name=${encodeURIComponent(o.buyer?.name || "Buyer")}`)}
+            >
+              <i className="fas fa-comment-dots" /> Message buyer
+            </button>
+          )}
 
           <div style={{ fontSize: "1.1rem", fontWeight: 700, color: "var(--ink-3)", textTransform: "uppercase", letterSpacing: ".06em", margin: "18px 0 6px" }}>Payment</div>
           {kv("Method", o.paymentMethod)}
@@ -1171,6 +1206,7 @@ export default function SellerDashboard() {
   const [statusUpdating, setStatusUpdating] = useState({});
   const [confirmCancel, setConfirmCancel] = useState(null);
   const [orderDetail, setOrderDetail] = useState(null);
+  const [imagePreview, setImagePreview] = useState(null); // { url, name }
 
   // Products
   const [quickEdit, setQuickEdit] = useState(null);
@@ -1916,11 +1952,20 @@ export default function SellerDashboard() {
                     <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--line)" }}>
                       {(o.items || []).map((it, i) => (
                         <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "1.3rem", padding: "4px 0" }}>
-                          <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                          <span style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+                            {it.product?.images?.[0]?.url && (
+                              <img
+                                src={it.product.images[0].url}
+                                alt=""
+                                title="Click to view product image"
+                                onClick={(e) => { e.stopPropagation(); setImagePreview({ url: it.product.images[0].url, name: it.product.name }); }}
+                                style={{ width: 44, height: 44, borderRadius: 8, objectFit: "cover", flexShrink: 0, cursor: "zoom-in", border: "1px solid var(--line)" }}
+                              />
+                            )}
                             {it.status === "completed"
                               ? <i className="fas fa-circle-check" style={{ color: "#16a34a", fontSize: "1.1rem" }} />
                               : <i className="fas fa-circle" style={{ color: "var(--ink-4)", fontSize: "1.1rem" }} />}
-                            {it.product?.name || it.name || "Item"} <span style={{ color: "var(--ink-3)" }}>×{it.quantity || 1}</span>
+                            <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.product?.name || it.name || "Item"} <span style={{ color: "var(--ink-3)" }}>×{it.quantity || 1}</span></span>
                           </span>
                           <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
                             <span style={{ fontWeight: 600 }}>{naira((it.price || 0) * (it.quantity || 1))}</span>
@@ -2733,7 +2778,30 @@ export default function SellerDashboard() {
       )}
       {quickEdit && <QuickEditModal product={quickEdit} onClose={() => setQuickEdit(null)} showToast={showToast} onSave={(updated) => { setProducts((p) => p.map((x) => x._id === updated._id ? { ...x, ...updated } : x)); setQuickEdit(null); }} />}
       {addProductOpen && <AddProductModal onClose={() => setAddProductOpen(false)} showToast={showToast} onSave={(result) => { if (result) setProducts((p) => [...(Array.isArray(result) ? result : [result]), ...p]); setAddProductOpen(false); }} />}
-      {orderDetail && <OrderDetailModal order={orderDetail} onClose={() => setOrderDetail(null)} />}
+      {orderDetail && <OrderDetailModal order={orderDetail} onClose={() => setOrderDetail(null)} navigate={navigate} onPreviewImage={setImagePreview} />}
+      {imagePreview && (
+        <div
+          style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.85)", zIndex: 400, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 24 }}
+          onClick={() => setImagePreview(null)}
+        >
+          <button
+            onClick={() => setImagePreview(null)}
+            aria-label="Close"
+            style={{ position: "absolute", top: 16, right: 16, border: "none", background: "rgba(255,255,255,.12)", color: "#fff", width: 40, height: 40, borderRadius: "50%", cursor: "pointer", fontSize: "1.6rem" }}
+          >
+            <i className="fas fa-xmark" />
+          </button>
+          <img
+            src={imagePreview.url}
+            alt={imagePreview.name || ""}
+            onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: "min(90vw, 480px)", maxHeight: "70vh", objectFit: "contain", borderRadius: 12, background: "#fff" }}
+          />
+          {imagePreview.name && (
+            <div style={{ marginTop: 14, color: "#fff", fontSize: "1.4rem", fontWeight: 600, textAlign: "center", maxWidth: 480 }}>{imagePreview.name}</div>
+          )}
+        </div>
+      )}
 
       <FloatingChat />
       <div className="seller-dash">

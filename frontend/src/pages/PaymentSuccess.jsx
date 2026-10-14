@@ -26,6 +26,7 @@ export default function PaymentSuccess() {
   const [subType, setSubType]     = useState(null);   // "seller" | "provider"
   const [adCampaign, setAdCampaign] = useState(null);
   const [countdown, setCountdown] = useState(5);
+  const [showDeliveryPopup, setShowDeliveryPopup] = useState(false);
 
   useEffect(() => {
     if (isFlutterwave && flwStatus === "cancelled") {
@@ -82,8 +83,17 @@ export default function PaymentSuccess() {
     return () => { clearTimeout(timer); controller.abort(); };
   }, [flwTransactionId, flwStatus, reference, isFlutterwave, isSubscription]);
 
+  // Order orders (not subscriptions/ads) with a known seller get an enforcing
+  // popup prompting the buyer to message them about pickup/delivery before
+  // the countdown is allowed to carry them away to /orders.
   useEffect(() => {
-    if (status !== "success") return;
+    if (status === "success" && !isSubscription && !isAd && orders.some((o) => o.seller)) {
+      setShowDeliveryPopup(true);
+    }
+  }, [status, isSubscription, isAd, orders]);
+
+  useEffect(() => {
+    if (status !== "success" || showDeliveryPopup) return;
     const dest = isSubscription
       ? (subType === "provider" ? "/provider-analytics" : "/seller-dashboard")
       : isAd ? "/seller-dashboard"
@@ -91,7 +101,7 @@ export default function PaymentSuccess() {
     if (countdown <= 0) { navigate(dest); return; }
     const t = setTimeout(() => setCountdown((c) => c - 1), 1000);
     return () => clearTimeout(t);
-  }, [status, countdown, navigate, isSubscription, subType, isAd]);
+  }, [status, countdown, navigate, isSubscription, subType, isAd, showDeliveryPopup]);
 
   if (status === "verifying") {
     return (
@@ -269,6 +279,45 @@ export default function PaymentSuccess() {
           </button>
         </div>
       </div>
+
+      {showDeliveryPopup && (
+        <div
+          style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.6)", zIndex: 500, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}
+        >
+          <div className="card" style={{ maxWidth: 420, width: "100%", padding: 24, textAlign: "left" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+              <div style={{ width: 44, height: 44, borderRadius: "50%", background: "rgba(249,115,22,.12)", color: "var(--accent)", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: "1.6rem", flexShrink: 0 }}>
+                <i className="fas fa-comment-dots" />
+              </div>
+              <h2 style={{ margin: 0, fontSize: "1.7rem", fontWeight: 800 }}>
+                {isMultiSeller ? "Message your sellers" : "Message your seller"}
+              </h2>
+            </div>
+            <p style={{ margin: "0 0 16px", color: "var(--ink-2)", fontSize: "1.25rem", lineHeight: 1.5 }}>
+              {isMultiSeller
+                ? "Reach out to each seller now to confirm pickup or delivery details — this avoids delays getting your items."
+                : `Reach out now to confirm ${orders[0]?.deliveryMethod === "pickup" ? "pickup" : "delivery"} details — this avoids delays getting your item${orders[0]?.deliveryMethod ? "" : "s"}.`}
+            </p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 14 }}>
+              {orders.filter((o) => o.seller).map((o) => (
+                <button
+                  key={o._id?.toString()}
+                  className="btn btn-primary"
+                  style={{ width: "100%", justifyContent: "flex-start", gap: 8 }}
+                  onClick={() => navigate(`/messages?with=${o.seller}&name=${encodeURIComponent(o.storeName || "Seller")}`)}
+                >
+                  <i className="fas fa-comment-dots" />
+                  Message {o.storeName || "seller"}
+                  {o.deliveryMethod && <span style={{ opacity: .85, fontWeight: 400 }}>&nbsp;· {o.deliveryMethod === "pickup" ? "pickup" : "delivery"}</span>}
+                </button>
+              ))}
+            </div>
+            <button className="btn btn-ghost btn-block" onClick={() => setShowDeliveryPopup(false)}>
+              I'll do this later
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

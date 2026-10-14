@@ -1225,7 +1225,11 @@ function MsgThread({ convo, onBack }) {
       <form onSubmit={send} className="msg-input-bar">
         <div className={`msg-input-pill${iAmAdmin ? " admin" : ""}`}>
           {iAmAdmin && (
-            <i className="fa-solid fa-shield-halved" style={{ color: "#f59e0b", fontSize: "1.1rem", marginRight: 8, flexShrink: 0 }} />
+            // .msg-input-pill aligns children to flex-end (so the pill grows
+            // upward as the textarea gains lines) — without alignSelf this
+            // icon sinks to the textarea's bottom edge instead of sitting on
+            // the text baseline, making it look like it's falling out of the pill.
+            <i className="fa-solid fa-shield-halved" style={{ color: "#f59e0b", fontSize: "1.1rem", marginRight: 8, flexShrink: 0, alignSelf: "center" }} />
           )}
           <textarea
             ref={inputRef}

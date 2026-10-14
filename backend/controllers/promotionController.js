@@ -195,6 +195,93 @@ export const cancelPromotion = async (req, res) => {
   }
 };
 
+// PUT /api/promotions/:id — admin-only, edits discount/cap/duration on a
+// still-active promotion (editing a terminal-status one doesn't make sense).
+export const updatePromotion = async (req, res) => {
+  try {
+    const { discountPercent, maxUnits, durationDays } = req.body;
+
+    const pct = Number(discountPercent);
+    if (!Number.isFinite(pct) || pct < 1 || pct > 95) {
+      return res.status(400).json({ message: "Discount must be a percentage between 1 and 95" });
+    }
+    const units = Number(maxUnits);
+    if (!Number.isInteger(units) || units < 1) {
+      return res.status(400).json({ message: "Max units must be a positive whole number" });
+    }
+    const days = Number(durationDays);
+    if (!Number.isFinite(days) || days < 1) {
+      return res.status(400).json({ message: "Duration must be at least 1 day" });
+    }
+
+    const existing = await Promotion.findById(req.params.id).select("status unitsSold").lean();
+    if (!existing) return res.status(404).json({ message: "Promotion not found" });
+    if (existing.status !== "active") {
+      return res.status(400).json({ message: `Cannot edit a promotion that is already ${existing.status}` });
+    }
+    if (units < existing.unitsSold) {
+      return res.status(400).json({ message: `Max units can't be less than the ${existing.unitsSold} already sold` });
+    }
+
+    const endsAt = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+
+    let promotion;
+    const session = await mongoose.startSession();
+    try {
+      await session.withTransaction(async () => {
+        // Atomically re-claim "active" so a concurrent cancel/depletion/expiry
+        // can't be overwritten by this edit.
+        promotion = await Promotion.findOneAndUpdate(
+          { _id: req.params.id, status: "active" },
+          { $set: { discountPercent: pct, maxUnits: units, endsAt } },
+          { new: true, session }
+        );
+        if (!promotion) return;
+
+        const products = await Product.find({ _id: { $in: promotion.products } }).select("_id price").session(session);
+        // Re-price each product from its own current price and push the new
+        // end date — one at a time, a ClientSession can't run operations
+        // concurrently.
+        for (const p of products) {
+          const salePrice = Math.round(p.price * (1 - pct / 100));
+          await Product.findByIdAndUpdate(p._id, { salePrice, saleEndsAt: endsAt }, { session });
+        }
+      });
+    } finally {
+      session.endSession();
+    }
+
+    if (!promotion) {
+      const latest = await Promotion.findById(req.params.id).select("status").lean();
+      return res.status(400).json({ message: `Cannot edit a promotion that is already ${latest?.status || "no longer active"}` });
+    }
+
+    res.json({ message: "Promotion updated", promotion: await shapePromotion(promotion._id) });
+  } catch (err) {
+    logger.error("updatePromotion:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
+// DELETE /api/promotions/:id/permanent — admin-only, permanently removes a
+// promotion record. Only once it's no longer active: deleting an active
+// promotion's document without reverting first would leave its products
+// stuck at the discounted price forever (nothing left to revert them).
+export const deletePromotion = async (req, res) => {
+  try {
+    const existing = await Promotion.findById(req.params.id).select("status").lean();
+    if (!existing) return res.status(404).json({ message: "Promotion not found" });
+    if (existing.status === "active") {
+      return res.status(400).json({ message: "End this promotion before deleting it" });
+    }
+    await Promotion.deleteOne({ _id: req.params.id });
+    res.json({ message: "Promotion deleted" });
+  } catch (err) {
+    logger.error("deletePromotion:", err);
+    res.status(500).json({ message: "Server error" });
+  }
+};
+
 // Called from confirmOrders.js whenever a promoted product's order is paid
 // for — increments the promotion's unit counter and reverts/notifies once
 // the cap is reached. Exported for reuse, not an HTTP handler.

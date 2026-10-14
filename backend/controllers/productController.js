@@ -7,6 +7,17 @@ import logger from "../utils/logger.js";
 import { notify } from "../utils/notify.js";
 
 const escapeRegex = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+// Mongo aggregation-expression mirror of utils/pricing.js's isOnSale() — used
+// to bubble discounted products to the top of the public listing.
+const ON_SALE_EXPR = {
+  $and: [
+    { $ne: ["$salePrice", null] },
+    { $gte: ["$salePrice", 0] },
+    { $lt: ["$salePrice", "$price"] },
+    { $or: [{ $eq: ["$saleEndsAt", null] }, { $gt: ["$saleEndsAt", "$$NOW"] }] },
+  ],
+};
 const filterValidObjectIds = (arr) => (arr === null ? null : (arr || []).filter((id) => mongoose.Types.ObjectId.isValid(id)));
 
 // Sellers only ever get offered active sections in the listing form's
@@ -284,6 +295,7 @@ export const getAllProducts = async (req, res) => {
         Product.aggregate([
           { $match: query },
           { $addFields: {
+              _onSale: { $cond: [ON_SALE_EXPR, 1, 0] },
               _rank: {
                 $add: [
                   { $rand: {} },
@@ -292,9 +304,11 @@ export const getAllProducts = async (req, res) => {
               },
             },
           },
-          { $sort: { _rank: -1 } },
+          // Discounted products always precede non-discounted ones; within
+          // each group the existing random/video-boosted order still applies.
+          { $sort: { _onSale: -1, _rank: -1 } },
           { $limit: safeLimit },
-          { $project: { viewedBy: 0, reviews: 0, _rank: 0 } },
+          { $project: { viewedBy: 0, reviews: 0, _rank: 0, _onSale: 0 } },
         ]),
         Product.countDocuments(query),
       ]);
@@ -311,18 +325,23 @@ export const getAllProducts = async (req, res) => {
       else if (sort === "price-desc" || sort === "price_desc") sortObj = { price:     -1, _id: -1 };
       else if (sort === "newest")                              sortObj = { createdAt: -1, _id: -1 };
 
-      const [fetchedProducts, total] = await Promise.all([
-        Product.find(query)
-          .populate("seller",   "name email storeName")
-          .populate("category", "name")
-          .select("-viewedBy -reviews")
-          .sort(sortObj)
-          .lean()
-          .skip(skip)
-          .limit(safeLimit),
+      // Discounted products always precede non-discounted ones, then the
+      // chosen sort applies within each group.
+      const [sorted, total] = await Promise.all([
+        Product.aggregate([
+          { $match: query },
+          { $addFields: { _onSale: { $cond: [ON_SALE_EXPR, 1, 0] } } },
+          { $sort: { _onSale: -1, ...sortObj } },
+          { $skip: skip },
+          { $limit: safeLimit },
+          { $project: { viewedBy: 0, reviews: 0, _onSale: 0 } },
+        ]),
         Product.countDocuments(query),
       ]);
-      products = fetchedProducts;
+      products = await Product.populate(sorted, [
+        { path: "seller",   select: "name email storeName", model: "User" },
+        { path: "category", select: "name",                 model: "Category" },
+      ]);
       return res.status(200).json({ success: true, count: products.length, total, products });
     }
   } catch (error) {

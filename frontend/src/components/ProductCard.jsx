@@ -137,7 +137,7 @@ function ProductCard({ product, variant = "always", onAddToCart }) {
         <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 4 }}>
           {isActiveSale ? (
             <div style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
-              <div className="product-price" style={{ color: "#ef4444" }}>{naira(product.salePrice)}</div>
+              <div className="product-price" style={{ color: "#ff3b3b", fontWeight: 800 }}>{naira(product.salePrice)}</div>
               <div style={{ fontSize: "1rem", color: "var(--ink-4)", textDecoration: "line-through" }}>{naira(product.price)}</div>
             </div>
           ) : (

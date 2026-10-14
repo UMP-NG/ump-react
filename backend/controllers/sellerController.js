@@ -5,6 +5,7 @@ import Service from "../models/Service.js";
 import PushSub from "../models/PushSub.js";
 import logger from "../utils/logger.js";
 import { notify } from "../utils/notify.js";
+import { isOnSale } from "../utils/pricing.js";
 
 // Profile fields the seller may set themselves. Trust/financial/ownership
 // fields (isVerified, isOfficial, isSuspended, isSubscribed, pendingPayout,
@@ -180,9 +181,13 @@ export const getSellerById = async (req, res) => {
       seller: seller.user?._id || seller.user,
       isRemoved: { $ne: true },
     })
-      .select("name price images category stock rating variants isAvailable")
+      .select("name price salePrice saleEndsAt images category stock rating variants isAvailable createdAt")
       .sort({ createdAt: -1 })
       .lean();
+
+    // Discounted products surface first — stable sort preserves the
+    // createdAt ordering within each (on-sale / not-on-sale) group.
+    products.sort((a, b) => (isOnSale(b) ? 1 : 0) - (isOnSale(a) ? 1 : 0));
 
     const currentUserId = req.user?._id?.toString();
     const followersArr = seller.followers || [];
