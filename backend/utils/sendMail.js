@@ -1,5 +1,4 @@
 import nodemailer from "nodemailer";
-import sgMail from "@sendgrid/mail";
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -155,30 +154,38 @@ const buildContent = (options) => {
   return { subject, htmlContent, textContent };
 };
 
-const sendViaSendGrid = async ({ to, from, subject, html, text }) => {
-  sgMail.setApiKey(process.env.SENDGRID_API_KEY);
-  await withTimeout(
-    sgMail.send({ to, from, subject, html, text }),
-    MAIL_TIMEOUT_MS
-  );
-  return { messageId: `sendgrid-${Date.now()}` };
-};
+const ZOHO_PORTS = [
+  { port: 587, secure: false, requireTLS: true }, // STARTTLS
+  { port: 465, secure: true },                    // implicit TLS — fallback for
+                                                    // networks that block/drop 587
+];
 
 const sendViaZoho = async (mailOptions) => {
-  const transporter = nodemailer.createTransport({
-    host: "smtppro.zoho.com",
-    port: 587,
-    secure: false,
-    requireTLS: true,
-    connectionTimeout: 10000,
-    greetingTimeout: 10000,
-    socketTimeout: 10000,
-    auth: {
-      user: process.env.ZOHO_SMTP_USER,
-      pass: process.env.ZOHO_SMTP_PASS,
-    },
-  });
-  return withTimeout(transporter.sendMail(mailOptions), MAIL_TIMEOUT_MS);
+  let lastErr;
+  for (const { port, secure, requireTLS } of ZOHO_PORTS) {
+    const transporter = nodemailer.createTransport({
+      host: "smtppro.zoho.com",
+      port,
+      secure,
+      ...(requireTLS ? { requireTLS: true } : {}),
+      connectionTimeout: 10000,
+      greetingTimeout: 10000,
+      socketTimeout: 10000,
+      auth: {
+        user: process.env.ZOHO_SMTP_USER,
+        pass: process.env.ZOHO_SMTP_PASS,
+      },
+    });
+    try {
+      return await withTimeout(transporter.sendMail(mailOptions), MAIL_TIMEOUT_MS);
+    } catch (err) {
+      lastErr = err;
+      // Only worth retrying on the other port for a connection-level failure —
+      // an auth/rejection error will fail identically on either port.
+      if (!/timeout|ECONNREFUSED|ETIMEDOUT|ESOCKET/i.test(err.message)) throw err;
+    }
+  }
+  throw lastErr;
 };
 
 const sendMail = async (options) => {
@@ -186,49 +193,25 @@ const sendMail = async (options) => {
     throw new Error("Recipient email is required");
   }
 
-  const hasSendGrid = !!process.env.SENDGRID_API_KEY;
   const hasZoho = !!(process.env.ZOHO_SMTP_USER && process.env.ZOHO_SMTP_PASS);
-
-  if (!hasSendGrid && !hasZoho) {
+  if (!hasZoho) {
     console.warn(`⚠️  [MAIL] No mail credentials configured — skipping email`);
     return { skipped: true };
   }
 
   const maskedEmail = options.email.replace(/(?<=.{2}).(?=[^@]*@)/g, "*");
   const { subject, htmlContent, textContent } = buildContent(options);
-
-  const FROM_SG   = process.env.SENDGRID_FROM_EMAIL || "admin@myump.com.ng";
   const FROM_ZOHO = `"UMP Official" <${process.env.ZOHO_SMTP_USER}>`;
 
-  const errors = [];
-
-  // 1️⃣ SendGrid — primary
-  if (hasSendGrid) {
-    try {
-      console.log(`📧 [MAIL] Sending via SendGrid to ${maskedEmail}`);
-      const info = await sendViaSendGrid({ to: options.email, from: FROM_SG, subject, html: htmlContent, text: textContent });
-      console.log(`✅ [MAIL] Sent via SendGrid to ${maskedEmail}`);
-      return info;
-    } catch (err) {
-      console.warn(`⚠️  [MAIL] SendGrid failed: ${err.message}`);
-      errors.push(`SendGrid: ${err.message}`);
-    }
+  try {
+    console.log(`📧 [MAIL] Sending via Zoho to ${maskedEmail}`);
+    const info = await sendViaZoho({ from: FROM_ZOHO, to: options.email, subject, text: textContent, html: htmlContent });
+    console.log(`✅ [MAIL] Sent via Zoho to ${maskedEmail}`);
+    return info;
+  } catch (err) {
+    console.warn(`⚠️  [MAIL] Zoho failed: ${err.message}`);
+    throw new Error(`Email delivery failed — Zoho: ${err.message}`);
   }
-
-  // 2️⃣ Zoho SMTP — fallback (port 587 STARTTLS)
-  if (hasZoho) {
-    try {
-      console.log(`📧 [MAIL] Falling back to Zoho for ${maskedEmail}`);
-      const info = await sendViaZoho({ from: FROM_ZOHO, to: options.email, subject, text: textContent, html: htmlContent });
-      console.log(`✅ [MAIL] Sent via Zoho to ${maskedEmail}`);
-      return info;
-    } catch (err) {
-      console.warn(`⚠️  [MAIL] Zoho failed: ${err.message}`);
-      errors.push(`Zoho: ${err.message}`);
-    }
-  }
-
-  throw new Error(`Email delivery failed — ${errors.join(" | ")}`);
 };
 
 export default sendMail;
