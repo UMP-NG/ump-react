@@ -3,16 +3,6 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
-const MAIL_TIMEOUT_MS = 15000;
-
-const withTimeout = (promise, ms) =>
-  Promise.race([
-    promise,
-    new Promise((_, reject) =>
-      setTimeout(() => reject(new Error(`Mail timed out after ${ms}ms`)), ms)
-    ),
-  ]);
-
 const escapeHtml = (str) =>
   String(str)
     .replace(/&/g, "&amp;")
@@ -160,6 +150,12 @@ const ZOHO_PORTS = [
                                                     // networks that block/drop 587
 ];
 
+// Nodemailer's own codes for a connection that never got established (DNS,
+// TCP connect, SMTP greeting, or socket all time out/fail the same way) —
+// safe to retry on the other port. Anything else (EAUTH, EENVELOPE, EMESSAGE)
+// would fail identically regardless of port, so don't waste a retry on it.
+const RETRYABLE_CODES = new Set(["ECONNECTION", "ETIMEDOUT", "ESOCKET", "ECONNREFUSED", "EDNS"]);
+
 const sendViaZoho = async (mailOptions) => {
   let lastErr;
   for (const { port, secure, requireTLS } of ZOHO_PORTS) {
@@ -177,12 +173,15 @@ const sendViaZoho = async (mailOptions) => {
       },
     });
     try {
-      return await withTimeout(transporter.sendMail(mailOptions), MAIL_TIMEOUT_MS);
+      // No outer race here — connectionTimeout/greetingTimeout/socketTimeout
+      // above are what actually tear the connection down on failure. Racing
+      // a second, independent timer against the send risked giving up on (and
+      // then retrying, i.e. duplicating) an attempt that was still alive and
+      // would have gone through.
+      return await transporter.sendMail(mailOptions);
     } catch (err) {
       lastErr = err;
-      // Only worth retrying on the other port for a connection-level failure —
-      // an auth/rejection error will fail identically on either port.
-      if (!/timeout|ECONNREFUSED|ETIMEDOUT|ESOCKET/i.test(err.message)) throw err;
+      if (!RETRYABLE_CODES.has(err.code)) throw err;
     }
   }
   throw lastErr;
