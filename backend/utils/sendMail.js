@@ -181,7 +181,13 @@ const sendViaZoho = async (mailOptions) => {
       return await transporter.sendMail(mailOptions);
     } catch (err) {
       lastErr = err;
-      if (!RETRYABLE_CODES.has(err.code)) throw err;
+      // err.command tells us which SMTP stage was in progress. A timeout/socket
+      // error during or after DATA means the message body may already have
+      // reached the server even though we never saw the final confirmation —
+      // retrying on the other port then risks a duplicate send. Only retry a
+      // failure that happened before the message was ever handed over.
+      const beforeSubmission = err.command !== "DATA";
+      if (!RETRYABLE_CODES.has(err.code) || !beforeSubmission) throw err;
     }
   }
   throw lastErr;
