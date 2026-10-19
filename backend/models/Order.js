@@ -8,6 +8,13 @@ const orderItemSchema = new mongoose.Schema({
   },
   quantity: { type: Number, required: true, min: 1, default: 1 },
   price: { type: Number, required: true, min: [0, "Price cannot be negative"] },
+  // What the SELLER is owed for this item — normally equal to `price`. When
+  // `price` reflects an admin-created store Promotion rather than a sale the
+  // seller set themselves, this holds the product's full, undiscounted price
+  // instead: the discount was the platform's call, not the seller's, so the
+  // platform (not the seller) absorbs the gap. See utils/pricing.js's
+  // payoutPrice(). Falls back to `price` when absent (pre-existing orders).
+  sellerPayoutPrice: { type: Number, min: [0, "Seller payout price cannot be negative"] },
   variant: {
     sku: String,
     attributes: mongoose.Schema.Types.Mixed,

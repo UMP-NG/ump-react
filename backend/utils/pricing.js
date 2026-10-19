@@ -15,3 +15,15 @@ export function isOnSale(product) {
 export function effectivePrice(product) {
   return isOnSale(product) ? product.salePrice : product.price;
 }
+
+// What the SELLER should be paid for one unit right now — distinct from
+// effectivePrice(), which is what the BUYER pays. A seller-set sale (no
+// activePromotion) pays out at the same discounted price the buyer paid,
+// same as always. An admin-created store Promotion writes into the exact
+// same salePrice/saleEndsAt fields, but the seller never chose that discount
+// — they're paid the full, undiscounted price, and the platform absorbs the
+// gap between what the buyer paid and what the seller is owed.
+export function payoutPrice(product) {
+  if (isOnSale(product) && product.activePromotion) return product.price;
+  return effectivePrice(product);
+}

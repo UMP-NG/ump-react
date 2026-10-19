@@ -13,7 +13,7 @@ import PDFDocument from "pdfkit";
 import cloudinary from "../config/cloudinary.js";
 import { audit } from "../utils/auditLog.js";
 import { notify } from "../utils/notify.js";
-import { effectivePrice } from "../utils/pricing.js";
+import { effectivePrice, payoutPrice } from "../utils/pricing.js";
 import logger from "../utils/logger.js";
 import { spendWalletBalance, refundWalletBalance } from "./walletController.js";
 
@@ -182,9 +182,15 @@ export const checkoutCart = async (req, res) => {
     // from it or pricier variants get undercharged). For a plain (non-variant) item,
     // re-check the CURRENT effective price instead of trusting the cart snapshot — a
     // sale/promotion that was active when the item was added may have ended since, and
-    // charging the stale discounted price would short the seller at checkout.
+    // charging the stale discounted price would under-collect from the buyer.
     const currentItemPrice = (i) =>
       i.negotiatedPrice ?? (i.selectedVariant ? (i.price ?? i.product.price) : effectivePrice(i.product));
+    // What the SELLER is owed per unit — same value for variants/negotiations
+    // (neither goes through admin Promotions), but for a plain item this pays
+    // the full price when the discount was an admin Promotion's doing rather
+    // than the seller's own sale. See payoutPrice()'s doc comment.
+    const currentPayoutPrice = (i) =>
+      i.negotiatedPrice ?? (i.selectedVariant ? (i.price ?? i.product.price) : payoutPrice(i.product));
     const cartTotal  = [...sellerGroups.values()].flat().reduce(
       (s, i) => s + currentItemPrice(i) * (i.quantity || 1), 0
     );
@@ -295,12 +301,13 @@ export const checkoutCart = async (req, res) => {
     let couponDiscountRemaining = couponDiscount;
     for (const [sid, sellerItems] of sellerGroups) {
       const orderItems = sellerItems.map((i) => ({
-        product:         i.product._id,
-        quantity:        i.quantity,
-        price:           currentItemPrice(i),
-        negotiatedPrice: i.negotiatedPrice || undefined,
-        negotiationId:   i.negotiationId   || undefined,
-        variant:         i.selectedVariant ? { sku: i.selectedVariant, attributes: {} } : {},
+        product:           i.product._id,
+        quantity:          i.quantity,
+        price:             currentItemPrice(i),
+        sellerPayoutPrice: currentPayoutPrice(i),
+        negotiatedPrice:   i.negotiatedPrice || undefined,
+        negotiationId:     i.negotiationId   || undefined,
+        variant:           i.selectedVariant ? { sku: i.selectedVariant, attributes: {} } : {},
       }));
 
       const subtotal = orderItems.reduce((s, i) => s + i.price * i.quantity, 0);
@@ -577,7 +584,11 @@ export const updateOrderStatus = async (req, res) => {
       const sellerId = order.seller || order.items[0]?.product?.seller;
       if (sellerId) {
         const cfg = await getFeeConfig();
-        const sellerBase = order.subtotal || order.totalAmount;
+        // Pays out on sellerPayoutPrice, not the (possibly admin-promo-
+        // discounted) price the buyer paid — see Order.js's doc comment.
+        // Falls back to price for pre-existing orders that predate this field.
+        const sellerBase = order.items.reduce((s, i) => s + (i.sellerPayoutPrice ?? i.price) * i.quantity, 0)
+          || order.subtotal || order.totalAmount;
         const sellerPayout = cfg.platformFeeEnabled
           ? Math.floor(sellerBase * (1 - cfg.platformFeeRate))
           : sellerBase;
@@ -1026,13 +1037,15 @@ export const confirmDelivery = async (req, res) => {
 
     const isPartial = toDeliver.length < pendingItems.length;
 
-    // Pro-rate seller payout for this delivery batch, using item prices as base
-    // (service charge goes to platform — seller is never penalised for it)
+    // Seller payout for this delivery batch, using sellerPayoutPrice as base
+    // (service charge goes to platform — seller is never penalised for it).
+    // sellerPayoutPrice is the full price when the discount was an admin
+    // Promotion's doing rather than the seller's own sale — see Order.js's
+    // doc comment — and falls back to `price` for pre-existing orders that
+    // predate this field. Summed directly per delivered item.
     const cfg = await getFeeConfig();
-    const allItemsSubtotal   = order.items.reduce((s, i) => s + i.price * i.quantity, 0);
-    const deliveredSubtotal  = toDeliver.reduce((s, i) => s + i.price * i.quantity, 0);
-    const proportion         = allItemsSubtotal > 0 ? deliveredSubtotal / allItemsSubtotal : 1;
-    const sellerBase         = (order.subtotal || allItemsSubtotal) * proportion;
+    const deliveredSubtotal  = toDeliver.reduce((s, i) => s + (i.sellerPayoutPrice ?? i.price) * i.quantity, 0);
+    const sellerBase         = deliveredSubtotal;
     const payoutAmount       = cfg.platformFeeEnabled
       ? Math.floor(sellerBase * (1 - cfg.platformFeeRate))
       : Math.floor(sellerBase);
@@ -1204,12 +1217,16 @@ export const confirmTransfer = async (req, res) => {
     for (const [sellerId, sellerItems] of Object.entries(itemsBySeller)) {
       // Always fetch authoritative price from DB — never trust client-submitted prices
       const productIds = [...new Set(sellerItems.map(i => i.product).filter(Boolean).map(String))];
-      const productDocs = await Product.find({ _id: { $in: productIds } }).select("_id price salePrice saleEndsAt").lean();
+      const productDocs = await Product.find({ _id: { $in: productIds } }).select("_id price salePrice saleEndsAt activePromotion").lean();
       const priceMap = new Map(productDocs.map(p => [p._id.toString(), effectivePrice(p)]));
+      // Seller payout basis — full price when the discount is an admin
+      // Promotion's doing, same discounted price otherwise. See payoutPrice().
+      const payoutPriceMap = new Map(productDocs.map(p => [p._id.toString(), payoutPrice(p)]));
 
       // Resolve per-item price: verify negotiation from DB when present, fall back to canonical price
       const resolvedItems = await Promise.all(sellerItems.map(async (item) => {
         const canonical = priceMap.get(String(item.product)) || 0;
+        const canonicalPayout = payoutPriceMap.get(String(item.product)) ?? canonical;
         if (item.negotiationId && mongoose.Types.ObjectId.isValid(item.negotiationId)) {
           const neg = await Negotiation.findOne({
             _id:    item.negotiationId,
@@ -1217,9 +1234,11 @@ export const confirmTransfer = async (req, res) => {
             buyer:  req.user._id,
             status: { $in: ["accepted", "applied"] },
           }).select("proposedPrice").lean();
-          if (neg) return { ...item, resolvedPrice: neg.proposedPrice };
+          // A negotiated price isn't admin-promo-driven — seller is paid the
+          // same negotiated amount the buyer pays, no special treatment.
+          if (neg) return { ...item, resolvedPrice: neg.proposedPrice, resolvedPayoutPrice: neg.proposedPrice };
         }
-        return { ...item, resolvedPrice: canonical };
+        return { ...item, resolvedPrice: canonical, resolvedPayoutPrice: canonicalPayout };
       }));
 
       const subtotal = resolvedItems.reduce((sum, item) => sum + item.resolvedPrice * (item.quantity || 1), 0);
@@ -1234,9 +1253,10 @@ export const confirmTransfer = async (req, res) => {
 
       // Build order items using DB-verified prices
       const orderItems = resolvedItems.map(item => ({
-        product:  item.product,
-        quantity: item.quantity || 1,
-        price:    item.resolvedPrice,
+        product:           item.product,
+        quantity:          item.quantity || 1,
+        price:             item.resolvedPrice,
+        sellerPayoutPrice: item.resolvedPayoutPrice,
         ...(item.negotiationId && { negotiationId: item.negotiationId }),
       }));
 
