@@ -9,24 +9,29 @@
 //   node scripts/backfillPromoPayouts.mjs              (dry run — report only)
 //   node scripts/backfillPromoPayouts.mjs --apply       (writes for real)
 //
-// Two separate buckets, because only one of them involves money moving:
+// Every matching item is classified individually (not by overall order
+// status) — a "partial" order has some items already delivered/paid and some
+// not, so each needs its own branch:
 //
-//   1. ALREADY COMPLETED items (order status "completed", or an item with
-//      status "completed" on a "partial" order) were already paid out under
-//      the old (buggy) logic. These get the seller actually CREDITED now —
+//   1. ALREADY PAID items — order.status is "completed" (pays the whole
+//      order in one shot regardless of item-level status, since that's how
+//      the admin-completes-the-whole-order path works), OR the individual
+//      item's own status is "completed" (the confirmDelivery path, which can
+//      pay out one batch of items on a "partial" order while others remain
+//      undelivered). These get the seller actually CREDITED now —
 //      pendingPayout/totalRevenue incremented, payoutHistory entry added —
 //      and the item marked with sellerPayoutPrice so a re-run won't double it.
 //
-//   2. STILL-OPEN items (any non-terminal status: pending, confirmed,
-//      shipped, ready_for_pickup, pending-verification, disputed) were
-//      created before this deploy and so are MISSING sellerPayoutPrice
-//      entirely. Without this script, when they eventually complete, the
-//      payout code's `item.sellerPayoutPrice ?? item.price` fallback would
-//      still use the discounted price — the code fix alone does NOT cover
-//      orders that already existed before it shipped. This bucket just sets
+//   2. NOT YET PAID items — everything else: a fully open order (pending,
+//      confirmed, shipped, etc.), or the still-undelivered items of a
+//      "partial" order. These were created before this deploy and so are
+//      MISSING sellerPayoutPrice entirely. Without this script, when they
+//      eventually complete, the payout code's
+//      `item.sellerPayoutPrice ?? item.price` fallback would still use the
+//      discounted price — the code fix alone does NOT cover orders that
+//      already existed before it shipped. This bucket just sets
 //      sellerPayoutPrice on the item now (no money moves yet) so that
-//      whenever the order does complete, the now-fixed payout logic pays
-//      the seller correctly.
+//      whenever it does get paid, the now-fixed payout logic pays correctly.
 //
 // How it matches orders to promotions: for every Promotion ever created
 // (any status), for every product CURRENTLY still listed in its `products`
@@ -57,7 +62,6 @@ dotenv.config();
 
 const apply = process.argv.includes("--apply");
 const PROMOTABLE_PRICE_CEILING = 10000; // must match promotionController.js
-const OPEN_STATUSES = ["pending", "pending-verification", "confirmed", "shipped", "ready_for_pickup", "disputed"];
 const PRICE_TOLERANCE = 1; // naira, for rounding
 
 async function main() {
@@ -88,6 +92,12 @@ async function main() {
   const sellerNames = new Map();
   const creditedBySeller = new Map();
   const markedOpenCount = { n: 0 };
+  // Guards against the same order+item being processed twice in one run —
+  // nothing actually prevents a product from matching more than one
+  // promotion's window (e.g. a stale, never-detached listing on an older
+  // promotion), and in dry-run mode nothing is ever persisted to the DB, so
+  // the "already backfilled" check on sellerPayoutPrice alone can't catch it.
+  const processedItemKeys = new Set();
   let skippedVariant = 0, skippedNegotiated = 0, skippedCeiling = 0, skippedPriceMismatch = 0;
 
   async function sellerName(sellerKey) {
@@ -132,24 +142,27 @@ async function main() {
     }).toArray();
 
     for (const order of orders) {
-      const isCompleted = order.status === "completed" || order.status === "partial";
-      const isOpen = OPEN_STATUSES.includes(order.status);
-      if (!isCompleted && !isOpen) continue; // cancelled, or anything else — nothing to do
-
       for (const item of order.items) {
         const productId = item.product?.toString();
         if (!productId || !promo.products.some((p) => p.toString() === productId)) continue;
         if (item.sellerPayoutPrice != null) continue; // already backfilled
 
-        if (isCompleted) {
-          const alreadyPaid = order.status === "completed" || item.status === "completed";
-          if (!alreadyPaid) continue; // partial order, this specific item not yet delivered
-        }
+        const itemKey = `${order._id}_${item._id}`;
+        if (processedItemKeys.has(itemKey)) continue;
+        processedItemKeys.add(itemKey);
+
+        // Per-ITEM, not per-order: a "partial" order has some items already
+        // delivered/paid (item.status "completed") and some not — each needs
+        // its own branch. order.status "completed" means the WHOLE order was
+        // paid in one shot regardless of individual item status (that's how
+        // updateOrderStatus's admin-completes-the-whole-order path works, and
+        // it never touches item-level status), so it overrides either way.
+        const itemAlreadyPaid = order.status === "completed" || item.status === "completed";
 
         const fullPrice = await verifyFullPrice(order, item, promo);
         if (fullPrice == null) continue;
 
-        if (isCompleted) {
+        if (itemAlreadyPaid) {
           const shortfall = (fullPrice - item.price) * (item.quantity || 1);
           const topUp = platformFeeEnabled ? Math.floor(shortfall * (1 - platformFeeRate)) : Math.floor(shortfall);
           if (topUp <= 0) continue;
@@ -199,8 +212,10 @@ async function main() {
             }
           }
         } else {
-          // Still-open order — just pre-stage sellerPayoutPrice, no money moves yet.
-          console.log(`[open]      order ${order._id} item ${item._id} (status: ${order.status}): pre-setting sellerPayoutPrice to ₦${fullPrice} for when it completes`);
+          // Not yet paid out — covers a fully open order, AND the still-
+          // undelivered items of a "partial" order. Just pre-stage
+          // sellerPayoutPrice now; no money moves until it actually completes.
+          console.log(`[open]      order ${order._id} item ${item._id} (order status: ${order.status}, item status: ${item.status}): pre-setting sellerPayoutPrice to ₦${fullPrice} for when it completes`);
           if (apply) {
             const result = await Orders.updateOne(
               { _id: order._id, items: { $elemMatch: { _id: item._id, sellerPayoutPrice: { $exists: false } } } },
